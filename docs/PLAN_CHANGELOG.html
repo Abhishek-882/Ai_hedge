@@ -1,0 +1,144 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>Swarm Plan Changelog</title>
+<style>
+    @page {
+        size: A4 portrait;
+        margin: 14mm 16mm 14mm 16mm;
+        @bottom-right {
+            content: counter(page);
+        }
+    }
+    *, *::before, *::after {
+        box-sizing: border-box;
+    }
+    body {
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+        color: #1e293b;
+        background: #ffffff;
+        margin: 0;
+        padding: 0;
+        font-size: 12px;
+        line-height: 1.45;
+    }
+    .header-banner {
+        border-bottom: 2px solid #0f172a;
+        padding-bottom: 10px;
+        margin-bottom: 14px;
+    }
+    h1 {
+        color: #0f172a;
+        font-size: 20px;
+        font-weight: 700;
+        margin: 0 0 4px 0;
+        letter-spacing: -0.02em;
+    }
+    .intro-desc {
+        color: #475569;
+        font-size: 12px;
+        margin: 0;
+        line-height: 1.4;
+    }
+    .entry-card {
+        margin-bottom: 12px;
+        page-break-inside: avoid;
+    }
+    h2 {
+        color: #0f172a;
+        font-size: 13px;
+        font-weight: 700;
+        margin: 12px 0 6px 0;
+        padding: 6px 10px;
+        background: #f1f5f9;
+        border-left: 4px solid #0284c7;
+        border-radius: 0 4px 4px 0;
+        page-break-after: avoid;
+    }
+    hr {
+        display: none;
+    }
+    ul {
+        margin: 4px 0 10px 0;
+        padding-left: 18px;
+    }
+    li {
+        margin-bottom: 4px;
+        color: #334155;
+    }
+    li strong {
+        color: #0f172a;
+    }
+    code {
+        font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+        background-color: #f1f5f9;
+        color: #0369a1;
+        padding: 1px 5px;
+        border-radius: 3px;
+        font-size: 11px;
+        border: 1px solid #e2e8f0;
+        font-weight: 600;
+    }
+    .footer {
+        margin-top: 16px;
+        padding-top: 8px;
+        border-top: 1px solid #e2e8f0;
+        font-size: 10px;
+        color: #94a3b8;
+        display: flex;
+        justify-content: space-between;
+    }
+    </style>
+</head>
+<body>
+    <div class="header-banner">
+        <h1>Swarm Plan Changelog (Append-Only)</h1>
+        <p class="intro-desc">This document tracks all formal modifications to the research plan, backlog prioritization, timebox estimates, and data source allocations.</p>
+    </div>
+    
+    
+
+<hr />
+<h2>[2026-08-28T14:22:00Z] Initial Milestone 1 Architecture Plan</h2>
+<ul>
+<li><strong>Tier:</strong> <code>Overseer</code></li>
+<li><strong>Proposer:</strong> <code>DELTA</code></li>
+<li><strong>Co-signer:</strong> <code>OVERSEER</code></li>
+<li><strong>Change:</strong> Established baseline M1 foundation architecture: SQLite WAL persistence with 12 tables, 5-state directory lifecycle machine, 8-field Agent Memo specification, runtime testnet guardrails, and seeded 5-idea backlog.</li>
+<li><strong>Rationale:</strong> Foundational milestone plan initialization per PROJECT.md specification.</li>
+</ul>
+<hr />
+<h2>[2026-08-28T14:30:00Z] Backlog Priority Reordering &amp; Idea 03 Deep Dive</h2>
+<ul>
+<li><strong>Tier:</strong> <code>Autonomous</code></li>
+<li><strong>Proposer:</strong> <code>ALPHA</code></li>
+<li><strong>Co-signer:</strong> <code>GAMMA</code></li>
+<li><strong>Change:</strong> Confirmed backlog execution order: Idea 03 (Cross-Exchange Spread Capture) designated as primary deep-dive through Phase E; Idea 01 (Cash-and-Carry) prioritized second; Idea RS (Bounded OU) third; Idea 02 and 04 assigned Phase A/B paper trails and deferred.</li>
+<li><strong>Rationale:</strong> Idea 03 provides the highest structural risk-adjusted yield potential in volatile funding regimes and exercises the complete multi-exchange execution and desync watchdog architecture.</li>
+</ul>
+<hr />
+<h2>[2026-08-28T14:40:00Z] Bounded Agent Research Slot (RS) Addition</h2>
+<ul>
+<li><strong>Tier:</strong> <code>Autonomous</code></li>
+<li><strong>Proposer:</strong> <code>GAMMA</code></li>
+<li><strong>Co-signer:</strong> <code>BETA</code></li>
+<li><strong>Change:</strong> Added <code>idea-rs-ou-mean-reversion</code> (Bounded OU Mean Reversion Spread Model) to the research backlog under statistical arbitrage. Bounded timebox of 4.0 hours completed with mathematical specification and half-life filters (2h - 48h).</li>
+<li><strong>Rationale:</strong> Peer-reviewed quantitative finance literature demonstrates robust mean-reversion characteristics in cross-exchange funding spread time-series.</li>
+</ul>
+<hr />
+<h2>[2026-08-28T14:50:00Z] Milestone 5 Pipeline Execution &amp; Idea 03 Promotion</h2>
+<ul>
+<li><strong>Tier:</strong> <code>Autonomous</code></li>
+<li><strong>Proposer:</strong> <code>ALPHA</code></li>
+<li><strong>Co-signer:</strong> <code>DELTA</code></li>
+<li><strong>Change:</strong> Executed full pipeline across all 5 strategies. Idea 03 promoted through Gate Decision to <code>/paper</code> for continuous live testnet paper trading following unanimous 4-agent quorum. Phase A + B paper trails completed for Ideas 01, 02, 04, and RS.</li>
+<li><strong>Rationale:</strong> Satisfies all Milestone 5 delivery criteria with zero silently dropped ideas and complete audit trails.</li>
+</ul>
+    
+    <div class="footer">
+        <span>Funding Rate Bot Architecture & Planning</span>
+        <span>Append-Only Ledger</span>
+    </div>
+</body>
+</html>

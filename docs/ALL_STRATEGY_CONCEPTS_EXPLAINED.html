@@ -1,0 +1,631 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="color-scheme" content="light">
+<title>Quantitative Strategy Concepts: Profit & Loss Deep Dive</title>
+<style>
+    :root {
+        color-scheme: light;
+    }
+    @page {
+        size: A4 portrait;
+        margin: 8mm 12mm 8mm 12mm;
+        @bottom-right {
+            content: "Page " counter(page) " of " counter(pages);
+            font-size: 8px;
+            color: #64748b;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+        }
+        @bottom-left {
+            content: "Funding Rate Bot • Complete Profit & Loss Concepts Guide";
+            font-size: 8px;
+            color: #64748b;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+        }
+    }
+    *, *::before, *::after {
+        box-sizing: border-box;
+    }
+    html {
+        background-color: #f8fafc !important;
+    }
+    body {
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif !important;
+        color: #0f172a !important;
+        background-color: #ffffff !important;
+        margin: 0;
+        padding: 8px;
+        max-width: 920px;
+        margin-left: auto;
+        margin-right: auto;
+        font-size: 10.5px;
+        line-height: 1.4;
+    }
+    
+    p, li, span, div, td, th {
+        color: #0f172a;
+    }
+    
+    /* Cover / Hero Header */
+    .hero-header {
+        background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%) !important;
+        color: #ffffff !important;
+        padding: 16px 20px;
+        border-radius: 8px;
+        margin-bottom: 10px;
+    }
+    .hero-title {
+        font-size: 18px;
+        font-weight: 800;
+        letter-spacing: -0.02em;
+        margin: 0 0 4px 0;
+        color: #ffffff !important;
+    }
+    .hero-subtitle {
+        font-size: 11.5px;
+        color: #cbd5e1 !important;
+        margin: 0 0 8px 0;
+        font-weight: 400;
+    }
+    .hero-tags {
+        display: flex;
+        gap: 6px;
+    }
+    .tag {
+        font-size: 9px;
+        font-weight: 700;
+        padding: 2px 7px;
+        border-radius: 4px;
+        text-transform: uppercase;
+        letter-spacing: 0.04em;
+    }
+    .tag-blue { background: #0284c7 !important; color: #ffffff !important; }
+    .tag-green { background: #059669 !important; color: #ffffff !important; }
+    .tag-purple { background: #7c3aed !important; color: #ffffff !important; }
+    .tag-amber { background: #d97706 !important; color: #ffffff !important; }
+
+    /* Primer Box */
+    .primer-box {
+        background-color: #f8fafc !important;
+        border: 1px solid #cbd5e1 !important;
+        border-left: 4px solid #0284c7 !important;
+        border-radius: 6px;
+        padding: 10px 12px;
+        margin-bottom: 12px;
+    }
+    .primer-title {
+        font-size: 12px;
+        font-weight: 700;
+        color: #0f172a !important;
+        margin: 0 0 3px 0;
+    }
+
+    /* Strategy Card Container */
+    .strategy-card {
+        border: 1px solid #cbd5e1 !important;
+        border-radius: 6px;
+        background-color: #ffffff !important;
+        margin-bottom: 12px;
+        overflow: hidden;
+        page-break-inside: avoid;
+    }
+    .card-header {
+        background-color: #f1f5f9 !important;
+        padding: 8px 12px;
+        border-bottom: 1px solid #cbd5e1 !important;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+    }
+    .card-title {
+        font-size: 12.5px;
+        font-weight: 700;
+        color: #0f172a !important;
+        margin: 0;
+    }
+    .card-body {
+        padding: 10px 12px;
+        background-color: #ffffff !important;
+    }
+
+    .section-label {
+        font-size: 10px;
+        font-weight: 800;
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+        color: #334155 !important;
+        margin: 8px 0 3px 0;
+        display: flex;
+        align-items: center;
+        gap: 4px;
+    }
+    
+    .callout-idea {
+        background-color: #eff6ff !important;
+        border: 1px solid #bfdbfe !important;
+        border-left: 4px solid #2563eb !important;
+        padding: 7px 10px;
+        border-radius: 4px;
+        margin: 3px 0 6px 0;
+        color: #1e3a8a !important;
+        font-size: 11px;
+    }
+    .callout-profit {
+        background-color: #f0fdf4 !important;
+        border: 1px solid #bbf7d0 !important;
+        border-left: 4px solid #16a34a !important;
+        padding: 7px 10px;
+        border-radius: 4px;
+        margin: 3px 0 6px 0;
+        color: #064e3b !important;
+        font-size: 11px;
+    }
+    .callout-risk {
+        background-color: #fffbeb !important;
+        border: 1px solid #fde68a !important;
+        border-left: 4px solid #d97706 !important;
+        padding: 7px 10px;
+        border-radius: 4px;
+        margin: 3px 0 6px 0;
+        color: #78350f !important;
+        font-size: 10.5px;
+    }
+
+    /* Example Box */
+    .example-box {
+        background-color: #f8fafc !important;
+        border: 1px solid #cbd5e1 !important;
+        border-radius: 5px;
+        padding: 8px 10px;
+        margin: 5px 0 6px 0;
+        color: #0f172a !important;
+    }
+    .example-title {
+        font-weight: 700;
+        color: #0f172a !important;
+        font-size: 11px;
+        margin-bottom: 4px;
+        border-bottom: 1px dashed #94a3b8;
+        padding-bottom: 3px;
+    }
+
+    /* Data Table */
+    table {
+        width: 100%;
+        border-collapse: collapse;
+        margin: 5px 0;
+        font-size: 10px;
+    }
+    th {
+        background-color: #0f172a !important;
+        color: #ffffff !important;
+        text-align: left;
+        padding: 5px 7px;
+        font-weight: 700;
+        border: 1px solid #0f172a;
+    }
+    td {
+        padding: 5px 7px;
+        border: 1px solid #cbd5e1 !important;
+        vertical-align: middle;
+        color: #0f172a !important;
+        background-color: #ffffff;
+    }
+    tr:nth-child(even) td {
+        background-color: #f8fafc !important;
+    }
+
+    /* Risk Breakdown Table */
+    .risk-table th {
+        background-color: #78350f !important;
+    }
+
+    code {
+        font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+        background-color: #e2e8f0 !important;
+        color: #0f172a !important;
+        padding: 1px 4px;
+        border-radius: 3px;
+        font-size: 10px;
+        font-weight: 600;
+    }
+
+    .badge-status-promoted {
+        background: #dcfce7 !important;
+        color: #15803d !important;
+        border: 1px solid #86efac;
+        font-weight: 700;
+        padding: 2px 6px;
+        border-radius: 4px;
+        font-size: 9px;
+    }
+    .badge-status-audit {
+        background: #fef3c7 !important;
+        color: #b45309 !important;
+        border: 1px solid #fde68a;
+        font-weight: 700;
+        padding: 2px 6px;
+        border-radius: 4px;
+        font-size: 9px;
+    }
+
+    .page-break {
+        page-break-before: always;
+    }
+    </style>
+</head>
+<body>
+
+    <!-- HERO HEADER -->
+    <div class="hero-header">
+        <h1 class="hero-title">Quantitative Strategy Concepts: Profit &amp; Loss Deep Dive</h1>
+        <p class="hero-subtitle">Comprehensive Plain-English Guide on How Profits Are Earned, Every Possibility for Loss, and Automated Bot Defenses</p>
+        <div class="hero-tags">
+            <span class="tag tag-blue">5 Research Strategies</span>
+            <span class="tag tag-green">Idea 03 Cross-Exchange</span>
+            <span class="tag tag-amber">Idea 01 Cash &amp; Carry</span>
+            <span class="tag tag-purple">Idea RS OU Mean-Reversion</span>
+        </div>
+    </div>
+
+    <!-- 2-MINUTE PRIMER -->
+    <div class="primer-box">
+        <div class="primer-title">📖 Foundation: How Funding Rates Generate Cash</div>
+        <p style="margin:0 0 3px 0; color:#0f172a;">
+            Perpetual futures contracts have no expiration date. To keep futures prices anchored to the spot market price, exchanges enforce a <strong>Funding Rate payment every 8 hours</strong> (00:00, 08:00, 16:00 UTC):
+        </p>
+        <ul style="margin:2px 0 3px 0; padding-left: 16px; color:#0f172a;">
+            <li><strong>Positive Rate (+):</strong> Bullish market. Buyers (Longs) must pay direct cash to Sellers (Shorts).</li>
+            <li><strong>Negative Rate (-):</strong> Bearish market. Sellers (Shorts) must pay direct cash to Buyers (Longs).</li>
+            <li><strong>The Profit Engine:</strong> By pairing equal long and short positions that neutralize 100% of price volatility (Delta-Neutral), we capture the rate spread with zero exposure to Bitcoin's price swings.</li>
+        </ul>
+    </div>
+
+    <!-- STRATEGY 3 (PROMOTED FLAGSHIP) -->
+    <div class="strategy-card">
+        <div class="card-header">
+            <div>
+                <span class="card-title">1. Cross-Exchange Funding Spread Capture</span>
+                <span style="color: #64748b; font-size: 10.5px; margin-left: 6px;">(<code>idea-03-cross-exchange-funding</code>)</span>
+            </div>
+            <div>
+                <span class="badge-status-promoted">⭐ Flagship — Active Live Paper</span>
+            </div>
+        </div>
+        <div class="card-body">
+            
+            <div class="section-label">💡 The Plain-English Idea</div>
+            <div class="callout-idea">
+                Different crypto exchanges (e.g., Binance vs Bybit or Delta India) frequently have different funding rates at the exact same second. We <strong>Short the high-rate exchange</strong> (to collect high payments) and <strong>Long the low-rate exchange</strong> (paying little to nothing).
+            </div>
+
+            <div class="section-label">💰 How Exactly Do We Get Profits? (3-Step Flow)</div>
+            <div class="callout-profit">
+                <strong>1. Zero Price Risk:</strong> Buy $5,000 BTC on Bybit while Selling $5,000 BTC on Binance. If BTC drops $5,000, Bybit loses $500 but Binance gains $500. Net price impact = <strong>$0.00</strong>.<br>
+                <strong>2. The Spread Gap:</strong> At the 8h funding clock (08:00 UTC):
+                <ul style="margin:2px 0 2px 0; padding-left: 16px;">
+                    <li>Binance (+0.06% rate): As a Short, you <strong>RECEIVE +$3.00</strong>.</li>
+                    <li>Bybit (+0.01% rate): As a Long, you <strong>PAY -$0.50</strong>.</li>
+                    <li><strong>Gross Funding Payout:</strong> +$3.00 - $0.50 = <strong>+$2.50 Net Profit per 8h</strong> (~27% APY on $10k capital).</li>
+                </ul>
+                <strong>3. The 9.5-Minute Sniper Execution:</strong> The bot enters 5.0 minutes before 08:00 UTC (when the rate is already fixed) and exits 4.5 minutes after. You only stay in the trade for 9.5 minutes!
+            </div>
+
+            <div class="section-label">⚠️ Possibilities for Loss &amp; How the Bot Protects You</div>
+            <table class="risk-table">
+                <tr>
+                    <th style="width: 25%;">Loss Scenario</th>
+                    <th style="width: 38%;">What Causes the Potential Loss?</th>
+                    <th style="width: 37%;">How the Bot Prevents / Mitigates It</th>
+                </tr>
+                <tr>
+                    <td><strong>1. Fee Drag (Fees &gt; Spread)</strong></td>
+                    <td>Taker fees on both exchanges exceed the funding rate gap, causing a net negative payout after opening &amp; closing.</td>
+                    <td><strong>Strict Spread Hurdle:</strong> Bot requires <code>Spread &ge; 0.035%</code>. It will NEVER open a trade unless net profit after all taker fees &amp; slippage is guaranteed positive.</td>
+                </tr>
+                <tr>
+                    <td><strong>2. Leg-Fill Latency (Leg Lag)</strong></td>
+                    <td>Binance fills in 20ms, but Bybit takes 400ms. In those 380ms, Bitcoin moves $100 against the unhedged open leg.</td>
+                    <td><strong>Concurrent Async Sockets + 100ms Timeout:</strong> Bot fires both orders simultaneously. If leg 2 is not filled in 100ms, leg 1 is immediately cancelled/aborted at market.</td>
+                </tr>
+                <tr>
+                    <td><strong>3. Basis Drift in 9.5 min</strong></td>
+                    <td>During the 9.5 minutes of holding, Binance perp and Bybit perp prices diverge slightly (e.g. Bybit falls $15 more than Binance).</td>
+                    <td><strong>Ultra-Short Holding Window:</strong> Holding for only 9.5 minutes around settlement limits statistical basis variance to under 0.005%, far smaller than the captured spread.</td>
+                </tr>
+                <tr>
+                    <td><strong>4. Exchange API Disconnect</strong></td>
+                    <td>One exchange's API freezes or drops connection while holding open positions.</td>
+                    <td><strong>Desync Watchdog:</strong> 24/7 background monitor checks heartbeats every 500ms. If connection drops &gt;2s, it instantly closes the opposite leg or engages emergency fallback.</td>
+                </tr>
+            </table>
+
+        </div>
+    </div>
+
+    <div class="page-break"></div>
+
+    <!-- STRATEGY 1 (SPOT-PERP CASH & CARRY) -->
+    <div class="strategy-card">
+        <div class="card-header">
+            <div>
+                <span class="card-title">2. Spot-Perpetual Cash-and-Carry</span>
+                <span style="color: #64748b; font-size: 10.5px; margin-left: 6px;">(<code>idea-01-cash-and-carry</code>)</span>
+            </div>
+            <div>
+                <span class="badge-status-audit">Audited Phase B Complete</span>
+            </div>
+        </div>
+        <div class="card-body">
+            
+            <div class="section-label">💡 The Plain-English Idea</div>
+            <div class="callout-idea">
+                Buy actual crypto on the <strong>Spot market</strong> and simultaneously open an equal-sized <strong>Short Perpetual Futures contract</strong> on the exact same exchange (e.g., Binance).
+            </div>
+
+            <div class="section-label">💰 How Exactly Do We Get Profits? (Continuous Yield)</div>
+            <div class="callout-profit">
+                <strong>1. 100% Price Immunity:</strong> You own 1 BTC on spot and are short 1 BTC on futures. If Bitcoin drops from $60,000 to $30,000, your spot loses $30k but your short gains $30k. Your dollar balance is unchanged.<br>
+                <strong>2. The Funding Cashflow:</strong> In normal/bullish markets, the funding rate is positive (e.g., +0.03% every 8h):
+                <ul style="margin:2px 0 2px 0; padding-left: 16px;">
+                    <li>As a Short on futures, the exchange deposits $1.50 into your account 3 times a day (<strong>+$4.50/day</strong>).</li>
+                    <li>Over 30 days on a $10,000 portfolio: $4.50 &times; 30 = <strong>+$135.00 gross yield</strong>.</li>
+                    <li>After $12.00 roundtrip trading fees = <strong style="color:#059669;">+$123.00 Net Monthly Profit</strong> (~15% to 28% APY).</li>
+                </ul>
+            </div>
+
+            <div class="section-label">⚠️ Possibilities for Loss &amp; How the Bot Protects You</div>
+            <table class="risk-table">
+                <tr>
+                    <th style="width: 25%;">Loss Scenario</th>
+                    <th style="width: 38%;">What Causes the Potential Loss?</th>
+                    <th style="width: 37%;">How the Bot Prevents / Mitigates It</th>
+                </tr>
+                <tr>
+                    <td><strong>1. Negative Funding Bleed</strong></td>
+                    <td>Market crashes into a prolonged bear regime and funding turns negative (-0.03%). Since you are Short, you must pay $4.50/day.</td>
+                    <td><strong>Auto-Unwind Threshold:</strong> If 8h funding drops below +0.005%, the bot automatically sells spot BTC, closes the short, and parks 100% in stablecoins earning 5-8% APY.</td>
+                </tr>
+                <tr>
+                    <td><strong>2. Short Liquidation on Rally</strong></td>
+                    <td>Using high isolated leverage (e.g. 10x): A sudden 12% vertical rally wipes out the short margin before spot profits can be transferred.</td>
+                    <td><strong>1x Leverage + Portfolio Margin:</strong> The bot uses 1x leverage and enables Unified Portfolio Margin, where the spot Bitcoin itself acts as collateral for the short (impossible to liquidate).</td>
+                </tr>
+                <tr>
+                    <td><strong>3. Basis Compression at Exit</strong></td>
+                    <td>You enter when Futures is trading $50 above Spot, but exit when Futures is $30 below Spot (losing $80 on price basis convergence).</td>
+                    <td><strong>Basis Premium Entry Filter:</strong> The bot only opens when the futures premium (basis) is historically elevated, and only unwinds when the basis returns to neutral.</td>
+                </tr>
+                <tr>
+                    <td><strong>4. Borrow Interest Spike</strong></td>
+                    <td>If borrowing USDT or crypto for margin spot legs, borrow interest rates on the exchange can suddenly jump to 30%+ APY.</td>
+                    <td><strong>Cash-Collateralized Spot:</strong> The bot uses 100% equity-funded spot purchases (zero borrowed margin loans).</td>
+                </tr>
+            </table>
+
+        </div>
+    </div>
+
+    <!-- STRATEGY 5 (RS - OU MEAN REVERSION) -->
+    <div class="strategy-card">
+        <div class="card-header">
+            <div>
+                <span class="card-title">3. Bounded "Rubber-Band" Mean-Reversion Spread Model</span>
+                <span style="color: #64748b; font-size: 10.5px; margin-left: 6px;">(<code>idea-rs-ou-mean-reversion</code>)</span>
+            </div>
+            <div>
+                <span class="badge-status-audit">Statistical Arbitrage • Audited</span>
+            </div>
+        </div>
+        <div class="card-body">
+            
+            <div class="section-label">💡 The Plain-English Idea</div>
+            <div class="callout-idea">
+                Think of the funding rate difference between two exchanges like a stretched rubber band. When excitement or panic pushes the spread unusually wide, it almost always snaps back to normal within 2 to 12 hours.
+            </div>
+
+            <div class="section-label">💰 How Exactly Do We Get Profits? (The Double Harvest Engine)</div>
+            <div class="callout-profit">
+                <strong>1. Dual Profit Streams:</strong> In this model, you make money in TWO ways at the same time:
+                <ul style="margin:2px 0 2px 0; padding-left: 16px;">
+                    <li><strong>Stream A (Funding Payments):</strong> You collect the high funding rate payment from the expensive exchange while holding the hedge.</li>
+                    <li><strong>Stream B (Price Convergence Gain):</strong> When a rate blows out to +0.08%, that exchange's futures price trades at a temporary premium ($60,050 vs $60,000). When the rubber band snaps back to normal, the price gap closes, giving you an extra trading gain!</li>
+                </ul>
+                <strong>2. Concrete Example:</strong> An anomaly pushes OKX rate to +0.08% vs Binance at +0.01% (0.07% spread). Bot shorts OKX ($5k) and longs Binance ($5k). Four hours later, the gap normalizes back to 0.01%. You pocket <strong>+$3.50 funding</strong> + <strong>+$4.20 price convergence</strong> = <strong style="color:#059669;">+$7.70 Net Profit in 4 Hours</strong>.
+            </div>
+
+            <div class="section-label">⚠️ Possibilities for Loss &amp; How the Bot Protects You</div>
+            <table class="risk-table">
+                <tr>
+                    <th style="width: 25%;">Loss Scenario</th>
+                    <th style="width: 38%;">What Causes the Potential Loss?</th>
+                    <th style="width: 37%;">How the Bot Prevents / Mitigates It</th>
+                </tr>
+                <tr>
+                    <td><strong>1. Spread Blowout (Regime Shift)</strong></td>
+                    <td>Instead of snapping back, the spread widens further (e.g. blows out to 0.15% due to an exchange liquidity crisis).</td>
+                    <td><strong>Statistical Stop-Loss at |Z| &ge; 3.5:</strong> If the spread expands beyond 3.5 standard deviations, the bot automatically cuts both legs at market, capping maximum loss to &lt;0.15%.</td>
+                </tr>
+                <tr>
+                    <td><strong>2. Half-Life Expansion (Stagnation)</strong></td>
+                    <td>The spread doesn't blow out, but stays wide for 3-4 days without snapping back, tying up capital.</td>
+                    <td><strong>Automated 48-Hour Time-Stop:</strong> If the spread does not mean-revert to the target exit zone within 48 hours, the bot automatically unwinds both positions.</td>
+                </tr>
+                <tr>
+                    <td><strong>3. Fee Drag on Small Spikes</strong></td>
+                    <td>Entering when the spread spike is too small (e.g. 0.02%), meaning roundtrip trading fees eat all the convergence profit.</td>
+                    <td><strong>Z-Score Entry Filter (|Z| &ge; 2.0):</strong> The bot strictly requires the spread anomaly to exceed 2.0 standard deviations (spread &ge; 0.045%), ensuring profit is &ge; 3&times; fees.</td>
+                </tr>
+                <tr>
+                    <td><strong>4. Paired Leg Fill Latency</strong></td>
+                    <td>One leg fills instantly, but the second leg lags during extreme volatility.</td>
+                    <td><strong>Atomic Async Routing:</strong> Bot sends simultaneous IOC limit/market orders with a 100ms cancellation timeout.</td>
+                </tr>
+            </table>
+
+        </div>
+    </div>
+
+    <!-- STRATEGY 2 -->
+    <div class="strategy-card">
+        <div class="card-header">
+            <div>
+                <span class="card-title">4. Rate-Momentum Sizing</span>
+                <span style="color: #64748b; font-size: 10.5px; margin-left: 6px;">(<code>idea-02-rate-momentum</code>)</span>
+            </div>
+            <div>
+                <span class="badge-status-audit">Directional Tilt • Audited</span>
+            </div>
+        </div>
+        <div class="card-body">
+            <div class="section-label">💡 The Plain-English Idea</div>
+            <div class="callout-idea">
+                A trend-following strategy with an "anti-crowding brake". When a trend is healthy, the bot takes full size. When retail FOMO pushes funding to extreme highs, the bot automatically cuts position size so you don't get wiped out in sudden liquidation cascades.
+            </div>
+
+            <div class="section-label">💵 Step-by-Step Realistic Dollar Example</div>
+            <div class="example-box">
+                <div class="example-title">Example: Riding an Ethereum Uptrend Safely</div>
+                <table>
+                    <tr>
+                        <th>Market Regime</th>
+                        <th>Funding Rate</th>
+                        <th>Position Size</th>
+                        <th>Protection Mechanism</th>
+                    </tr>
+                    <tr>
+                        <td><strong>Early Bull Trend</strong></td>
+                        <td>+0.01% (Normal)</td>
+                        <td><strong>100% Size ($10,000 Long)</strong></td>
+                        <td>Captures full trend velocity when risk is low.</td>
+                    </tr>
+                    <tr>
+                        <td><strong>Overheated Peak (FOMO)</strong></td>
+                        <td>+0.12% (Extreme)</td>
+                        <td><strong>30% Size ($3,000 Long)</strong></td>
+                        <td>Pockets 70% profit and shields against long squeezes.</td>
+                    </tr>
+                </table>
+            </div>
+
+            <div class="section-label">⚠️ What Could Go Wrong &amp; Safeguards</div>
+            <div class="callout-risk">
+                <strong>Main Risk:</strong> Choppy sideways markets causing whipsaws.<br>
+                <strong>Safeguard:</strong> Multi-timeframe trend confirmation and trailing stop-losses.
+            </div>
+        </div>
+    </div>
+
+    <!-- STRATEGY 4 -->
+    <div class="strategy-card">
+        <div class="card-header">
+            <div>
+                <span class="card-title">5. Machine Learning Augmented Rate Prediction</span>
+                <span style="color: #64748b; font-size: 10.5px; margin-left: 6px;">(<code>idea-04-ml-rate-prediction</code>)</span>
+            </div>
+            <div>
+                <span class="badge-status-audit">Predictive AI • Audited</span>
+            </div>
+        </div>
+        <div class="card-body">
+            <div class="section-label">💡 The Plain-English Idea</div>
+            <div class="callout-idea">
+                Using AI models to analyze order book depth, trade flow imbalance, and open interest to predict what the upcoming funding rate will be <em>hours before it gets officially posted</em>.
+            </div>
+
+            <div class="section-label">💵 Step-by-Step Realistic Dollar Example</div>
+            <div class="example-box">
+                <div class="example-title">Example: Pre-Positioning 2 Hours Before Settlement</div>
+                <p style="margin: 0 0 4px 0; color:#0f172a;">
+                    • <strong>Current Displayed Rate:</strong> +0.01% (ignored by most market participants).<br>
+                    • <strong>AI Order Book Detection:</strong> Heavy perpetual bidding is pushing futures $45 above spot.<br>
+                    • <strong>The Prediction:</strong> AI model forecasts next funding rate will jump to <strong>+0.075%</strong>.<br>
+                    • <strong>Action:</strong> Bot enters 2 hours early at cheap prices, collects the giant payment, and exits as latecomers arrive.
+                </p>
+            </div>
+
+            <div class="section-label">⚠️ What Could Go Wrong &amp; Safeguards</div>
+            <div class="callout-risk">
+                <strong>Main Risk:</strong> Sudden unexpected news breaks historical patterns.<br>
+                <strong>Safeguard:</strong> Strict &gt;75% AI confidence threshold before opening any speculative position.
+            </div>
+        </div>
+    </div>
+
+    <!-- SUMMARY COMPARISON MATRIX & KEY TAKEAWAYS -->
+    <div class="strategy-card">
+        <div class="card-header" style="background:#0f172a !important; color:white !important;">
+            <span class="card-title" style="color:white !important;">📊 Complete Strategy Comparison Matrix</span>
+        </div>
+        <div class="card-body" style="padding:8px 10px;">
+            <table>
+                <tr>
+                    <th>Strategy Name</th>
+                    <th>Price Risk (Delta)</th>
+                    <th>Target Yield (APY)</th>
+                    <th>Holding Time</th>
+                    <th>Target Venues</th>
+                    <th>Status</th>
+                </tr>
+                <tr>
+                    <td><strong>Cross-Exchange Spread</strong></td>
+                    <td><span style="color:#059669; font-weight:700;">Zero (Delta-Neutral)</span></td>
+                    <td>20% – 45% APY</td>
+                    <td>9.5 Minutes</td>
+                    <td>Binance + Bybit / Delta</td>
+                    <td><span class="badge-status-promoted">⭐ Live Paper</span></td>
+                </tr>
+                <tr>
+                    <td><strong>Spot-Perp Cash &amp; Carry</strong></td>
+                    <td><span style="color:#059669; font-weight:700;">Zero (Delta-Neutral)</span></td>
+                    <td>12% – 28% APY</td>
+                    <td>Days to Months</td>
+                    <td>Binance / Bybit</td>
+                    <td><span class="badge-status-audit">Audited</span></td>
+                </tr>
+                <tr>
+                    <td><strong>OU Mean Reversion</strong></td>
+                    <td><span style="color:#059669; font-weight:700;">Zero (Delta-Neutral)</span></td>
+                    <td>25% – 50% APY</td>
+                    <td>2 to 12 Hours</td>
+                    <td>Binance + OKX / Bybit</td>
+                    <td><span class="badge-status-audit">Audited</span></td>
+                </tr>
+                <tr>
+                    <td><strong>Rate-Momentum Sizing</strong></td>
+                    <td><span style="color:#d97706; font-weight:700;">Directional (Tilted)</span></td>
+                    <td>35% – 70% APY</td>
+                    <td>Trend Duration</td>
+                    <td>Binance USD-M</td>
+                    <td><span class="badge-status-audit">Audited</span></td>
+                </tr>
+                <tr>
+                    <td><strong>ML Rate Prediction</strong></td>
+                    <td><span style="color:#059669; font-weight:700;">Zero (Pre-Positioned)</span></td>
+                    <td>25% – 40% APY</td>
+                    <td>2 to 8 Hours</td>
+                    <td>Multi-Exchange Feeds</td>
+                    <td><span class="badge-status-audit">Audited</span></td>
+                </tr>
+            </table>
+        </div>
+    </div>
+
+    <!-- CORE TAKEAWAYS / CHECKLIST -->
+    <div class="strategy-card" style="margin-top: 8px;">
+        <div class="card-header" style="background:#1e293b !important; color:white !important;">
+            <span class="card-title" style="color:white !important;">🎯 Executive Summary: Rules for Zero Losses</span>
+        </div>
+        <div class="card-body" style="padding:8px 12px;">
+            <ul style="margin:0; padding-left:16px; line-height: 1.5; color:#0f172a;">
+                <li><strong>The Fee Hurdle Rule:</strong> Never enter a cross-exchange trade unless the funding spread exceeds roundtrip taker fees by at least 0.03%.</li>
+                <li><strong>The 9.5-Minute Rule:</strong> Never hold cross-exchange trades for hours. Enter at <code>T - 5.0m</code>, collect settlement at <code>T = 0</code>, exit at <code>T + 4.5m</code>.</li>
+                <li><strong>The Spot Collateral Rule:</strong> In Cash &amp; Carry, always use 1x leverage with Portfolio Margin so spot crypto backs the short contract (zero liquidation risk).</li>
+                <li><strong>The Statistical Stop-Loss Rule:</strong> In OU Mean Reversion, never hold through a regime break; exit at <code>|Z| &ge; 3.5</code> or 48-hour time limit.</li>
+            </ul>
+        </div>
+    </div>
+
+</body>
+</html>

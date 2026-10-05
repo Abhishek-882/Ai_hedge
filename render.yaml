@@ -1,0 +1,16 @@
+services:
+  - type: web
+    name: ai-hedge-cockpit
+    runtime: node
+    plan: free
+    region: oregon
+    rootDir: web
+    buildCommand: npm install && npm run build
+    startCommand: npm start
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: NEXT_TELEMETRY_DISABLED
+        value: "1"
+      - key: NODE_VERSION
+        value: "20.18.0"

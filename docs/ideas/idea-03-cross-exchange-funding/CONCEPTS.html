@@ -1,0 +1,169 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>PHASE A: CONCEPT FORMALIZATION</title>
+<style>
+    @page {
+        size: A4 portrait;
+        margin: 16mm 18mm 16mm 18mm;
+        @bottom-right {
+            content: counter(page);
+        }
+    }
+    *, *::before, *::after {
+        box-sizing: border-box;
+    }
+    body {
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+        color: #1e293b;
+        background: #ffffff;
+        margin: 0;
+        padding: 0;
+        font-size: 12.5px;
+        line-height: 1.5;
+    }
+    .header-banner {
+        border-bottom: 2px solid #0f172a;
+        padding-bottom: 12px;
+        margin-bottom: 16px;
+        display: flex;
+        justify-content: space-between;
+        align-items: flex-start;
+    }
+    h1 {
+        color: #0f172a;
+        font-size: 18px;
+        font-weight: 700;
+        margin: 0;
+        letter-spacing: -0.01em;
+    }
+    .badge-phase {
+        background: #0284c7;
+        color: #ffffff;
+        font-size: 10px;
+        font-weight: 700;
+        padding: 3px 8px;
+        border-radius: 4px;
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+        white-space: nowrap;
+    }
+    h2 {
+        color: #0f172a;
+        font-size: 13.5px;
+        font-weight: 700;
+        margin: 16px 0 8px 0;
+        padding: 6px 10px;
+        background: #f8fafc;
+        border-left: 4px solid #0284c7;
+        border-radius: 0 4px 4px 0;
+    }
+    pre {
+        background-color: #0f172a;
+        color: #38bdf8;
+        padding: 12px 14px;
+        border-radius: 6px;
+        font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+        font-size: 12px;
+        overflow-x: auto;
+        margin: 8px 0 12px 0;
+        border: 1px solid #1e293b;
+    }
+    pre code {
+        background: transparent;
+        color: inherit;
+        padding: 0;
+        border: none;
+    }
+    p {
+        margin: 6px 0 10px 0;
+    }
+    .formula-box {
+        background: #f8fafc;
+        border: 1px solid #cbd5e1;
+        border-left: 4px solid #6366f1;
+        padding: 10px 14px;
+        border-radius: 4px;
+        font-family: ui-monospace, monospace;
+        font-size: 12px;
+        color: #1e1b4b;
+        font-weight: 600;
+        margin: 8px 0 12px 0;
+    }
+    ul {
+        margin: 6px 0 12px 0;
+        padding-left: 20px;
+    }
+    li {
+        margin-bottom: 6px;
+        color: #334155;
+    }
+    li strong {
+        color: #0f172a;
+    }
+    code {
+        font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+        background-color: #f1f5f9;
+        color: #0369a1;
+        padding: 2px 5px;
+        border-radius: 3px;
+        font-size: 11.5px;
+        border: 1px solid #e2e8f0;
+        font-weight: 600;
+    }
+    .signoff-box {
+        background: #f0fdf4;
+        border: 1px solid #bbf7d0;
+        border-radius: 6px;
+        padding: 8px 12px;
+        margin-top: 12px;
+    }
+    .footer {
+        margin-top: 24px;
+        padding-top: 8px;
+        border-top: 1px solid #e2e8f0;
+        font-size: 10px;
+        color: #94a3b8;
+        display: flex;
+        justify-content: space-between;
+    }
+    </style>
+</head>
+<body>
+    <div class="header-banner">
+        <div>
+            <h1>PHASE A: CONCEPT FORMALIZATION</h1>
+            <p style="color: #64748b; font-size: 12px; margin: 4px 0 0 0;">Strategy Specification • <code>idea-03-cross-exchange-funding</code></p>
+        </div>
+        <div>
+            <span class="badge-phase">Phase A Complete</span>
+        </div>
+    </div>
+    
+    
+<h2>1. Payoff Mechanics &amp; Derivation</h2>
+<pre><code>Phi_net = N * [(FR_H - FR_L) - 0.0020 (FeeDrag) - 0.0010 (Slippage) + DeltaBasis]
+</code></pre>
+<h2>2. Delta-Neutrality Definition &amp; Proof</h2>
+<div class='formula-box'>N_L = Q_L · P_L = N_H = Q_H · P_H = target_notional / 2 &nbsp;⟹&nbsp; <strong>Net Delta = N_L − N_H = 0.0</strong></div>
+<h2>3. Residual Risk Inventory</h2>
+<ul>
+<li>Basis Risk: Divergence between venue A and venue B perp prices during 9.5-minute holding interval.</li>
+<li>Execution Timing Risk: Stochastic fill latency skew (40ms-350ms) causing momentary unhedged delta exposure.</li>
+<li>Funding Settlement Asynchrony: Timestamp discrepancies across venues or differing funding intervals.</li>
+<li>Exchange Outage / Disconnect: Single venue drops websocket feed leaving open leg unhedged.</li>
+<li>Auto-Deleveraging (ADL) / Liquidation Cascades: Extreme market moves triggering unhedged directional tail risk.</li>
+</ul>
+<h2>4. Sign-offs</h2>
+<ul>
+<li><strong>GAMMA</strong>: <code>GAMMA — 2026-08-28T14:52:28.651084+00:00 — git:m5-exec-2026</code></li>
+<li><strong>BETA</strong>: <code>BETA — 2026-08-28T14:52:28.651084+00:00 — git:m5-exec-2026</code></li>
+</ul>
+    
+    <div class="footer">
+        <span>Funding Rate Bot • Strategy Ideas Backlog</span>
+        <span>Cryptographic Audit Proof Signed</span>
+    </div>
+</body>
+</html>

@@ -1,0 +1,222 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>Strategy Ideas Backlog Registry</title>
+<style>
+    @page {
+        size: A4 landscape;
+        margin: 15mm;
+        @bottom-right {
+            content: counter(page);
+        }
+    }
+    *, *::before, *::after {
+        box-sizing: border-box;
+    }
+    body {
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+        color: #1e293b;
+        background: #ffffff;
+        margin: 0;
+        padding: 10px;
+        font-size: 13px;
+        line-height: 1.5;
+    }
+    .header {
+        margin-bottom: 24px;
+        padding-bottom: 14px;
+        border-bottom: 2px solid #e2e8f0;
+        display: flex;
+        justify-content: space-between;
+        align-items: flex-end;
+    }
+    h1 {
+        color: #0f172a;
+        font-size: 24px;
+        font-weight: 700;
+        margin: 0 0 6px 0;
+        letter-spacing: -0.02em;
+    }
+    .subtitle {
+        color: #64748b;
+        font-size: 12px;
+        margin: 0;
+    }
+    .badge-registry {
+        background: #0284c7;
+        color: white;
+        padding: 4px 10px;
+        border-radius: 9999px;
+        font-size: 11px;
+        font-weight: 600;
+        letter-spacing: 0.05em;
+        text-transform: uppercase;
+    }
+    table {
+        width: 100%;
+        border-collapse: collapse;
+        border-spacing: 0;
+        margin-top: 10px;
+        font-size: 11.5px;
+        background: #ffffff;
+        border: 1px solid #e2e8f0;
+        border-radius: 8px;
+        overflow: hidden;
+    }
+    th {
+        background-color: #0f172a;
+        color: #f8fafc;
+        text-align: left;
+        padding: 10px 12px;
+        font-weight: 600;
+        font-size: 11px;
+        letter-spacing: 0.03em;
+        text-transform: uppercase;
+        border: 1px solid #1e293b;
+    }
+    td {
+        padding: 10px 12px;
+        border: 1px solid #e2e8f0;
+        vertical-align: middle;
+    }
+    tr:nth-child(even) {
+        background-color: #f8fafc;
+    }
+    tr:hover {
+        background-color: #f1f5f9;
+    }
+    code {
+        font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+        background-color: #f1f5f9;
+        color: #0f172a;
+        padding: 2px 6px;
+        border-radius: 4px;
+        font-size: 11px;
+        border: 1px solid #e2e8f0;
+        font-weight: 600;
+    }
+    .status-paper {
+        background: #dcfce7;
+        color: #15803d;
+        border: 1px solid #bbf7d0;
+        padding: 2px 8px;
+        border-radius: 9999px;
+        font-weight: 600;
+        display: inline-block;
+    }
+    .status-audit {
+        background: #fef3c7;
+        color: #b45309;
+        border: 1px solid #fde68a;
+        padding: 2px 8px;
+        border-radius: 9999px;
+        font-weight: 600;
+        display: inline-block;
+    }
+    .priority-1 {
+        color: #0369a1;
+        font-weight: 700;
+    }
+    .footer {
+        margin-top: 30px;
+        padding-top: 10px;
+        border-top: 1px solid #e2e8f0;
+        font-size: 10px;
+        color: #94a3b8;
+        display: flex;
+        justify-content: space-between;
+    }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <div>
+            <h1>Strategy Ideas Backlog Registry</h1>
+            <p class="subtitle">Quantitative Arbitrage & Yield Capture Engine • Active Backlog</p>
+        </div>
+        <div>
+            <span class="badge-registry">M5 Pipeline Active</span>
+        </div>
+    </div>
+    
+    
+<table>
+<thead>
+<tr>
+<th>ID</th>
+<th>Strategy Name</th>
+<th>Source</th>
+<th>Category</th>
+<th>Status</th>
+<th>Phase</th>
+<th>Lead Agent</th>
+<th>Target Venues</th>
+<th>Priority</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>idea-03-cross-exchange-funding</code></td>
+<td>Cross-Exchange Funding Spread Capture</td>
+<td>user</td>
+<td>cross-exchange delta-neutral</td>
+<td><span class='status-paper'>paper</span></td>
+<td>Phase E (Live Testnet Paper Trading)</td>
+<td>ALPHA / GAMMA</td>
+<td>Binance, Bybit, Delta India, KuCoin</td>
+<td>1 (Promoted to Paper)</td>
+</tr>
+<tr>
+<td><code>idea-01-cash-and-carry</code></td>
+<td>Spot-Perp Cash-and-Carry</td>
+<td>user</td>
+<td>single-exchange delta-neutral</td>
+<td><span class='status-audit'>audit</span></td>
+<td>Phase B (Data Feasibility Complete)</td>
+<td>GAMMA</td>
+<td>Binance, Bybit</td>
+<td>2 (Audited Phase B Complete)</td>
+</tr>
+<tr>
+<td><code>idea-rs-ou-mean-reversion</code></td>
+<td>Bounded OU Mean Reversion Spread Model</td>
+<td>agent-researched</td>
+<td>statistical arbitrage</td>
+<td><span class='status-audit'>audit</span></td>
+<td>Phase B (Data Feasibility Complete)</td>
+<td>GAMMA</td>
+<td>Binance, Bybit</td>
+<td>3 (GAMMA Research Slot Complete)</td>
+</tr>
+<tr>
+<td><code>idea-02-rate-momentum</code></td>
+<td>Rate-Momentum Sizing</td>
+<td>user</td>
+<td>directional-tilt</td>
+<td><span class='status-audit'>audit</span></td>
+<td>Phase B (Data Feasibility Complete)</td>
+<td>ALPHA</td>
+<td>Binance USD-M</td>
+<td>4 (Deferred with Reason)</td>
+</tr>
+<tr>
+<td><code>idea-04-ml-rate-prediction</code></td>
+<td>ML-Augmented Rate Prediction</td>
+<td>user</td>
+<td>predictive</td>
+<td><span class='status-audit'>audit</span></td>
+<td>Phase B (Data Feasibility Complete)</td>
+<td>ALPHA / GAMMA</td>
+<td>Multi-Exchange Feeds</td>
+<td>5 (Deferred with Reason)</td>
+</tr>
+</tbody>
+</table>
+    
+    <div class="footer">
+        <span>Funding Rate Bot Documentation</span>
+        <span>Generated: 2026-08-28</span>
+    </div>
+</body>
+</html>
