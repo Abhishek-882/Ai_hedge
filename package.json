@@ -3,10 +3,10 @@
   "version": "1.0.0",
   "description": "Autonomous Delta-Neutral Funding Rate Arbitrage Cockpit (Binance Futures + Bitget Perpetuals)",
   "scripts": {
-    "build": "npm --prefix web run build",
+    "build": "npm --prefix web install --no-audit --no-fund && npm --prefix web run build",
     "start": "npm --prefix web run start",
     "dev": "npm --prefix web run dev",
-    "install:web": "npm --prefix web install"
+    "install:web": "npm --prefix web install --no-audit --no-fund"
   },
   "keywords": [
     "arbitrage",
