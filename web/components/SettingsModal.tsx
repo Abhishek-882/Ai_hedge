@@ -219,7 +219,7 @@ export default function SettingsModal({ isOpen, onClose, onSaved }: SettingsModa
     } else {
       setBitgetKey("bg_2c493eb64032f2b0aea68c1c18d56e05");
       setBitgetSecret("c77d2baac5b1fb84e9d900e15dfcac783b962d1da1837b50ff05daf68ac2f5f6");
-      setBitgetPassphrase(localStorage.getItem("BITGET_PASSPHRASE") || "");
+      setBitgetPassphrase(localStorage.getItem("BITGET_PASSPHRASE") || "ArbitrageBot2027");
       setBitgetEnv("demo");
     }
     setTestResult(null);

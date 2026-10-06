@@ -136,21 +136,25 @@ export async function getBitgetAccount(creds?: BitgetCredentials) {
       data = await res.json();
     }
 
-    // If account is in Unified Trading Account (UTA) mode, auto-fallback to V3 assets
-    if (data.code === "40084") {
+    // If account is in Unified Trading Account (UTA) mode or V2 Mix returns permissions error, auto-fallback to V3 assets
+    if (data.code === "40084" || data.code === "40014" || data.code !== "00000") {
       const v3Path = "/api/v3/account/assets";
       const v3Headers = await getBitgetHeaders(creds, "GET", v3Path);
       const v3Res = await fetch(`${baseUrl}${v3Path}`, { headers: v3Headers, cache: "no-store" });
       const v3Data = await v3Res.json();
       if (v3Data.code === "00000" && v3Data.data) {
-        const assets = v3Data.data || [];
-        const usdt = assets.find((a: any) => a.coin === "USDT") || assets[0] || {};
+        const raw = v3Data.data;
+        const assetsList = Array.isArray(raw) ? raw : (raw.assets || []);
+        const usdt = assetsList.find((a: any) => a.coin === "USDT") || assetsList[0] || {};
+        const usdtEquity = parseFloat(usdt.equity || usdt.balance || raw.usdtEquity || "0");
+        const available = parseFloat(usdt.available || raw.effEquity || "0");
+        const unrealizedPnL = parseFloat(raw.unrealisedPnl || usdt.unrealizedPnL || "0");
         return {
           success: true,
-          venue: "Bitget-Unified-UTA",
-          equity: parseFloat(usdt.equity || usdt.balance || "0"),
-          available: parseFloat(usdt.available || "0"),
-          unrealizedPnL: parseFloat(usdt.unrealizedPnL || "0"),
+          venue: creds.isDemo ? "Bitget-UTA-Demo" : "Bitget-Unified-UTA",
+          equity: usdtEquity > 0 ? usdtEquity : parseFloat(raw.accountEquity || "0"),
+          available,
+          unrealizedPnL,
           isSimulated: false,
         };
       }
