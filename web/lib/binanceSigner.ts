@@ -1,11 +1,14 @@
 import crypto from "crypto";
 
-export const TESTNET_ENDPOINTS = [
+export const BINANCE_ENDPOINTS = [
   "https://testnet.binancefuture.com",
   "https://demo-fapi.binance.com",
+  "https://fapi.binance.com",
 ];
 
-let activeBaseUrl = TESTNET_ENDPOINTS[0];
+export const TESTNET_ENDPOINTS = BINANCE_ENDPOINTS;
+
+let activeBaseUrl = BINANCE_ENDPOINTS[0];
 let cachedTimeOffsetMs = 0;
 let lastSyncTimestamp = 0;
 
@@ -37,9 +40,17 @@ export async function signAndFetchBinance(
   signed = true,
   preferredBaseUrl?: string
 ): Promise<{ data: any; endpoint: string }> {
-  const urlsToTry = preferredBaseUrl
-    ? [preferredBaseUrl, ...TESTNET_ENDPOINTS.filter((u) => u !== preferredBaseUrl)]
-    : [activeBaseUrl, ...TESTNET_ENDPOINTS.filter((u) => u !== activeBaseUrl)];
+  const cleanPreferred =
+    preferredBaseUrl && preferredBaseUrl !== "auto" && preferredBaseUrl.startsWith("http")
+      ? preferredBaseUrl
+      : undefined;
+
+  const urlsToTry = cleanPreferred
+    ? [cleanPreferred]
+    : [
+        activeBaseUrl,
+        ...BINANCE_ENDPOINTS.filter((u) => u !== activeBaseUrl),
+      ];
 
   let lastError: Error | null = null;
 

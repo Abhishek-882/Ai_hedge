@@ -66,12 +66,15 @@ export default function SettingsModal({ isOpen, onClose, onSaved }: SettingsModa
       if (binanceEndpoint !== "auto") {
         headers["x-binance-endpoint"] = binanceEndpoint;
       }
-      const res = await fetch("/api/account", { headers });
+      const res = await fetch(`/api/account?_t=${Date.now()}`, {
+        headers,
+        cache: "no-store",
+      });
       const data = await res.json();
       if (data.success) {
         setTestResult({
           success: true,
-          msg: `Binance Connected! Balance: $${data.totalWalletBalance?.toLocaleString()} USDT (${data.endpoint})`,
+          msg: `Binance Connected [${data.keyMask}]! Balance: $${data.totalWalletBalance?.toLocaleString()} USDT (${data.endpoint.replace("https://", "")})`,
         });
       } else {
         setTestResult({
@@ -100,7 +103,10 @@ export default function SettingsModal({ isOpen, onClose, onSaved }: SettingsModa
         "x-bitget-passphrase": bitgetPassphrase.trim(),
         "x-bitget-env": bitgetEnv,
       };
-      const res = await fetch("/api/bitget/account", { headers });
+      const res = await fetch(`/api/bitget/account?_t=${Date.now()}`, {
+        headers,
+        cache: "no-store",
+      });
       const data = await res.json();
       if (data.success) {
         setTestResult({

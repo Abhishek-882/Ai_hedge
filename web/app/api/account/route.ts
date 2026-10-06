@@ -4,13 +4,28 @@ import { signAndFetchBinance } from "@/lib/binanceSigner";
 export const dynamic = "force-dynamic";
 
 export async function GET(req: NextRequest) {
-  const apiKey = req.headers.get("x-binance-key") || process.env.BINANCE_TESTNET_API_KEY;
-  const apiSecret = req.headers.get("x-binance-secret") || process.env.BINANCE_TESTNET_API_SECRET;
+  const clientKey = req.headers.get("x-binance-key");
+  const clientSecret = req.headers.get("x-binance-secret");
   const preferredUrl = req.headers.get("x-binance-endpoint") || undefined;
 
+  const isCustomKey = Boolean(clientKey && clientKey.trim());
+  const apiKey = isCustomKey ? clientKey!.trim() : process.env.BINANCE_TESTNET_API_KEY || "";
+  const apiSecret = isCustomKey ? (clientSecret ? clientSecret.trim() : "") : process.env.BINANCE_TESTNET_API_SECRET || "";
+
+  const noCacheHeaders = {
+    "Cache-Control": "no-store, no-cache, must-revalidate, proxy-revalidate, max-age=0",
+    "Pragma": "no-cache",
+    "Expires": "0",
+  };
+
   if (!apiKey || !apiSecret) {
-    return NextResponse.json({ success: false, error: "Missing API credentials" }, { status: 401 });
+    return NextResponse.json(
+      { success: false, error: "Missing API credentials" },
+      { status: 401, headers: noCacheHeaders }
+    );
   }
+
+  const keyMask = apiKey.length >= 8 ? `${apiKey.slice(0, 4)}...${apiKey.slice(-4)}` : "INVALID";
 
   try {
     const { data, endpoint } = await signAndFetchBinance(
@@ -37,16 +52,24 @@ export async function GET(req: NextRequest) {
         leverage: parseInt(p.leverage, 10),
       }));
 
-    return NextResponse.json({
-      success: true,
-      endpoint,
-      totalWalletBalance,
-      availableBalance,
-      totalUnrealizedProfit,
-      positionsCount: positions.length,
-      positions,
-    });
+    return NextResponse.json(
+      {
+        success: true,
+        endpoint,
+        totalWalletBalance,
+        availableBalance,
+        totalUnrealizedProfit,
+        positionsCount: positions.length,
+        positions,
+        keyMask,
+        isCustomKey,
+      },
+      { headers: noCacheHeaders }
+    );
   } catch (err: any) {
-    return NextResponse.json({ success: false, error: err.message }, { status: 500 });
+    return NextResponse.json(
+      { success: false, error: err.message, keyMask, isCustomKey },
+      { status: 500, headers: noCacheHeaders }
+    );
   }
 }

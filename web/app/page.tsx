@@ -60,9 +60,10 @@ export default function DashboardPage() {
       }
 
       const headers = getVaultHeaders();
+      const ts = Date.now();
 
-      // 1. Binance Account & Positions
-      const accountRes = await fetch("/api/account", { headers });
+      // 1. Binance Account & Positions (Strict Uncached)
+      const accountRes = await fetch(`/api/account?_t=${ts}`, { headers, cache: "no-store" });
       const accountData = await accountRes.json();
       if (accountData.success) {
         setAccount(accountData);
@@ -76,8 +77,8 @@ export default function DashboardPage() {
         if (accountData.endpoint) setAccountEndpoint(accountData.endpoint);
       }
 
-      // 2. Bitget Account
-      const bitgetRes = await fetch("/api/bitget/account", { headers });
+      // 2. Bitget Account (Strict Uncached)
+      const bitgetRes = await fetch(`/api/bitget/account?_t=${ts}`, { headers, cache: "no-store" });
       const bitgetData = await bitgetRes.json();
       if (bitgetData.success) {
         setBitgetAccount(bitgetData);
@@ -213,7 +214,15 @@ export default function DashboardPage() {
               </span>
             </div>
 
-            {hasCustomKey ? (
+            {account?.keyMask ? (
+              <span className={`px-2 py-0.5 rounded text-[10px] font-mono border ${
+                account.isCustomKey
+                  ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/30"
+                  : "bg-amber-500/10 text-amber-400 border-amber-500/30"
+              }`}>
+                KEY: {account.keyMask} {account.isCustomKey ? "(VAULT CUSTOM)" : "(DEFAULT TESTNET)"}
+              </span>
+            ) : hasCustomKey ? (
               <span className="px-2 py-0.5 rounded text-[10px] bg-emerald-500/10 text-emerald-400 border border-emerald-500/30">
                 VAULT KEYS LOADED
               </span>
