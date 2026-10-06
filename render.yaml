@@ -3,7 +3,7 @@ services:
     name: ai-hedge-cockpit
     runtime: node
     plan: free
-    region: oregon
+    region: frankfurt
     rootDir: web
     buildCommand: npm install --no-audit --no-fund && npm run build
     startCommand: npm start

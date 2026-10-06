@@ -18,6 +18,7 @@ export default function DashboardPage() {
   const [bitgetAccount, setBitgetAccount] = useState<any>(null);
   const [positions, setPositions] = useState<any[]>([]);
   const [accountError, setAccountError] = useState<string | null>(null);
+  const [bitgetError, setBitgetError] = useState<string | null>(null);
   const [accountEndpoint, setAccountEndpoint] = useState<string | null>(null);
   const [hasCustomKey, setHasCustomKey] = useState(false);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
@@ -63,29 +64,43 @@ export default function DashboardPage() {
       const ts = Date.now();
 
       // 1. Binance Account & Positions (Strict Uncached)
-      const accountRes = await fetch(`/api/account?_t=${ts}`, { headers, cache: "no-store" });
-      const accountData = await accountRes.json();
-      if (accountData.success) {
-        setAccount(accountData);
-        setPositions(accountData.positions || []);
-        setAccountError(null);
-        if (accountData.endpoint) setAccountEndpoint(accountData.endpoint);
-      } else {
+      try {
+        const accountRes = await fetch(`/api/account?_t=${ts}`, { headers, cache: "no-store" });
+        const accountData = await accountRes.json();
+        if (accountData.success) {
+          setAccount(accountData);
+          setPositions(accountData.positions || []);
+          setAccountError(null);
+          if (accountData.endpoint) setAccountEndpoint(accountData.endpoint);
+        } else {
+          setAccount(null);
+          setPositions([]);
+          setAccountError(accountData.error || "Failed to authenticate with Binance");
+          if (accountData.endpoint) setAccountEndpoint(accountData.endpoint);
+        }
+      } catch (err: any) {
         setAccount(null);
         setPositions([]);
-        setAccountError(accountData.error || "Failed to authenticate with Binance");
-        if (accountData.endpoint) setAccountEndpoint(accountData.endpoint);
+        setAccountError(err.message || "Network error fetching Binance");
       }
 
       // 2. Bitget Account (Strict Uncached)
-      const bitgetRes = await fetch(`/api/bitget/account?_t=${ts}`, { headers, cache: "no-store" });
-      const bitgetData = await bitgetRes.json();
-      if (bitgetData.success) {
-        setBitgetAccount(bitgetData);
+      try {
+        const bitgetRes = await fetch(`/api/bitget/account?_t=${ts}`, { headers, cache: "no-store" });
+        const bitgetData = await bitgetRes.json();
+        if (bitgetData.success) {
+          setBitgetAccount(bitgetData);
+          setBitgetError(null);
+        } else {
+          setBitgetAccount(null);
+          setBitgetError(bitgetData.error || "Failed to authenticate with Bitget");
+        }
+      } catch (err: any) {
+        setBitgetAccount(null);
+        setBitgetError(err.message || "Network error fetching Bitget");
       }
     } catch (err: any) {
       console.error("Dashboard fetch error:", err);
-      setAccountError(err.message || "Network error fetching account data");
     } finally {
       setIsRefreshing(false);
     }
@@ -256,12 +271,14 @@ export default function DashboardPage() {
 
           {/* Bitget Equity */}
           <div className="flex items-center space-x-2 bg-surface px-3 py-2 rounded-lg border border-border text-xs">
-            <Wallet className="w-4 h-4 text-cyan-400" />
+            <Wallet className={`w-4 h-4 ${bitgetError ? "text-accent-rose" : "text-cyan-400"}`} />
             <div>
               <div className="text-[10px] text-zinc-500">BITGET EQUITY</div>
               <div className="font-bold text-zinc-200">
                 {bitgetAccount?.equity !== undefined
                   ? `$${bitgetAccount.equity.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} USDT`
+                  : bitgetError
+                  ? <span className="text-accent-rose">AUTH ERROR</span>
                   : "SYNCING..."}
               </div>
             </div>
@@ -297,25 +314,59 @@ export default function DashboardPage() {
       </header>
 
       {/* Account Error / Diagnostic Alert Banner */}
-      {accountError && (
-        <div className="mb-6 p-4 rounded-xl border border-rose-500/40 bg-rose-500/10 backdrop-blur flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 text-xs">
-          <div className="space-y-1">
-            <div className="font-bold text-rose-300 flex items-center gap-1.5">
-              <span>⚠️ Binance Testnet Authentication Issue:</span>
+      {(accountError || bitgetError) && (
+        <div className="mb-6 p-4 rounded-xl border border-rose-500/40 bg-rose-500/10 backdrop-blur space-y-3 text-xs">
+          {accountError && (
+            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+              <div className="space-y-1 w-full">
+                <div className="font-bold text-rose-300 flex items-center gap-1.5">
+                  <span>⚠️ Binance Authentication Issue:</span>
+                </div>
+                <div className="text-zinc-300 font-mono text-[11px] bg-zinc-950/60 p-2 rounded border border-rose-500/20 max-w-3xl overflow-x-auto">
+                  {accountError}
+                </div>
+                {accountError.toLowerCase().includes("restricted location") && (
+                  <div className="text-amber-300/90 text-[11px] bg-amber-950/40 border border-amber-500/30 p-2 rounded mt-1">
+                    🌍 <strong>Geo-Restriction Detected</strong>: Binance blocks US datacenter IPs (Render Oregon).
+                    <br />
+                    • <strong>Fix on Render</strong>: In Render Dashboard → Settings → Region → change to <strong>Frankfurt (EU Central)</strong>.
+                    <br />
+                    • <strong>Run Locally</strong>: Run <code className="text-zinc-200">npm run dev</code> inside <code className="text-zinc-200">web/</code> on your computer (India IP has zero restrictions).
+                  </div>
+                )}
+              </div>
+              <button
+                onClick={() => setIsSettingsOpen(true)}
+                className="px-3 py-2 rounded-lg bg-rose-500/20 hover:bg-rose-500/30 text-rose-200 border border-rose-500/40 font-semibold whitespace-nowrap transition-colors self-start sm:self-center"
+              >
+                Open Vault Settings
+              </button>
             </div>
-            <div className="text-zinc-300 font-mono text-[11px] bg-zinc-950/60 p-2 rounded border border-rose-500/20 max-w-3xl overflow-x-auto">
-              {accountError}
+          )}
+
+          {bitgetError && (
+            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 pt-2 border-t border-rose-500/20">
+              <div className="space-y-1 w-full">
+                <div className="font-bold text-rose-300 flex items-center gap-1.5">
+                  <span>⚠️ Bitget Authentication Issue:</span>
+                </div>
+                <div className="text-zinc-300 font-mono text-[11px] bg-zinc-950/60 p-2 rounded border border-rose-500/20 max-w-3xl overflow-x-auto">
+                  {bitgetError}
+                </div>
+                {bitgetError.toLowerCase().includes("passphrase") && (
+                  <div className="text-zinc-400 text-[11px]">
+                    Tip: Enter the passphrase <code className="text-cyan-300">ArbitrageBot2026</code> in the Bitget tab inside Vault Settings.
+                  </div>
+                )}
+              </div>
+              <button
+                onClick={() => setIsSettingsOpen(true)}
+                className="px-3 py-2 rounded-lg bg-rose-500/20 hover:bg-rose-500/30 text-rose-200 border border-rose-500/40 font-semibold whitespace-nowrap transition-colors self-start sm:self-center"
+              >
+                Open Vault Settings
+              </button>
             </div>
-            <div className="text-zinc-400 text-[11px]">
-              Tip: If you generated keys on <strong>demo.binance.com</strong>, make sure your Vault environment is set to <strong>demo-fapi.binance.com</strong> or <strong>Automatic</strong>.
-            </div>
-          </div>
-          <button
-            onClick={() => setIsSettingsOpen(true)}
-            className="px-3 py-2 rounded-lg bg-rose-500/20 hover:bg-rose-500/30 text-rose-200 border border-rose-500/40 font-semibold whitespace-nowrap transition-colors"
-          >
-            Open Vault Settings
-          </button>
+          )}
         </div>
       )}
 
