@@ -217,10 +217,10 @@ export default function SettingsModal({ isOpen, onClose, onSaved }: SettingsModa
       setBinanceSecret("dpMSrQ1GDCPhNPnRRsIC0rCjzlDK9VfbC9fKXwptUGtqn2WdTKLZWekZqXykY00h");
       setBinanceEndpoint("https://demo-fapi.binance.com");
     } else {
-      setBitgetKey("bg_8c2e7e602008fbfd0d571e266bfcd8dc");
-      setBitgetSecret("bdb9294fec70ff19d909c83113abe88a032d394b44b915292ffec36e75a462bd");
-      setBitgetPassphrase("ArbitrageBot2026");
-      setBitgetEnv("live");
+      setBitgetKey("bg_2c493eb64032f2b0aea68c1c18d56e05");
+      setBitgetSecret("c77d2baac5b1fb84e9d900e15dfcac783b962d1da1837b50ff05daf68ac2f5f6");
+      setBitgetPassphrase(localStorage.getItem("BITGET_PASSPHRASE") || "");
+      setBitgetEnv("demo");
     }
     setTestResult(null);
   };

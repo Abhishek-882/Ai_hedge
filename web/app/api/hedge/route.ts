@@ -5,16 +5,24 @@ import { placeBitgetOrder, BitgetCredentials } from "@/lib/bitgetSigner";
 export const dynamic = "force-dynamic";
 
 export async function POST(req: NextRequest) {
+  const DEFAULT_BINANCE_KEY = "RkqI5SmWN3z6DxKcAirPx48BmHpkA21FHPaeWFPsiJ4NbIvMAt4yTM3TsoLbHVAU";
+  const DEFAULT_BINANCE_SECRET = "dpMSrQ1GDCPhNPnRRsIC0rCjzlDK9VfbC9fKXwptUGtqn2WdTKLZWekZqXykY00h";
+
+  const DEFAULT_BITGET_KEY = "bg_2c493eb64032f2b0aea68c1c18d56e05";
+  const DEFAULT_BITGET_SECRET = "c77d2baac5b1fb84e9d900e15dfcac783b962d1da1837b50ff05daf68ac2f5f6";
+  const DEFAULT_BITGET_PASSPHRASE = process.env.BITGET_PASSPHRASE || "ArbitrageBot2026";
+  const DEFAULT_BITGET_ENV = "demo";
+
   // Binance Credentials
-  const binanceKey = req.headers.get("x-binance-key") || process.env.BINANCE_TESTNET_API_KEY;
-  const binanceSecret = req.headers.get("x-binance-secret") || process.env.BINANCE_TESTNET_API_SECRET;
+  const binanceKey = req.headers.get("x-binance-key") || process.env.BINANCE_TESTNET_API_KEY || DEFAULT_BINANCE_KEY;
+  const binanceSecret = req.headers.get("x-binance-secret") || process.env.BINANCE_TESTNET_API_SECRET || DEFAULT_BINANCE_SECRET;
   const binanceEndpoint = req.headers.get("x-binance-endpoint") || undefined;
 
   // Bitget Credentials
-  const bitgetKey = req.headers.get("x-bitget-key") || process.env.BITGET_API_KEY || "";
-  const bitgetSecret = req.headers.get("x-bitget-secret") || process.env.BITGET_API_SECRET || "";
-  const bitgetPassphrase = req.headers.get("x-bitget-passphrase") || process.env.BITGET_PASSPHRASE || "";
-  const bitgetEnv = req.headers.get("x-bitget-env") || "live";
+  const bitgetKey = req.headers.get("x-bitget-key") || process.env.BITGET_API_KEY || DEFAULT_BITGET_KEY;
+  const bitgetSecret = req.headers.get("x-bitget-secret") || process.env.BITGET_API_SECRET || DEFAULT_BITGET_SECRET;
+  const bitgetPassphrase = req.headers.get("x-bitget-passphrase") || DEFAULT_BITGET_PASSPHRASE;
+  const bitgetEnv = req.headers.get("x-bitget-env") || process.env.BITGET_ENV || DEFAULT_BITGET_ENV;
 
   if (!binanceKey || !binanceSecret) {
     return NextResponse.json({ success: false, error: "Missing Binance API credentials" }, { status: 401 });

@@ -9,9 +9,12 @@ export async function GET(req: NextRequest) {
   const clientSecret = req.headers.get("x-binance-secret");
   const preferredUrl = req.headers.get("x-binance-endpoint") || undefined;
 
+  const DEFAULT_BINANCE_KEY = "RkqI5SmWN3z6DxKcAirPx48BmHpkA21FHPaeWFPsiJ4NbIvMAt4yTM3TsoLbHVAU";
+  const DEFAULT_BINANCE_SECRET = "dpMSrQ1GDCPhNPnRRsIC0rCjzlDK9VfbC9fKXwptUGtqn2WdTKLZWekZqXykY00h";
+
   const isCustomKey = Boolean(clientKey && clientKey.trim());
-  const apiKey = isCustomKey ? clientKey!.trim() : process.env.BINANCE_TESTNET_API_KEY || "";
-  const apiSecret = isCustomKey ? (clientSecret ? clientSecret.trim() : "") : process.env.BINANCE_TESTNET_API_SECRET || "";
+  const apiKey = isCustomKey ? clientKey!.trim() : (process.env.BINANCE_TESTNET_API_KEY || DEFAULT_BINANCE_KEY);
+  const apiSecret = isCustomKey ? (clientSecret ? clientSecret.trim() : "") : (process.env.BINANCE_TESTNET_API_SECRET || DEFAULT_BINANCE_SECRET);
 
   const noCacheHeaders = {
     "Cache-Control": "no-store, no-cache, must-revalidate, proxy-revalidate, max-age=0",
