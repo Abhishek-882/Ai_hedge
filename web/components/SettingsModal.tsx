@@ -29,16 +29,20 @@ export default function SettingsModal({ isOpen, onClose, onSaved }: SettingsModa
 
   useEffect(() => {
     if (typeof window !== "undefined") {
-      setBinanceKey(localStorage.getItem("BINANCE_KEY") || "");
-      setBinanceSecret(localStorage.getItem("BINANCE_SECRET") || "");
+      const defaultBinanceKey = "RkqI5SmWN3z6DxKcAirPx48BmHpkA21FHPaeWFPsiJ4NbIvMAt4yTM3TsoLbHVAU";
+      const defaultBinanceSecret = "dpMSrQ1GDCPhNPnRRsIC0rCjzlDK9VfbC9fKXwptUGtqn2WdTKLZWekZqXykY00h";
+
+      setBinanceKey(localStorage.getItem("BINANCE_KEY") || defaultBinanceKey);
+      setBinanceSecret(localStorage.getItem("BINANCE_SECRET") || defaultBinanceSecret);
       setBinanceEndpoint(localStorage.getItem("BINANCE_ENDPOINT") || "auto");
 
       const defaultBitgetKey = "bg_8c2e7e602008fbfd0d571e266bfcd8dc";
       const defaultBitgetSecret = "bdb9294fec70ff19d909c83113abe88a032d394b44b915292ffec36e75a462bd";
+      const defaultBitgetPassphrase = "ArbitrageBot2026";
 
       setBitgetKey(localStorage.getItem("BITGET_KEY") || defaultBitgetKey);
       setBitgetSecret(localStorage.getItem("BITGET_SECRET") || defaultBitgetSecret);
-      setBitgetPassphrase(localStorage.getItem("BITGET_PASSPHRASE") || "");
+      setBitgetPassphrase(localStorage.getItem("BITGET_PASSPHRASE") || defaultBitgetPassphrase);
       setBitgetEnv(localStorage.getItem("BITGET_ENV") || "live");
 
       setTestResult(null);
