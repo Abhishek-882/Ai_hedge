@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getBitgetAccount } from "@/lib/bitgetSigner";
+import { logServerEvent } from "@/lib/logger";
 
 export const dynamic = "force-dynamic";
 
@@ -15,11 +16,23 @@ export async function GET(req: NextRequest) {
       : undefined;
 
     const account = await getBitgetAccount(creds);
-    return NextResponse.json(account);
+
+    if (account.success) {
+      logServerEvent("INFO", "BITGET", `Account synced (${account.venue}). Equity: $${account.equity}`);
+    } else {
+      logServerEvent("ERROR", "BITGET", `Account error: ${account.error}`);
+    }
+
+    return NextResponse.json(account, {
+      headers: {
+        "Cache-Control": "no-store, no-cache, must-revalidate, max-age=0",
+      },
+    });
   } catch (err: any) {
+    logServerEvent("ERROR", "BITGET", `Unexpected error: ${err.message}`);
     return NextResponse.json(
       { success: false, error: err.message || "Failed to fetch Bitget account" },
-      { status: 500 }
+      { status: 500, headers: { "Cache-Control": "no-store, no-cache, must-revalidate, max-age=0" } }
     );
   }
 }

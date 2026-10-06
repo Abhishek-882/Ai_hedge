@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { signAndFetchBinance } from "@/lib/binanceSigner";
+import { logServerEvent } from "@/lib/logger";
 
 export const dynamic = "force-dynamic";
 
@@ -19,6 +20,7 @@ export async function GET(req: NextRequest) {
   };
 
   if (!apiKey || !apiSecret) {
+    logServerEvent("WARN", "BINANCE", "Missing credentials in request");
     return NextResponse.json(
       { success: false, error: "Missing API credentials" },
       { status: 401, headers: noCacheHeaders }
@@ -52,6 +54,8 @@ export async function GET(req: NextRequest) {
         leverage: parseInt(p.leverage, 10),
       }));
 
+    logServerEvent("INFO", "BINANCE", `Account synced [${keyMask}] on ${endpoint}. Balance: $${totalWalletBalance}`);
+
     return NextResponse.json(
       {
         success: true,
@@ -67,6 +71,7 @@ export async function GET(req: NextRequest) {
       { headers: noCacheHeaders }
     );
   } catch (err: any) {
+    logServerEvent("ERROR", "BINANCE", `Authentication failed for [${keyMask}] (${preferredUrl || "auto"}): ${err.message}`);
     return NextResponse.json(
       { success: false, error: err.message, keyMask, isCustomKey },
       { status: 500, headers: noCacheHeaders }
