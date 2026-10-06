@@ -17,17 +17,27 @@ export async function GET(req: NextRequest) {
 
     const account = await getBitgetAccount(creds);
 
+    const hasCustomKey = Boolean(req.headers.get("x-bitget-key"));
+    const keyMask = apiKey.length >= 8 ? `${apiKey.slice(0, 4)}...${apiKey.slice(-4)}` : (creds ? "ACTIVE" : "SIMULATION");
+
     if (account.success) {
-      logServerEvent("INFO", "BITGET", `Account synced (${account.venue}). Equity: $${account.equity}`);
+      logServerEvent("INFO", "BITGET", `Account synced [${keyMask}] (${account.venue}). Equity: $${account.equity}`);
     } else {
-      logServerEvent("ERROR", "BITGET", `Account error: ${account.error}`);
+      logServerEvent("ERROR", "BITGET", `Account error [${keyMask}]: ${account.error}`);
     }
 
-    return NextResponse.json(account, {
-      headers: {
-        "Cache-Control": "no-store, no-cache, must-revalidate, max-age=0",
+    return NextResponse.json(
+      {
+        ...account,
+        keyMask,
+        isCustomKey: hasCustomKey,
       },
-    });
+      {
+        headers: {
+          "Cache-Control": "no-store, no-cache, must-revalidate, max-age=0",
+        },
+      }
+    );
   } catch (err: any) {
     logServerEvent("ERROR", "BITGET", `Unexpected error: ${err.message}`);
     return NextResponse.json(

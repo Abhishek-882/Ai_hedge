@@ -229,21 +229,23 @@ export default function DashboardPage() {
               </span>
             </div>
 
-            {account?.keyMask ? (
+            {account?.keyMask && (
               <span className={`px-2 py-0.5 rounded text-[10px] font-mono border ${
                 account.isCustomKey
-                  ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/30"
-                  : "bg-amber-500/10 text-amber-400 border-amber-500/30"
+                  ? "bg-amber-500/10 text-amber-400 border-amber-500/30"
+                  : "bg-zinc-800 text-zinc-400 border-zinc-700"
               }`}>
-                KEY: {account.keyMask} {account.isCustomKey ? "(VAULT CUSTOM)" : "(DEFAULT TESTNET)"}
+                BN: {account.keyMask} {account.isCustomKey ? "(VAULT)" : "(ENV)"}
               </span>
-            ) : hasCustomKey ? (
-              <span className="px-2 py-0.5 rounded text-[10px] bg-emerald-500/10 text-emerald-400 border border-emerald-500/30">
-                VAULT KEYS LOADED
-              </span>
-            ) : (
-              <span className="px-2 py-0.5 rounded text-[10px] bg-amber-500/10 text-amber-400 border border-amber-500/30">
-                SYSTEM DEFAULT KEYS
+            )}
+
+            {bitgetAccount?.keyMask && (
+              <span className={`px-2 py-0.5 rounded text-[10px] font-mono border ${
+                bitgetAccount.isCustomKey
+                  ? "bg-cyan-500/10 text-cyan-400 border-cyan-500/30"
+                  : "bg-zinc-800 text-zinc-400 border-zinc-700"
+              }`}>
+                BG: {bitgetAccount.keyMask} {bitgetAccount.isCustomKey ? "(VAULT)" : "(ENV)"}
               </span>
             )}
           </div>

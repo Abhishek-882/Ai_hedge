@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
-import { KeyRound, Shield, Check, X, RefreshCw, AlertCircle, Server, Layers } from "lucide-react";
+import { KeyRound, Shield, Check, X, RefreshCw, AlertCircle, Server, Layers, Trash2, Sparkles } from "lucide-react";
 
 interface SettingsModalProps {
   isOpen: boolean;
@@ -29,20 +29,13 @@ export default function SettingsModal({ isOpen, onClose, onSaved }: SettingsModa
 
   useEffect(() => {
     if (typeof window !== "undefined") {
-      const defaultBinanceKey = "RkqI5SmWN3z6DxKcAirPx48BmHpkA21FHPaeWFPsiJ4NbIvMAt4yTM3TsoLbHVAU";
-      const defaultBinanceSecret = "dpMSrQ1GDCPhNPnRRsIC0rCjzlDK9VfbC9fKXwptUGtqn2WdTKLZWekZqXykY00h";
-
-      setBinanceKey(localStorage.getItem("BINANCE_KEY") || defaultBinanceKey);
-      setBinanceSecret(localStorage.getItem("BINANCE_SECRET") || defaultBinanceSecret);
+      setBinanceKey(localStorage.getItem("BINANCE_KEY") || "");
+      setBinanceSecret(localStorage.getItem("BINANCE_SECRET") || "");
       setBinanceEndpoint(localStorage.getItem("BINANCE_ENDPOINT") || "auto");
 
-      const defaultBitgetKey = "bg_8c2e7e602008fbfd0d571e266bfcd8dc";
-      const defaultBitgetSecret = "bdb9294fec70ff19d909c83113abe88a032d394b44b915292ffec36e75a462bd";
-      const defaultBitgetPassphrase = "ArbitrageBot2026";
-
-      setBitgetKey(localStorage.getItem("BITGET_KEY") || defaultBitgetKey);
-      setBitgetSecret(localStorage.getItem("BITGET_SECRET") || defaultBitgetSecret);
-      setBitgetPassphrase(localStorage.getItem("BITGET_PASSPHRASE") || defaultBitgetPassphrase);
+      setBitgetKey(localStorage.getItem("BITGET_KEY") || "");
+      setBitgetSecret(localStorage.getItem("BITGET_SECRET") || "");
+      setBitgetPassphrase(localStorage.getItem("BITGET_PASSPHRASE") || "");
       setBitgetEnv(localStorage.getItem("BITGET_ENV") || "live");
 
       setTestResult(null);
@@ -128,13 +121,38 @@ export default function SettingsModal({ isOpen, onClose, onSaved }: SettingsModa
 
   const handleSave = () => {
     if (typeof window !== "undefined") {
-      localStorage.setItem("BINANCE_KEY", binanceKey.trim());
-      localStorage.setItem("BINANCE_SECRET", binanceSecret.trim());
+      if (binanceKey.trim()) {
+        localStorage.setItem("BINANCE_KEY", binanceKey.trim());
+      } else {
+        localStorage.removeItem("BINANCE_KEY");
+      }
+
+      if (binanceSecret.trim()) {
+        localStorage.setItem("BINANCE_SECRET", binanceSecret.trim());
+      } else {
+        localStorage.removeItem("BINANCE_SECRET");
+      }
+
       localStorage.setItem("BINANCE_ENDPOINT", binanceEndpoint);
 
-      localStorage.setItem("BITGET_KEY", bitgetKey.trim());
-      localStorage.setItem("BITGET_SECRET", bitgetSecret.trim());
-      localStorage.setItem("BITGET_PASSPHRASE", bitgetPassphrase.trim());
+      if (bitgetKey.trim()) {
+        localStorage.setItem("BITGET_KEY", bitgetKey.trim());
+      } else {
+        localStorage.removeItem("BITGET_KEY");
+      }
+
+      if (bitgetSecret.trim()) {
+        localStorage.setItem("BITGET_SECRET", bitgetSecret.trim());
+      } else {
+        localStorage.removeItem("BITGET_SECRET");
+      }
+
+      if (bitgetPassphrase.trim()) {
+        localStorage.setItem("BITGET_PASSPHRASE", bitgetPassphrase.trim());
+      } else {
+        localStorage.removeItem("BITGET_PASSPHRASE");
+      }
+
       localStorage.setItem("BITGET_ENV", bitgetEnv);
 
       setSavedSuccess(true);
@@ -146,7 +164,7 @@ export default function SettingsModal({ isOpen, onClose, onSaved }: SettingsModa
     }
   };
 
-  const handleClear = () => {
+  const handleClearTab = () => {
     if (typeof window !== "undefined") {
       if (activeTab === "binance") {
         localStorage.removeItem("BINANCE_KEY");
@@ -166,8 +184,49 @@ export default function SettingsModal({ isOpen, onClose, onSaved }: SettingsModa
         setBitgetEnv("live");
       }
       setTestResult(null);
+      if (onSaved) onSaved();
     }
   };
+
+  const handleClearAll = () => {
+    if (typeof window !== "undefined") {
+      localStorage.removeItem("BINANCE_KEY");
+      localStorage.removeItem("BINANCE_SECRET");
+      localStorage.removeItem("BINANCE_ENDPOINT");
+      localStorage.removeItem("BITGET_KEY");
+      localStorage.removeItem("BITGET_SECRET");
+      localStorage.removeItem("BITGET_PASSPHRASE");
+      localStorage.removeItem("BITGET_ENV");
+
+      setBinanceKey("");
+      setBinanceSecret("");
+      setBinanceEndpoint("auto");
+      setBitgetKey("");
+      setBitgetSecret("");
+      setBitgetPassphrase("");
+      setBitgetEnv("live");
+
+      setTestResult(null);
+      if (onSaved) onSaved();
+    }
+  };
+
+  const handleLoadDemoPresets = () => {
+    if (activeTab === "binance") {
+      setBinanceKey("RkqI5SmWN3z6DxKcAirPx48BmHpkA21FHPaeWFPsiJ4NbIvMAt4yTM3TsoLbHVAU");
+      setBinanceSecret("dpMSrQ1GDCPhNPnRRsIC0rCjzlDK9VfbC9fKXwptUGtqn2WdTKLZWekZqXykY00h");
+      setBinanceEndpoint("https://demo-fapi.binance.com");
+    } else {
+      setBitgetKey("bg_8c2e7e602008fbfd0d571e266bfcd8dc");
+      setBitgetSecret("bdb9294fec70ff19d909c83113abe88a032d394b44b915292ffec36e75a462bd");
+      setBitgetPassphrase("ArbitrageBot2026");
+      setBitgetEnv("live");
+    }
+    setTestResult(null);
+  };
+
+  const isBinanceVaultSet = typeof window !== "undefined" && Boolean(localStorage.getItem("BINANCE_KEY"));
+  const isBitgetVaultSet = typeof window !== "undefined" && Boolean(localStorage.getItem("BITGET_KEY"));
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 font-mono">
@@ -189,40 +248,73 @@ export default function SettingsModal({ isOpen, onClose, onSaved }: SettingsModa
         </p>
 
         {/* Tab Switcher */}
-        <div className="flex space-x-2 border-b border-border pb-3 mb-4">
+        <div className="flex items-center justify-between border-b border-border pb-3 mb-4">
+          <div className="flex space-x-2">
+            <button
+              onClick={() => {
+                setActiveTab("binance");
+                setTestResult(null);
+              }}
+              className={`px-3 py-1.5 text-xs rounded-lg font-semibold flex items-center space-x-1.5 transition-colors ${
+                activeTab === "binance"
+                  ? "bg-accent-amber/20 text-accent-amber border border-accent-amber/40"
+                  : "bg-surface-card text-zinc-400 hover:text-zinc-200 border border-transparent"
+              }`}
+            >
+              <Layers className="w-3.5 h-3.5" />
+              <span>Binance Futures</span>
+              {isBinanceVaultSet && <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 ml-1" />}
+            </button>
+            <button
+              onClick={() => {
+                setActiveTab("bitget");
+                setTestResult(null);
+              }}
+              className={`px-3 py-1.5 text-xs rounded-lg font-semibold flex items-center space-x-1.5 transition-colors ${
+                activeTab === "bitget"
+                  ? "bg-cyan-500/20 text-cyan-400 border border-cyan-500/40"
+                  : "bg-surface-card text-zinc-400 hover:text-zinc-200 border border-transparent"
+              }`}
+            >
+              <Layers className="w-3.5 h-3.5" />
+              <span>Bitget Perpetuals</span>
+              {isBitgetVaultSet && <span className="w-1.5 h-1.5 rounded-full bg-cyan-400 ml-1" />}
+            </button>
+          </div>
+
           <button
-            onClick={() => {
-              setActiveTab("binance");
-              setTestResult(null);
-            }}
-            className={`px-3 py-1.5 text-xs rounded-lg font-semibold flex items-center space-x-1.5 transition-colors ${
-              activeTab === "binance"
-                ? "bg-accent-amber/20 text-accent-amber border border-accent-amber/40"
-                : "bg-surface-card text-zinc-400 hover:text-zinc-200 border border-transparent"
-            }`}
+            onClick={handleLoadDemoPresets}
+            title="Load shared demo credentials for rapid testing"
+            className="text-[11px] text-zinc-500 hover:text-amber-400 flex items-center space-x-1 transition-colors px-2 py-1 rounded hover:bg-zinc-800"
           >
-            <Layers className="w-3.5 h-3.5" />
-            <span>Binance Futures (Leg 1)</span>
-          </button>
-          <button
-            onClick={() => {
-              setActiveTab("bitget");
-              setTestResult(null);
-            }}
-            className={`px-3 py-1.5 text-xs rounded-lg font-semibold flex items-center space-x-1.5 transition-colors ${
-              activeTab === "bitget"
-                ? "bg-cyan-500/20 text-cyan-400 border border-cyan-500/40"
-                : "bg-surface-card text-zinc-400 hover:text-zinc-200 border border-transparent"
-            }`}
-          >
-            <Layers className="w-3.5 h-3.5" />
-            <span>Bitget Perpetuals (Leg 2)</span>
+            <Sparkles className="w-3 h-3" />
+            <span>Load Demo Presets</span>
           </button>
         </div>
 
         {/* TAB 1: BINANCE */}
         {activeTab === "binance" && (
           <div className="space-y-4">
+            <div className="p-2.5 rounded-lg bg-surface-card border border-border text-[11px] text-zinc-400 flex items-center justify-between">
+              <div>
+                <span className="font-semibold text-zinc-300">Status: </span>
+                {isBinanceVaultSet ? (
+                  <span className="text-emerald-400">Vault Key Active in Browser</span>
+                ) : (
+                  <span className="text-amber-400">Using Server Environment Variables (Render)</span>
+                )}
+              </div>
+              {isBinanceVaultSet && (
+                <button
+                  onClick={handleClearTab}
+                  className="text-xs text-rose-400 hover:text-rose-300 flex items-center space-x-1"
+                >
+                  <Trash2 className="w-3 h-3" />
+                  <span>Remove Custom Key</span>
+                </button>
+              )}
+            </div>
+
             <div>
               <label className="text-[11px] uppercase tracking-wider text-zinc-400 block mb-1 flex items-center justify-between">
                 <span>Binance API Key</span>
@@ -235,7 +327,7 @@ export default function SettingsModal({ isOpen, onClose, onSaved }: SettingsModa
                   setBinanceKey(e.target.value);
                   setTestResult(null);
                 }}
-                placeholder="Enter Binance Futures Key..."
+                placeholder="Paste your Binance API Key..."
                 className="w-full px-3 py-2 text-xs rounded-lg bg-surface-card border border-border text-zinc-200 focus:outline-none focus:border-accent-amber font-mono"
               />
             </div>
@@ -252,7 +344,7 @@ export default function SettingsModal({ isOpen, onClose, onSaved }: SettingsModa
                   setBinanceSecret(e.target.value);
                   setTestResult(null);
                 }}
-                placeholder="Enter Binance Futures Secret..."
+                placeholder="Paste your Binance API Secret..."
                 className="w-full px-3 py-2 text-xs rounded-lg bg-surface-card border border-border text-zinc-200 focus:outline-none focus:border-accent-amber font-mono"
               />
             </div>
@@ -282,14 +374,24 @@ export default function SettingsModal({ isOpen, onClose, onSaved }: SettingsModa
         {/* TAB 2: BITGET */}
         {activeTab === "bitget" && (
           <div className="space-y-4">
-            {/* Detected Privileges Banner */}
-            <div className="p-2.5 rounded-lg bg-cyan-950/40 border border-cyan-800/40 text-[11px] text-cyan-300 flex flex-col gap-1">
-              <div className="font-semibold flex items-center space-x-1">
-                <span>🛡️ Bitget Key Privileges Verified:</span>
+            <div className="p-2.5 rounded-lg bg-surface-card border border-border text-[11px] text-zinc-400 flex items-center justify-between">
+              <div>
+                <span className="font-semibold text-zinc-300">Status: </span>
+                {isBitgetVaultSet ? (
+                  <span className="text-cyan-400">Vault Key Active in Browser</span>
+                ) : (
+                  <span className="text-amber-400">Using Server Environment Variables (Render)</span>
+                )}
               </div>
-              <div className="text-[10px] text-zinc-400">
-                Futures (Orders & Holdings) • Spot/Margin Trade • Wallet Transfer
-              </div>
+              {isBitgetVaultSet && (
+                <button
+                  onClick={handleClearTab}
+                  className="text-xs text-rose-400 hover:text-rose-300 flex items-center space-x-1"
+                >
+                  <Trash2 className="w-3 h-3" />
+                  <span>Remove Custom Key</span>
+                </button>
+              )}
             </div>
 
             <div>
@@ -304,7 +406,7 @@ export default function SettingsModal({ isOpen, onClose, onSaved }: SettingsModa
                   setBitgetKey(e.target.value);
                   setTestResult(null);
                 }}
-                placeholder="Enter Bitget API Key..."
+                placeholder="Paste your Bitget API Key..."
                 className="w-full px-3 py-2 text-xs rounded-lg bg-surface-card border border-border text-zinc-200 focus:outline-none focus:border-cyan-400 font-mono"
               />
             </div>
@@ -321,7 +423,7 @@ export default function SettingsModal({ isOpen, onClose, onSaved }: SettingsModa
                   setBitgetSecret(e.target.value);
                   setTestResult(null);
                 }}
-                placeholder="Enter Bitget API Secret..."
+                placeholder="Paste your Bitget API Secret..."
                 className="w-full px-3 py-2 text-xs rounded-lg bg-surface-card border border-border text-zinc-200 focus:outline-none focus:border-cyan-400 font-mono"
               />
             </div>
@@ -338,11 +440,11 @@ export default function SettingsModal({ isOpen, onClose, onSaved }: SettingsModa
                   setBitgetPassphrase(e.target.value);
                   setTestResult(null);
                 }}
-                placeholder="Enter the Passphrase you created on Bitget..."
+                placeholder="Enter the Passphrase you set when creating this key on Bitget..."
                 className="w-full px-3 py-2 text-xs rounded-lg bg-surface-card border border-border text-zinc-200 focus:outline-none focus:border-cyan-400 font-mono"
               />
               <p className="text-[10px] text-zinc-500 mt-1">
-                ℹ️ The 8–32 character passphrase you chose when generating this key. (Bitget never displays it on screen after creation).
+                ℹ️ The 8–32 character passphrase you chose when generating this key.
               </p>
             </div>
 
@@ -390,10 +492,12 @@ export default function SettingsModal({ isOpen, onClose, onSaved }: SettingsModa
         <div className="mt-6 flex flex-wrap items-center justify-between gap-3">
           <div className="flex items-center space-x-2">
             <button
-              onClick={handleClear}
-              className="text-xs text-zinc-500 hover:text-zinc-300 transition-colors"
+              onClick={handleClearAll}
+              title="Remove all custom keys and revert to Render environment variables"
+              className="text-xs text-zinc-500 hover:text-zinc-300 transition-colors flex items-center space-x-1"
             >
-              Clear Tab
+              <Trash2 className="w-3 h-3" />
+              <span>Reset All</span>
             </button>
             <button
               onClick={activeTab === "binance" ? testBinance : testBitget}

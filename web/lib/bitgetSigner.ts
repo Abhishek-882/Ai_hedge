@@ -25,24 +25,27 @@ let lastBitgetTimeSync = 0;
 /**
  * Calibrate local clock against Bitget server time
  */
-export async function calibrateBitgetTime(baseUrl = "https://api.bitget.com"): Promise<number> {
+export async function calibrateBitgetTime(baseUrl = "https://api.bitget.com", forceRefresh = false): Promise<number> {
   const now = Date.now();
-  if (now - lastBitgetTimeSync < 60_000) {
+  if (!forceRefresh && now - lastBitgetTimeSync < 30_000 && Number.isFinite(cachedBitgetTimeOffset) && cachedBitgetTimeOffset !== 0) {
     return cachedBitgetTimeOffset;
   }
 
   try {
     const res = await fetch(`${baseUrl}/api/v2/public/time`, { cache: "no-store" });
     const data = await res.json();
-    if (data.code === "00000" && data.data) {
-      const serverTime = parseInt(data.data, 10);
-      cachedBitgetTimeOffset = serverTime - Date.now();
-      lastBitgetTimeSync = now;
+    const serverTimeRaw = data?.data?.serverTime || data?.requestTime || (typeof data?.data === "string" ? data.data : undefined);
+    if (serverTimeRaw) {
+      const serverTime = Number(serverTimeRaw);
+      if (Number.isFinite(serverTime) && serverTime > 0) {
+        cachedBitgetTimeOffset = serverTime - Date.now();
+        lastBitgetTimeSync = now;
+      }
     }
   } catch {
     // If transient network failure, retain prior offset
   }
-  return cachedBitgetTimeOffset;
+  return Number.isFinite(cachedBitgetTimeOffset) ? cachedBitgetTimeOffset : 0;
 }
 
 /**
@@ -56,7 +59,8 @@ export async function getBitgetHeaders(
   body = ""
 ): Promise<Record<string, string>> {
   const offset = await calibrateBitgetTime();
-  const timestamp = (Date.now() + offset).toString();
+  const safeOffset = Number.isFinite(offset) ? offset : 0;
+  const timestamp = Math.floor(Date.now() + safeOffset).toString();
 
   // Handle URL paths that already include query parameters
   let cleanPath = requestPath;
@@ -114,12 +118,23 @@ export async function getBitgetAccount(creds?: BitgetCredentials) {
   const v2Path = "/api/v2/mix/account/accounts?productType=USDT-FUTURES";
 
   try {
-    const headers = await getBitgetHeaders(creds, "GET", v2Path);
-    const res = await fetch(`${baseUrl}${v2Path}`, {
+    let headers = await getBitgetHeaders(creds, "GET", v2Path);
+    let res = await fetch(`${baseUrl}${v2Path}`, {
       headers,
       cache: "no-store",
     });
-    const data = await res.json();
+    let data = await res.json();
+
+    // If timestamp expired (code 40008), force immediate re-calibration and retry once
+    if (data.code === "40008") {
+      await calibrateBitgetTime(baseUrl, true);
+      headers = await getBitgetHeaders(creds, "GET", v2Path);
+      res = await fetch(`${baseUrl}${v2Path}`, {
+        headers,
+        cache: "no-store",
+      });
+      data = await res.json();
+    }
 
     // If account is in Unified Trading Account (UTA) mode, auto-fallback to V3 assets
     if (data.code === "40084") {
@@ -237,13 +252,24 @@ export async function placeBitgetOrder(
   const bodyStr = JSON.stringify(payload);
 
   try {
-    const headers = await getBitgetHeaders(creds, "POST", path, bodyStr);
-    const res = await fetch(`${baseUrl}${path}`, {
+    let headers = await getBitgetHeaders(creds, "POST", path, bodyStr);
+    let res = await fetch(`${baseUrl}${path}`, {
       method: "POST",
       headers,
       body: bodyStr,
     });
-    const data = await res.json();
+    let data = await res.json();
+
+    if (data.code === "40008") {
+      await calibrateBitgetTime(baseUrl, true);
+      headers = await getBitgetHeaders(creds, "POST", path, bodyStr);
+      res = await fetch(`${baseUrl}${path}`, {
+        method: "POST",
+        headers,
+        body: bodyStr,
+      });
+      data = await res.json();
+    }
 
     if (data.code !== "00000") {
       return {
