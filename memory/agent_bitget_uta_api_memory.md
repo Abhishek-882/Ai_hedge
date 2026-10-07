@@ -84,3 +84,12 @@
   - Close 2: 131.4 ms
   - Close 3: 168.7 ms
 - **Average Fill Ack:** **164.4 ms**
+
+### Manual Platform Tester V2 Run — 2026-10-07T19:24:39.857704
+- Target: `https://ai-hedge-1.onrender.com`
+- All Coins Scanner: 800+ perpetual pairs verified with live spreads and APRs
+- Persistent Hedge Entry: Live position verified in Positions Table
+- Flatten All: Clean dual unwind confirmed (0 residual exposure)
+- Traded Hedges History: Persistent audit log verified with Order IDs & PnL
+- Session Realized PnL: Verified live updates in header stats
+- All 7 Stages Passed: True

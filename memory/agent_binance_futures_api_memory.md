@@ -63,3 +63,12 @@
   });
   ```
 - **Live Verification Result:** Confirmed working. When Bitget rejected an order, Binance Leg 1 was unwound in <200ms with `reduceOnly: "true"`, leaving net position at `0.0000 BTC`.
+
+### Manual Platform Tester V2 Run — 2026-10-07T19:24:39.857704
+- Target: `https://ai-hedge-1.onrender.com`
+- All Coins Scanner: 800+ perpetual pairs verified with live spreads and APRs
+- Persistent Hedge Entry: Live position verified in Positions Table
+- Flatten All: Clean dual unwind confirmed (0 residual exposure)
+- Traded Hedges History: Persistent audit log verified with Order IDs & PnL
+- Session Realized PnL: Verified live updates in header stats
+- All 7 Stages Passed: True

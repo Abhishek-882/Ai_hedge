@@ -179,3 +179,12 @@ Full-page high-resolution screenshots were captured at each phase of manual user
 1. **EWMA Lead Staggering is Highly Effective:** Because Bitget's REST API gateway introduces an additional ~25–35ms of roundtrip latency compared to Binance from this server region, staggering the Binance dispatch by this calibrated difference allows both orders to hit exchange matching engines in as little as **0.14 ms (140 μs)**.
 2. **Dual-Close Concurrency Eliminates Leg-Out Risk:** Executing close operations across both exchanges simultaneously via `Promise.all` bounds the total closure window to ~180–205ms, preventing unhedged price drift.
 3. **UTA V3 Compatibility Restored:** Transitioning to `POST /api/v3/trade/place-order` with explicit `posSide` (`"long"` / `"short"`) completely eliminated Bitget `40762` balance errors.
+
+### Manual Platform Tester V2 Run — 2026-10-07T19:24:39.857704
+- Target: `https://ai-hedge-1.onrender.com`
+- All Coins Scanner: 800+ perpetual pairs verified with live spreads and APRs
+- Persistent Hedge Entry: Live position verified in Positions Table
+- Flatten All: Clean dual unwind confirmed (0 residual exposure)
+- Traded Hedges History: Persistent audit log verified with Order IDs & PnL
+- Session Realized PnL: Verified live updates in header stats
+- All 7 Stages Passed: True

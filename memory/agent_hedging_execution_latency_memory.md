@@ -82,3 +82,12 @@ We executed consecutive live test trials using real demo market orders on both B
 - Direction B Arrival Delta: `147.14ms` (Stagger: 12ms Binance)
 - Benchmark Entry Delta: `47.3ms` | Exit Delta: `80.86ms`
 - Delta Neutrality Verified: `True` | Net PnL: `$0.0011 USDT`
+
+### Manual Platform Tester V2 Run — 2026-10-07T19:24:39.857704
+- Target: `https://ai-hedge-1.onrender.com`
+- All Coins Scanner: 800+ perpetual pairs verified with live spreads and APRs
+- Persistent Hedge Entry: Live position verified in Positions Table
+- Flatten All: Clean dual unwind confirmed (0 residual exposure)
+- Traded Hedges History: Persistent audit log verified with Order IDs & PnL
+- Session Realized PnL: Verified live updates in header stats
+- All 7 Stages Passed: True
