@@ -76,6 +76,7 @@ export default function ControlCockpit({
   const [quantity, setQuantity] = useState<string>(assetMeta.defaultQty);
   const [internalMinSpread, setInternalMinSpread] = useState<number>(12);
   const [internalExitTarget, setInternalExitTarget] = useState<number>(2);
+  const [cockpitError, setCockpitError] = useState<string | null>(null);
 
   // Auto-sync quantity when selectedSymbol updates
   React.useEffect(() => {
@@ -172,7 +173,8 @@ export default function ControlCockpit({
       if (onOrderSuccess) onOrderSuccess(data);
       if (onRefresh) onRefresh();
     } catch (err: any) {
-      alert(`Hedge Entry Failed: ${err.message}`);
+      setCockpitError(`Hedge Entry Failed: ${err.message}`);
+      setTimeout(() => setCockpitError(null), 8000);
     } finally {
       setLoadingAction(null);
     }
@@ -219,7 +221,8 @@ export default function ControlCockpit({
       }
       if (onRefresh) onRefresh();
     } catch (err: any) {
-      alert(`Close Failed: ${err.message}`);
+      setCockpitError(`Close Failed: ${err.message}`);
+      setTimeout(() => setCockpitError(null), 8000);
     } finally {
       setLoadingAction(null);
     }
@@ -273,7 +276,8 @@ export default function ControlCockpit({
       }
       if (onRefresh) onRefresh();
     } catch (err: any) {
-      alert(`Hedge Benchmark Failed: ${err.message}`);
+      setCockpitError(`Hedge Benchmark Failed: ${err.message}`);
+      setTimeout(() => setCockpitError(null), 8000);
     } finally {
       setLoadingAction(null);
     }
@@ -295,6 +299,22 @@ export default function ControlCockpit({
             </span>
           </div>
         </div>
+
+        {/* Cockpit Error Banner */}
+        {cockpitError && (
+          <div className="my-3 px-3.5 py-2.5 rounded-lg bg-rose-950/80 border border-rose-800 text-rose-300 text-xs flex items-center justify-between shadow-lg shadow-rose-950/30 animate-fadeIn">
+            <div className="flex items-center space-x-2">
+              <ShieldAlert className="w-4 h-4 text-rose-400 shrink-0" />
+              <span>{cockpitError}</span>
+            </div>
+            <button
+              onClick={() => setCockpitError(null)}
+              className="text-zinc-400 hover:text-zinc-100 text-xs px-2 py-0.5 rounded hover:bg-rose-900/50 transition-colors"
+            >
+              ✕
+            </button>
+          </div>
+        )}
 
         {/* Multi-Asset Selector Bar */}
         <div className="mt-4">

@@ -53,12 +53,12 @@ async def run_verification():
         if btn_count > 0:
             target_btn = quick_hedge_btns.first
             await target_btn.click()
-            print("Clicked QUICK HEDGE. Waiting for transition to FILLED ✓...")
+            print("Clicked QUICK HEDGE. Waiting for transition to FILLED [OK]...")
             
             # Wait for filled confirmation
             try:
-                await page.wait_for_selector("button:has-text('FILLED ✓')", timeout=12000)
-                print("SUCCESS: Button transitioned to FILLED ✓!")
+                await page.wait_for_selector("button:has-text('FILLED')", timeout=12000)
+                print("SUCCESS: Button transitioned to FILLED [OK]!")
             except Exception as e:
                 print(f"Note on fill transition: {e}")
 

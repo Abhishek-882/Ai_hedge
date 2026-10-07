@@ -27,33 +27,56 @@ let cachedTestnetSymbols: Set<string> | null = null;
 let lastTestnetFetch = 0;
 const TESTNET_CACHE_TTL_MS = 15 * 60 * 1000;
 
-async function getBinanceTestnetSymbols(): Promise<Set<string>> {
+async function getMutualDemoCryptoSymbols(): Promise<Set<string>> {
   const now = Date.now();
   if (cachedTestnetSymbols && now - lastTestnetFetch < TESTNET_CACHE_TTL_MS) {
     return cachedTestnetSymbols;
   }
 
   try {
-    const res = await fetch("https://testnet.binancefuture.com/fapi/v1/exchangeInfo", {
-      cache: "no-store",
-    });
-    const data = await res.json();
-    if (Array.isArray(data.symbols)) {
-      const set = new Set<string>();
-      for (const s of data.symbols) {
-        if (s.status === "TRADING" && s.quoteAsset === "USDT" && s.symbol) {
-          set.add(s.symbol);
-        }
+    const [bRes, bgRes] = await Promise.all([
+      fetch("https://testnet.binancefuture.com/fapi/v1/exchangeInfo", { cache: "no-store" }),
+      fetch("https://api.bitget.com/api/v2/mix/market/contracts?productType=USDT-FUTURES", {
+        headers: { "papertrading": "1", "paptrading": "1" },
+        cache: "no-store",
+      }),
+    ]);
+    const bData = await bRes.json().catch(() => ({}));
+    const bgData = await bgRes.json().catch(() => ({}));
+
+    // Filter strictly to non-TradFi standard crypto perpetuals (underlyingType: COIN, contractType: PERPETUAL)
+    const bCrypto = new Set(
+      (bData.symbols || [])
+        .filter((s: any) => s.status === "TRADING" && s.quoteAsset === "USDT" && s.underlyingType === "COIN" && s.contractType === "PERPETUAL")
+        .map((s: any) => s.symbol)
+    );
+
+    const bgList: string[] = (bgData?.data || []).map((c: any) => c.symbol);
+    const mutual = new Set<string>();
+    for (const sym of bgList) {
+      if (bCrypto.has(sym)) {
+        mutual.add(sym);
       }
-      cachedTestnetSymbols = set;
+    }
+
+    if (mutual.size > 0) {
+      cachedTestnetSymbols = mutual;
       lastTestnetFetch = now;
-      return set;
+      return mutual;
     }
   } catch (err) {
-    console.error("Failed to fetch Binance testnet symbols:", err);
+    console.error("Failed to fetch mutual demo crypto symbols:", err);
   }
 
-  return cachedTestnetSymbols || new Set<string>();
+  const fallback = new Set([
+    "BTCUSDT", "ETHUSDT", "SOLUSDT", "DOGEUSDT", "XRPUSDT",
+    "ADAUSDT", "AVAXUSDT", "BCHUSDT", "BNBUSDT", "DOTUSDT",
+    "LINKUSDT", "LTCUSDT", "NEARUSDT", "TRXUSDT", "UNIUSDT",
+    "USDCUSDT", "HYPEUSDT"
+  ]);
+  cachedTestnetSymbols = fallback;
+  lastTestnetFetch = now;
+  return fallback;
 }
 
 export async function GET(req: NextRequest) {
@@ -84,7 +107,7 @@ export async function GET(req: NextRequest) {
         headers: { "User-Agent": "FundingArbitrage/2.0" },
         cache: "no-store",
       }),
-      getBinanceTestnetSymbols(),
+      getMutualDemoCryptoSymbols(),
     ]);
 
     const binanceRaw = await binanceRes.json().catch(() => []);
