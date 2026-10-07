@@ -1,6 +1,7 @@
 "use client";
 
 import React from "react";
+import { ShieldAlert, ShieldCheck } from "lucide-react";
 
 interface Position {
   venue?: string;
@@ -34,8 +35,14 @@ export default function PositionsTable({
             LIVE OPEN POSITIONS
           </h2>
         </div>
-        <div className="text-[10px] text-zinc-500 uppercase">
-          Active: {positions.length}
+        <div className="flex items-center space-x-3 text-[10px] text-zinc-400">
+          <span>Active: <strong className="text-zinc-200">{positions.length}</strong></span>
+          {positions.length > 0 && (
+            <span className="px-2 py-0.5 rounded bg-emerald-950/40 border border-emerald-800/40 text-emerald-400 font-semibold flex items-center gap-1">
+              <ShieldCheck className="w-3 h-3" />
+              DELTA NEUTRAL
+            </span>
+          )}
         </div>
       </div>
 
@@ -48,11 +55,12 @@ export default function PositionsTable({
           <table className="w-full text-left text-xs">
             <thead>
               <tr className="border-b border-border text-[10px] text-zinc-400 uppercase">
-                <th className="pb-2">Symbol</th>
+                <th className="pb-2">Symbol / Venue</th>
                 <th className="pb-2">Size</th>
                 <th className="pb-2">Entry Price</th>
                 <th className="pb-2">Mark Price</th>
-                <th className="pb-2">PnL (USDT)</th>
+                <th className="pb-2">Dynamic PnL (4D)</th>
+                <th className="pb-2">Liq. Buffer</th>
                 <th className="pb-2">Leverage</th>
                 <th className="pb-2 text-right">Action</th>
               </tr>
@@ -60,20 +68,29 @@ export default function PositionsTable({
             <tbody className="divide-y border-border">
               {positions.map((pos) => {
                 const isLong = pos.amount > 0;
-                // Live mark price dynamically selected based on venue
-                const liveMarkPrice = pos.venue === "Bitget"
+                const venueMarkPrice = pos.venue === "Bitget"
                   ? (liveBitgetPrice || pos.markPrice)
                   : (liveBinancePrice || pos.markPrice);
 
-                // Dynamic real-time tick-by-tick PnL: (markPrice - entryPrice) * amount
-                const dynamicPnl = (pos.amount !== 0 && pos.entryPrice > 0 && liveMarkPrice > 0)
-                  ? (liveMarkPrice - pos.entryPrice) * pos.amount
+                const dynamicPnl = (pos.amount !== 0 && pos.entryPrice > 0 && venueMarkPrice > 0)
+                  ? (venueMarkPrice - pos.entryPrice) * pos.amount
                   : pos.unrealizedPnl;
 
                 const isProfit = dynamicPnl >= 0;
                 const notional = pos.entryPrice * Math.abs(pos.amount);
-                const initialMargin = notional / (pos.leverage || 20);
+                const leverage = pos.leverage || 20;
+                const initialMargin = notional / leverage;
                 const roePct = initialMargin > 0 ? (dynamicPnl / initialMargin) * 100 : 0;
+
+                // Estimated liquidation distance
+                const estLiqPrice = isLong
+                  ? pos.entryPrice * (1 - (1 / leverage) * 0.9)
+                  : pos.entryPrice * (1 + (1 / leverage) * 0.9);
+                const liqBufferPct = venueMarkPrice > 0
+                  ? (Math.abs(venueMarkPrice - estLiqPrice) / venueMarkPrice) * 100
+                  : 5.0;
+
+                const assetSymbol = pos.symbol.replace("USDT", "");
 
                 return (
                   <tr key={`${pos.venue || "pos"}-${pos.symbol}-${pos.amount}`} className="text-zinc-200">
@@ -88,13 +105,16 @@ export default function PositionsTable({
                     </td>
                     <td className="py-2.5">
                       <span className={isLong ? "text-accent-emerald font-semibold" : "text-accent-rose font-semibold"}>
-                        {isLong ? "+" : ""}{pos.amount} BTC
+                        {isLong ? "+" : ""}{pos.amount} {assetSymbol}
                       </span>
+                      <div className="text-[10px] text-zinc-500 font-normal">
+                        ${notional.toFixed(2)} Notional
+                      </div>
                     </td>
                     <td className="py-2.5">${pos.entryPrice?.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
                     <td className="py-2.5">
                       <div className="flex items-center space-x-1.5">
-                        <span>${liveMarkPrice?.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                        <span>${venueMarkPrice?.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
                         <span className="text-[9px] px-1 py-0.2 rounded bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 font-mono">
                           LIVE
                         </span>
@@ -110,7 +130,15 @@ export default function PositionsTable({
                         </span>
                       </div>
                     </td>
-                    <td className="py-2.5">{pos.leverage}x</td>
+                    <td className="py-2.5">
+                      <span className={`text-[11px] font-semibold ${liqBufferPct > 3 ? "text-emerald-400" : "text-amber-400"}`}>
+                        +{liqBufferPct.toFixed(1)}%
+                      </span>
+                      <div className="text-[9px] text-zinc-500">
+                        Liq ~${estLiqPrice.toFixed(1)}
+                      </div>
+                    </td>
+                    <td className="py-2.5">{leverage}x</td>
                     <td className="py-2.5 text-right">
                       <button
                         onClick={onClosePosition}

@@ -5,14 +5,16 @@ import { KeyRound, RefreshCw, Wallet, ShieldCheck, ExternalLink, Activity, Radio
 import PrismaticCore3D from "@/components/PrismaticCore3D";
 import TelemetryHUD from "@/components/TelemetryHUD";
 import SpreadTracker from "@/components/SpreadTracker";
-import ControlCockpit from "@/components/ControlCockpit";
+import ControlCockpit, { SupportedAsset } from "@/components/ControlCockpit";
 import PositionsTable from "@/components/PositionsTable";
 import SettingsModal from "@/components/SettingsModal";
 import { useDualExchangeWebSockets } from "@/hooks/useDualExchangeWebSockets";
 
 export default function DashboardPage() {
+  const [selectedSymbol, setSelectedSymbol] = useState<SupportedAsset>("BTCUSDT");
+
   // Live Dual-Exchange WebSockets Stream
-  const wsData = useDualExchangeWebSockets();
+  const wsData = useDualExchangeWebSockets(selectedSymbol);
 
   const [account, setAccount] = useState<any>(null);
   const [bitgetAccount, setBitgetAccount] = useState<any>(null);
@@ -414,6 +416,8 @@ export default function DashboardPage() {
           <ControlCockpit
             onRefresh={fetchData}
             getVaultHeaders={getVaultHeaders}
+            selectedSymbol={selectedSymbol}
+            onSymbolChange={setSelectedSymbol}
             isAutopilotActive={isAutopilotActive}
             onToggleAutopilot={setIsAutopilotActive}
             autopilotState={autopilotState}
@@ -436,10 +440,12 @@ export default function DashboardPage() {
         />
       </div>
 
-      {/* Live Positions Table */}
+      {/* Live Positions Table with Real-Time Dynamic 4-Decimal Mark-to-Market PnL */}
       <div className="mb-6">
         <PositionsTable
           positions={positions}
+          liveBinancePrice={wsData.binancePrice}
+          liveBitgetPrice={wsData.bitgetPrice}
           onClosePosition={handleClosePosition}
         />
       </div>

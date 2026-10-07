@@ -11,12 +11,26 @@ import {
   Zap,
   Sliders,
   CheckCircle2,
+  ShieldCheck,
+  Cpu,
 } from "lucide-react";
+
+export type SupportedAsset = "BTCUSDT" | "ETHUSDT" | "SOLUSDT" | "DOGEUSDT" | "XRPUSDT";
+
+const ASSET_CONFIGS: Record<SupportedAsset, { label: string; base: string; presets: string[]; step: string; defaultQty: string }> = {
+  BTCUSDT: { label: "BTC", base: "BTC", presets: ["0.002", "0.005", "0.010", "0.020"], step: "0.001", defaultQty: "0.005" },
+  ETHUSDT: { label: "ETH", base: "ETH", presets: ["0.02", "0.05", "0.10", "0.20"], step: "0.01", defaultQty: "0.05" },
+  SOLUSDT: { label: "SOL", base: "SOL", presets: ["0.2", "0.5", "1.0", "2.0"], step: "0.1", defaultQty: "0.5" },
+  DOGEUSDT: { label: "DOGE", base: "DOGE", presets: ["200", "500", "1000", "2000"], step: "10", defaultQty: "500" },
+  XRPUSDT: { label: "XRP", base: "XRP", presets: ["50", "100", "200", "500"], step: "1", defaultQty: "100" },
+};
 
 interface ControlCockpitProps {
   onRefresh?: () => void;
   onOrderSuccess?: (receipt: any) => void;
   getVaultHeaders: () => Record<string, string>;
+  selectedSymbol?: SupportedAsset;
+  onSymbolChange?: (sym: SupportedAsset) => void;
   isAutopilotActive?: boolean;
   onToggleAutopilot?: (active: boolean) => void;
   autopilotState?: string;
@@ -31,6 +45,8 @@ export default function ControlCockpit({
   onRefresh,
   onOrderSuccess,
   getVaultHeaders,
+  selectedSymbol = "BTCUSDT",
+  onSymbolChange,
   isAutopilotActive = false,
   onToggleAutopilot,
   autopilotState = "IDLE_SCANNING",
@@ -40,9 +56,17 @@ export default function ControlCockpit({
   exitSpreadTarget = 2,
   onExitSpreadTargetChange,
 }: ControlCockpitProps) {
-  const [quantity, setQuantity] = useState<string>("0.005");
+  const currentAsset = ASSET_CONFIGS[selectedSymbol] ? selectedSymbol : "BTCUSDT";
+  const assetMeta = ASSET_CONFIGS[currentAsset];
+
+  const [quantity, setQuantity] = useState<string>(assetMeta.defaultQty);
   const [internalMinSpread, setInternalMinSpread] = useState<number>(12);
   const [internalExitTarget, setInternalExitTarget] = useState<number>(2);
+
+  // Stagger Strategy State
+  const [staggerPolicy, setStaggerPolicy] = useState<"auto_ewma" | "simultaneous" | "manual">("auto_ewma");
+  const [manualDelayMs, setManualDelayMs] = useState<number>(120);
+  const [manualVenue, setManualVenue] = useState<"Binance" | "Bitget">("Bitget");
 
   const currentMinSpread = minSpreadEntry ?? internalMinSpread;
   const currentExitTarget = exitSpreadTarget ?? internalExitTarget;
@@ -63,6 +87,13 @@ export default function ControlCockpit({
     }
   };
 
+  const handleAssetSelect = (sym: SupportedAsset) => {
+    if (onSymbolChange) {
+      onSymbolChange(sym);
+    }
+    setQuantity(ASSET_CONFIGS[sym].defaultQty);
+  };
+
   const [showConfig, setShowConfig] = useState<boolean>(false);
   const [loadingAction, setLoadingAction] = useState<string | null>(null);
   const [lastReceipt, setLastReceipt] = useState<any>(null);
@@ -79,8 +110,12 @@ export default function ControlCockpit({
         },
         body: JSON.stringify({
           action: "entry",
+          symbol: currentAsset,
           quantity: parseFloat(quantity),
           leg1Side,
+          staggerPolicy,
+          manualDelayMs,
+          manualVenue,
         }),
       });
       const data = await res.json();
@@ -132,8 +167,12 @@ export default function ControlCockpit({
         },
         body: JSON.stringify({
           action: "benchmark",
+          symbol: currentAsset,
           quantity: parseFloat(quantity),
-          leg1Side: "SELL", // Binance Short
+          leg1Side: "SELL",
+          staggerPolicy,
+          manualDelayMs,
+          manualVenue,
         }),
       });
       const data = await res.json();
@@ -164,6 +203,32 @@ export default function ControlCockpit({
             <span className="px-1.5 py-0.5 rounded text-[9px] bg-zinc-800 text-cyan-400 border border-cyan-800/40">
               BINANCE + BITGET
             </span>
+          </div>
+        </div>
+
+        {/* Multi-Asset Selector Bar */}
+        <div className="mt-4">
+          <label className="text-[10px] text-zinc-400 block mb-1.5 uppercase font-semibold">
+            SELECT TRADING ASSET
+          </label>
+          <div className="grid grid-cols-5 gap-1.5">
+            {(Object.keys(ASSET_CONFIGS) as SupportedAsset[]).map((sym) => {
+              const meta = ASSET_CONFIGS[sym];
+              const isSelected = sym === currentAsset;
+              return (
+                <button
+                  key={sym}
+                  onClick={() => handleAssetSelect(sym)}
+                  className={`py-1.5 text-xs rounded border transition-all font-bold ${
+                    isSelected
+                      ? "bg-accent-amber/20 border-accent-amber text-accent-amber shadow-sm"
+                      : "bg-surface-card border-border text-zinc-400 hover:border-zinc-700 hover:text-zinc-200"
+                  }`}
+                >
+                  {meta.label}
+                </button>
+              );
+            })}
           </div>
         </div>
 
@@ -200,30 +265,81 @@ export default function ControlCockpit({
               className="text-zinc-400 hover:text-zinc-200 flex items-center space-x-1"
             >
               <Sliders className="w-3 h-3" />
-              <span>{showConfig ? "Hide Triggers" : "Edit Triggers"}</span>
+              <span>{showConfig ? "Hide Config" : "Tuning & Policy"}</span>
             </button>
           </div>
 
           {showConfig && (
-            <div className="mt-2 pt-2 border-t border-border grid grid-cols-2 gap-2 text-[10px]">
-              <div>
-                <label className="text-zinc-500 block mb-1">ENTRY THRESHOLD (BPS)</label>
-                <input
-                  type="number"
-                  value={currentMinSpread}
-                  onChange={(e) => handleMinSpreadChange(parseFloat(e.target.value) || 12)}
-                  className="w-full px-2 py-1 bg-zinc-900 border border-border rounded text-zinc-200 font-mono"
-                />
+            <div className="mt-2 pt-2 border-t border-border space-y-2 text-[10px]">
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <label className="text-zinc-500 block mb-1">ENTRY THRESHOLD (BPS)</label>
+                  <input
+                    type="number"
+                    value={currentMinSpread}
+                    onChange={(e) => handleMinSpreadChange(parseFloat(e.target.value) || 12)}
+                    className="w-full px-2 py-1 bg-zinc-900 border border-border rounded text-zinc-200 font-mono"
+                  />
+                </div>
+                <div>
+                  <label className="text-zinc-500 block mb-1">EXIT TARGET (BPS)</label>
+                  <input
+                    type="number"
+                    value={currentExitTarget}
+                    onChange={(e) => handleExitTargetChange(parseFloat(e.target.value) || 2)}
+                    className="w-full px-2 py-1 bg-zinc-900 border border-border rounded text-zinc-200 font-mono"
+                  />
+                </div>
               </div>
+
+              {/* Stagger Policy Selector */}
               <div>
-                <label className="text-zinc-500 block mb-1">EXIT TARGET (BPS)</label>
-                <input
-                  type="number"
-                  value={currentExitTarget}
-                  onChange={(e) => handleExitTargetChange(parseFloat(e.target.value) || 2)}
-                  className="w-full px-2 py-1 bg-zinc-900 border border-border rounded text-zinc-200 font-mono"
-                />
+                <label className="text-zinc-500 block mb-1">LATENCY STAGGER POLICY</label>
+                <div className="grid grid-cols-3 gap-1">
+                  {[
+                    { id: "auto_ewma", label: "Auto EWMA" },
+                    { id: "simultaneous", label: "Parallel (0ms)" },
+                    { id: "manual", label: "Manual Delay" },
+                  ].map((p) => (
+                    <button
+                      key={p.id}
+                      onClick={() => setStaggerPolicy(p.id as any)}
+                      className={`py-1 text-[9px] rounded border ${
+                        staggerPolicy === p.id
+                          ? "bg-zinc-800 border-accent-cyan text-accent-cyan font-bold"
+                          : "bg-zinc-900 border-border text-zinc-400 hover:text-zinc-200"
+                      }`}
+                    >
+                      {p.label}
+                    </button>
+                  ))}
+                </div>
               </div>
+
+              {staggerPolicy === "manual" && (
+                <div className="grid grid-cols-2 gap-2 pt-1">
+                  <div>
+                    <label className="text-zinc-500 block mb-0.5">DELAY VENUE</label>
+                    <select
+                      value={manualVenue}
+                      onChange={(e) => setManualVenue(e.target.value as any)}
+                      className="w-full px-2 py-1 bg-zinc-900 border border-border rounded text-zinc-200 font-mono text-[9px]"
+                    >
+                      <option value="Bitget">Bitget</option>
+                      <option value="Binance">Binance</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="text-zinc-500 block mb-0.5">OFFSET (MS)</label>
+                    <input
+                      type="number"
+                      value={manualDelayMs}
+                      onChange={(e) => setManualDelayMs(parseInt(e.target.value, 10) || 0)}
+                      className="w-full px-2 py-1 bg-zinc-900 border border-border rounded text-zinc-200 font-mono text-[9px]"
+                    />
+                  </div>
+                </div>
+              )}
             </div>
           )}
 
@@ -233,11 +349,19 @@ export default function ControlCockpit({
           </div>
         </div>
 
-        {/* Size Selection */}
+        {/* Size Selection & Custom Continuous Input */}
         <div className="mt-4">
-          <label className="text-xs text-zinc-400 block mb-1.5">ORDER QUANTITY (BTC)</label>
-          <div className="grid grid-cols-4 gap-2">
-            {["0.002", "0.005", "0.010", "0.020"].map((qty) => (
+          <div className="flex items-center justify-between mb-1.5">
+            <label className="text-xs text-zinc-400 uppercase">
+              ORDER QUANTITY ({assetMeta.base})
+            </label>
+            <span className="text-[10px] text-zinc-500">
+              Selected: <strong className="text-zinc-200">{quantity} {assetMeta.base}</strong>
+            </span>
+          </div>
+
+          <div className="grid grid-cols-4 gap-2 mb-2">
+            {assetMeta.presets.map((qty) => (
               <button
                 key={qty}
                 onClick={() => setQuantity(qty)}
@@ -247,9 +371,22 @@ export default function ControlCockpit({
                     : "bg-surface-card border-border text-zinc-400 hover:border-zinc-700"
                 }`}
               >
-                {qty} BTC
+                {qty} {assetMeta.base}
               </button>
             ))}
+          </div>
+
+          {/* Custom Numerical Quantity Input */}
+          <div className="flex items-center space-x-2">
+            <span className="text-[10px] text-zinc-500">Custom Size:</span>
+            <input
+              type="number"
+              step={assetMeta.step}
+              value={quantity}
+              onChange={(e) => setQuantity(e.target.value)}
+              className="flex-1 px-2.5 py-1 text-xs bg-zinc-900 border border-border rounded font-mono text-zinc-100 focus:outline-none focus:border-accent-amber"
+              placeholder={`Enter custom ${assetMeta.base}`}
+            />
           </div>
         </div>
 
@@ -266,7 +403,7 @@ export default function ControlCockpit({
               <ArrowDownRight className="w-4 h-4 mb-1" />
             )}
             <span>SHORT BINANCE</span>
-            <span className="text-[10px] text-accent-cyan font-medium">+ LONG BITGET ({quantity})</span>
+            <span className="text-[10px] text-accent-cyan font-medium">+ LONG BITGET ({quantity} {assetMeta.base})</span>
           </button>
 
           <button
@@ -280,7 +417,7 @@ export default function ControlCockpit({
               <ArrowUpRight className="w-4 h-4 mb-1" />
             )}
             <span>LONG BINANCE</span>
-            <span className="text-[10px] text-accent-amber font-medium">+ SHORT BITGET ({quantity})</span>
+            <span className="text-[10px] text-accent-amber font-medium">+ SHORT BITGET ({quantity} {assetMeta.base})</span>
           </button>
         </div>
 
@@ -289,7 +426,7 @@ export default function ControlCockpit({
           <div className="flex items-center justify-between mb-2">
             <span className="text-[11px] text-zinc-300 font-bold flex items-center space-x-1.5">
               <Play className="w-3.5 h-3.5 text-accent-cyan" />
-              <span>DUAL HEDGE BENCHMARK (BINANCE + BITGET)</span>
+              <span>DUAL HEDGE BENCHMARK ({currentAsset})</span>
             </span>
             <span className="text-[10px] text-zinc-500">Sub-250ms Target</span>
           </div>
@@ -338,7 +475,7 @@ export default function ControlCockpit({
       {lastReceipt && (
         <div className="mt-4 p-3 rounded-lg bg-zinc-950 border border-zinc-800 text-[10px] text-zinc-400 space-y-1">
           <div className="font-semibold text-zinc-200 uppercase flex justify-between">
-            <span>RECEIPT: {lastReceipt.type}</span>
+            <span>RECEIPT: {lastReceipt.type} ({lastReceipt.data?.symbol || currentAsset})</span>
             <span className="text-accent-emerald flex items-center gap-1">
               <CheckCircle2 className="w-3 h-3" />
               CONFIRMED

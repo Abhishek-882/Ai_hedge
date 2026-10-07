@@ -1,11 +1,35 @@
 import { NextRequest, NextResponse } from "next/server";
 import { signAndFetchBinance } from "@/lib/binanceSigner";
 import { placeBitgetOrder, BitgetCredentials } from "@/lib/bitgetSigner";
-import { getLeadStaggerDelays, recordExecutionRTT, getLatencyMetrics } from "@/lib/latencyTracker";
+import { getLeadStaggerDelays, recordExecutionRTT, getLatencyMetrics, StaggerPolicy } from "@/lib/latencyTracker";
+import { checkRateLimit } from "@/lib/rateLimiter";
 
 export const dynamic = "force-dynamic";
 
+function formatSymbolQuantity(qty: number, symbol: string): string {
+  const s = symbol.toUpperCase();
+  if (s.startsWith("BTC")) return qty.toFixed(3);
+  if (s.startsWith("ETH")) return qty.toFixed(2);
+  if (s.startsWith("SOL")) return qty.toFixed(1);
+  if (s.startsWith("DOGE")) return Math.round(qty).toString();
+  if (s.startsWith("XRP")) return qty.toFixed(1);
+  return qty.toFixed(3);
+}
+
 export async function POST(req: NextRequest) {
+  // 1. In-Memory Sliding-Window Rate Limiting (12 requests / 5 seconds per client IP)
+  const clientIp = req.headers.get("x-forwarded-for") || req.headers.get("x-real-ip") || "local_client";
+  const rateLimit = checkRateLimit(clientIp, { windowMs: 5000, maxRequests: 12 });
+  if (!rateLimit.allowed) {
+    return NextResponse.json(
+      {
+        success: false,
+        error: `Rate limit exceeded. System is pacing requests. Retry in ${(rateLimit.resetMs / 1000).toFixed(1)}s.`,
+      },
+      { status: 429 }
+    );
+  }
+
   const DEFAULT_BINANCE_KEY = "RkqI5SmWN3z6DxKcAirPx48BmHpkA21FHPaeWFPsiJ4NbIvMAt4yTM3TsoLbHVAU";
   const DEFAULT_BINANCE_SECRET = "dpMSrQ1GDCPhNPnRRsIC0rCjzlDK9VfbC9fKXwptUGtqn2WdTKLZWekZqXykY00h";
 
@@ -36,10 +60,16 @@ export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
     const action = body.action || "benchmark"; // "entry", "benchmark", "exit"
+    const symbol = (body.symbol || "BTCUSDT").toUpperCase();
     const quantity = parseFloat(body.quantity || "0.005");
+    const formattedQty = formatSymbolQuantity(quantity, symbol);
     const leg1Side: "BUY" | "SELL" = body.leg1Side || "SELL"; // Default arbitrage: Short Binance
     const leg2Side: "buy" | "sell" = leg1Side === "SELL" ? "buy" : "sell"; // Long Bitget
-    const symbol = "BTCUSDT";
+    
+    // Flexible Stagger Policy Options
+    const staggerPolicy: StaggerPolicy = body.staggerPolicy || "auto_ewma";
+    const manualDelayMs: number = parseFloat(body.manualDelayMs || "0");
+    const manualVenue: "Binance" | "Bitget" | "None" = body.manualVenue || "None";
 
     // 1. Fetch reference mark price from Binance
     const { data: prem, endpoint } = await signAndFetchBinance(
@@ -56,8 +86,13 @@ export async function POST(req: NextRequest) {
     // PHASE 1: CONCURRENT PARALLEL ENTRY WITH DYNAMIC EWMA LEAD STAGGER
     const tEntryStart = performance.now();
 
-    // Get calibrated dynamic lead stagger delays
-    const { binanceDelayMs: leg1DelayMs, bitgetDelayMs: leg2DelayMs, leadStaggerAppliedMs, staggerVenue } = getLeadStaggerDelays();
+    // Get calibrated dynamic lead stagger delays based on selected policy
+    const {
+      binanceDelayMs: leg1DelayMs,
+      bitgetDelayMs: leg2DelayMs,
+      leadStaggerAppliedMs,
+      staggerVenue,
+    } = getLeadStaggerDelays(staggerPolicy, manualDelayMs, manualVenue);
 
     let leg1AckTime = 0;
     let leg2AckTime = 0;
@@ -79,7 +114,7 @@ export async function POST(req: NextRequest) {
           symbol,
           side: leg1Side,
           type: "MARKET",
-          quantity: quantity.toFixed(3),
+          quantity: formattedQty,
         },
         true,
         endpoint
@@ -111,7 +146,7 @@ export async function POST(req: NextRequest) {
         {
           symbol,
           side: leg2Side,
-          size: quantity.toFixed(3),
+          size: formattedQty,
           orderType: "market",
           tradeSide: "open",
         },
@@ -127,7 +162,7 @@ export async function POST(req: NextRequest) {
           {
             symbol,
             side: leg2Side,
-            size: quantity.toFixed(3),
+            size: formattedQty,
             orderType: "market",
             tradeSide: "open",
           },
@@ -158,33 +193,37 @@ export async function POST(req: NextRequest) {
     // Actual arrival delta at matching engines / client ACK
     const interLegEntryDelta = Math.abs(leg1AckTime - leg2AckTime);
 
-    // Update shared EWMA latency tracker
+    // Update shared EWMA latency tracker with outlier filtering
     if (leg1EntryRes.success && leg2EntryRes.success) {
       recordExecutionRTT(leg1OrderDurationMs, leg2OrderDurationMs, interLegEntryDelta, leadStaggerAppliedMs, staggerVenue);
     }
 
-    // CIRCUIT BREAKER: Emergency Unwind if Leg 2 totally failed
+    // CIRCUIT BREAKER 2.0: Immediate IOC Unwind on Leg 1 if Leg 2 fails
     if (!leg2EntryRes.success) {
       const unwindSide = leg1Side === "BUY" ? "SELL" : "BUY";
-      await signAndFetchBinance(
-        binanceKey,
-        binanceSecret,
-        "POST",
-        "/fapi/v1/order",
-        {
-          symbol,
-          side: unwindSide,
-          type: "MARKET",
-          quantity: quantity.toFixed(3),
-          reduceOnly: "true",
-        },
-        true,
-        endpoint
-      );
+      try {
+        await signAndFetchBinance(
+          binanceKey,
+          binanceSecret,
+          "POST",
+          "/fapi/v1/order",
+          {
+            symbol,
+            side: unwindSide,
+            type: "MARKET",
+            quantity: formattedQty,
+            reduceOnly: "true",
+          },
+          true,
+          endpoint
+        );
+      } catch (unwindErr) {
+        console.error("Critical: Leg 1 emergency unwind failed:", unwindErr);
+      }
 
       return NextResponse.json({
         success: false,
-        error: `Leg 2 (Bitget) failed after 3 chase retries. Emergency unwind triggered on Leg 1. Error: ${leg2EntryRes.error}`,
+        error: `Leg 2 (Bitget) rejected after 3 chase retries. Atomic IOC unwind executed on Leg 1. Bitget Error: ${leg2EntryRes.error}`,
         unwound: true,
       }, { status: 502 });
     }
@@ -193,11 +232,13 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({
         success: true,
         action: "entry",
+        symbol,
         leg1: leg1EntryRes,
         leg2: leg2EntryRes,
         interLegDeltaMs: parseFloat(interLegEntryDelta.toFixed(2)),
         leadStaggerAppliedMs,
         staggerVenue,
+        staggerPolicy,
         totalEntryMs: parseFloat((tEntryEnd - tEntryStart).toFixed(1)),
         latencyMetrics: getLatencyMetrics(),
       });
@@ -243,7 +284,7 @@ export async function POST(req: NextRequest) {
             symbol,
             side: leg1CloseSide,
             type: "MARKET",
-            quantity: quantity.toFixed(3),
+            quantity: formattedQty,
             reduceOnly: "true",
           },
           true,
@@ -272,7 +313,7 @@ export async function POST(req: NextRequest) {
           {
             symbol,
             side: leg2CloseSide,
-            size: quantity.toFixed(3),
+            size: formattedQty,
             orderType: "market",
             tradeSide: "close",
           },
@@ -283,58 +324,56 @@ export async function POST(req: NextRequest) {
 
         return {
           venue: res.venue || "Bitget",
-          orderId: res.orderId || `close_${Date.now()}`,
+          orderId: res.orderId || `bitget_close_${Date.now()}`,
           side: leg2CloseSide.toUpperCase(),
           price: res.avgPrice || exitMarkPrice,
           fillMs: parseFloat(closeLeg2OrderDurationMs.toFixed(1)),
           ackTimestamp: closeLeg2Ack,
+          success: res.success,
         };
       })(),
     ]);
+
     const tCloseEnd = performance.now();
     const dualCloseLatencyMs = tCloseEnd - tCloseStart;
-    const interLegExitDelta = Math.abs(closeLeg1Ack - closeLeg2Ack);
+    const interLegCloseDelta = Math.abs(closeLeg1Ack - closeLeg2Ack);
 
-    // Update EWMA filter with exit latencies as well
-    recordExecutionRTT(closeLeg1OrderDurationMs, closeLeg2OrderDurationMs, interLegExitDelta, leadStaggerAppliedMs, staggerVenue);
+    // PHASE 4: RECONCILE DIRECTIONAL DELTA-NEUTRAL PNL
+    const binanceDir = leg1Side === "BUY" ? 1 : -1;
+    const bitgetDir = leg2Side === "buy" ? 1 : -1;
 
-    // PHASE 4: DELTA-NEUTRAL PnL RECONCILIATION
-    const pnlLeg1 = leg1Side === "BUY"
-      ? (leg1ExitRes.price - leg1EntryRes.price) * quantity
-      : (leg1EntryRes.price - leg1ExitRes.price) * quantity;
-
-    const pnlLeg2 = leg2Side === "buy"
-      ? (leg2ExitRes.price - leg2EntryRes.price) * quantity
-      : (leg2EntryRes.price - leg2ExitRes.price) * quantity;
-
-    const netPnl = pnlLeg1 + pnlLeg2;
+    const binancePnl = binanceDir * (leg1ExitRes.price - leg1EntryRes.price) * quantity;
+    const bitgetPnl = bitgetDir * (leg2ExitRes.price - leg2EntryRes.price) * quantity;
+    const netPnl = binancePnl + bitgetPnl;
 
     return NextResponse.json({
       success: true,
-      action: "benchmark_complete",
+      action: "benchmark",
+      symbol,
       entry: {
         leg1: leg1EntryRes,
         leg2: leg2EntryRes,
         interLegDeltaMs: parseFloat(interLegEntryDelta.toFixed(2)),
+        totalEntryLatencyMs: parseFloat((tEntryEnd - tEntryStart).toFixed(1)),
         leadStaggerAppliedMs,
         staggerVenue,
-        totalEntryMs: parseFloat((tEntryEnd - tEntryStart).toFixed(1)),
+        staggerPolicy,
       },
       exit: {
         leg1: leg1ExitRes,
         leg2: leg2ExitRes,
-        interLegExitDeltaMs: parseFloat(interLegExitDelta.toFixed(2)),
+        interLegCloseDeltaMs: parseFloat(interLegCloseDelta.toFixed(2)),
         dualCloseLatencyMs: parseFloat(dualCloseLatencyMs.toFixed(1)),
       },
       pnl: {
-        leg1Pnl: parseFloat(pnlLeg1.toFixed(4)),
-        leg2Pnl: parseFloat(pnlLeg2.toFixed(4)),
+        binancePnl: parseFloat(binancePnl.toFixed(4)),
+        bitgetPnl: parseFloat(bitgetPnl.toFixed(4)),
         netPnl: parseFloat(netPnl.toFixed(4)),
-        deltaNeutralSuccess: Math.abs(netPnl) < 1.0, // within $1 acceptable basis fluctuation for 0.005 BTC
+        deltaNeutralSuccess: Math.abs(netPnl) < 1.0,
       },
       latencyMetrics: getLatencyMetrics(),
     });
-  } catch (err: any) {
-    return NextResponse.json({ success: false, error: err.message }, { status: 500 });
+  } catch (error: any) {
+    return NextResponse.json({ success: false, error: error.message }, { status: 500 });
   }
 }
