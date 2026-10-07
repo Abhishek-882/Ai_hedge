@@ -70,14 +70,23 @@ export default function PositionsTable({
             <tbody className="divide-y border-border">
               {positions.map((pos) => {
                 const isLong = pos.amount > 0;
-                const matchesCurrentAsset = !currentSymbol || pos.symbol === currentSymbol;
-                const venueMarkPrice = matchesCurrentAsset
-                  ? (pos.venue === "Bitget" ? (liveBitgetPrice || pos.markPrice) : (liveBinancePrice || pos.markPrice))
-                  : pos.markPrice;
+                const matchesCurrentAsset = Boolean(currentSymbol && pos.symbol === currentSymbol);
+                const rawLivePrice = (pos.venue === "Bitget" ? liveBitgetPrice : liveBinancePrice) || 0;
+                const baselinePrice = pos.markPrice || pos.entryPrice;
+                // Plausibility check: live price must be > 0 and within 20% of baseline price
+                const isPricePlausible = Boolean(
+                  rawLivePrice > 0 &&
+                  baselinePrice > 0 &&
+                  Math.abs(rawLivePrice - baselinePrice) / baselinePrice < 0.20
+                );
 
-                const dynamicPnl = (pos.amount !== 0 && pos.entryPrice > 0 && venueMarkPrice > 0)
+                const venueMarkPrice = (matchesCurrentAsset && isPricePlausible)
+                  ? rawLivePrice
+                  : baselinePrice;
+
+                const dynamicPnl = (matchesCurrentAsset && isPricePlausible && pos.amount !== 0 && pos.entryPrice > 0)
                   ? (venueMarkPrice - pos.entryPrice) * pos.amount
-                  : pos.unrealizedPnl;
+                  : (pos.unrealizedPnl || 0);
 
                 const isProfit = dynamicPnl >= 0;
                 const notional = pos.entryPrice * Math.abs(pos.amount);

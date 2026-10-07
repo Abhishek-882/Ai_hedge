@@ -20,7 +20,7 @@ export interface DualStreamData {
 
 const DEFAULT_PRICES: Record<string, number> = {
   BTCUSDT: 86400,
-  ETHUSDT: 3100,
+  ETHUSDT: 2568,
   SOLUSDT: 185,
   DOGEUSDT: 0.165,
   XRPUSDT: 1.45,
@@ -29,13 +29,13 @@ const DEFAULT_PRICES: Record<string, number> = {
 export function useDualExchangeWebSockets(symbol: string = "BTCUSDT"): DualStreamData {
   const symUpper = symbol.toUpperCase();
   const symLower = symbol.toLowerCase();
-  const defaultPrice = DEFAULT_PRICES[symUpper] || 86400;
+  const defaultPrice = DEFAULT_PRICES[symUpper] || 0;
 
-  const [data, setData] = useState<DualStreamData>({
+  const [data, setData] = useState<DualStreamData>(() => ({
     symbol: symUpper,
     binancePrice: defaultPrice,
     binanceFundingRate: 0.0001,
-    bitgetPrice: defaultPrice * 0.9998,
+    bitgetPrice: defaultPrice > 0 ? defaultPrice * 0.9998 : 0,
     bitgetFundingRate: 0.0002,
     spreadBps: 1.0,
     annualizedYieldPct: 10.95,
@@ -44,37 +44,73 @@ export function useDualExchangeWebSockets(symbol: string = "BTCUSDT"): DualStrea
     binanceWsConnected: false,
     bitgetWsConnected: false,
     lastUpdated: Date.now(),
-  });
+  }));
 
   const binanceWsRef = useRef<WebSocket | null>(null);
   const bitgetWsRef = useRef<WebSocket | null>(null);
 
+  // Throttling buffer to prevent rapid UI thrashing / flickering
+  const pendingUpdatesRef = useRef<Partial<DualStreamData>>({});
+  const throttleTimerRef = useRef<any>(null);
+
   useEffect(() => {
-    // Immediate initial ticker fetch for real price/rates on symbol change
+    // Reset symbol and initial prices immediately when symbol changes
+    setData((prev) => ({
+      ...prev,
+      symbol: symUpper,
+      binancePrice: defaultPrice > 0 ? defaultPrice : prev.binancePrice,
+      bitgetPrice: defaultPrice > 0 ? defaultPrice * 0.9998 : prev.bitgetPrice,
+      binanceWsConnected: false,
+      bitgetWsConnected: false,
+    }));
+    pendingUpdatesRef.current = {};
+
+    // Helper to queue throttled state updates (max 4 updates/sec = 250ms interval)
+    const queueThrottledUpdate = (partial: Partial<DualStreamData>) => {
+      pendingUpdatesRef.current = { ...pendingUpdatesRef.current, ...partial };
+      if (!throttleTimerRef.current) {
+        throttleTimerRef.current = setTimeout(() => {
+          throttleTimerRef.current = null;
+          if (Object.keys(pendingUpdatesRef.current).length > 0) {
+            setData((prev) => {
+              const merged = { ...prev, ...pendingUpdatesRef.current, lastUpdated: Date.now() };
+              // Calculate synchronized spread and APY
+              const bRate = merged.binanceFundingRate ?? prev.binanceFundingRate;
+              const gRate = merged.bitgetFundingRate ?? prev.bitgetFundingRate;
+              const spread = parseFloat(((gRate - bRate) * 10000).toFixed(2));
+              merged.spreadBps = spread;
+              merged.annualizedYieldPct = parseFloat(((Math.abs(spread) * 3 * 365) / 100).toFixed(2));
+              pendingUpdatesRef.current = {};
+              return merged;
+            });
+          }
+        }, 250);
+      }
+    };
+
+    // 1. Initial Ticker Fetch (REST) for instant calibration without waiting for WS ticks
     const fetchInitialTicker = () => {
       fetch(`/api/ticker?symbol=${symUpper}`, { cache: "no-store" })
         .then((res) => res.json())
         .then((t) => {
           if (t.success && t.binancePrice) {
-            setData((prev) => ({
-              ...prev,
+            queueThrottledUpdate({
               symbol: symUpper,
               binancePrice: t.binancePrice,
-              binanceFundingRate: t.binanceFundingRate || prev.binanceFundingRate,
+              binanceFundingRate: t.binanceFundingRate,
               bitgetPrice: t.bitgetPrice || t.binancePrice,
-              bitgetFundingRate: t.bitgetFundingRate || prev.bitgetFundingRate,
-              spreadBps: t.spreadBps !== undefined ? t.spreadBps : prev.spreadBps,
-              annualizedYieldPct: t.annualizedYieldPct !== undefined ? t.annualizedYieldPct : prev.annualizedYieldPct,
-              lastUpdated: Date.now(),
-            }));
+              bitgetFundingRate: t.bitgetFundingRate,
+              nextFundingTime: t.nextFundingTime || getDeterministicNextFundingTime(),
+            });
           }
         })
         .catch(() => {});
     };
 
     fetchInitialTicker();
-    const fallbackTickerInterval = setInterval(fetchInitialTicker, 3000); // 3s fallback poll
-    // 1. BINANCE FUTURES WEBSOCKET
+    const fallbackTickerInterval = setInterval(fetchInitialTicker, 4000); // 4s periodic REST calibration
+
+    // 2. BINANCE FUTURES WEBSOCKET
     let binanceReconnectTimer: any;
     const connectBinance = () => {
       try {
@@ -82,41 +118,35 @@ export function useDualExchangeWebSockets(symbol: string = "BTCUSDT"): DualStrea
         binanceWsRef.current = ws;
 
         ws.onopen = () => {
-          setData((prev) => ({ ...prev, binanceWsConnected: true }));
+          queueThrottledUpdate({ binanceWsConnected: true });
         };
 
         ws.onmessage = (event) => {
           try {
             const msg = JSON.parse(event.data);
             if (msg.e === "markPriceUpdate") {
-              const markPrice = parseFloat(msg.p || String(defaultPrice));
+              const markPrice = parseFloat(msg.p || "0");
               const fundingRate = parseFloat(msg.r || "0.0001");
               const nextFunding = parseInt(msg.T || "0", 10);
 
-              setData((prev) => {
-                const spread = (fundingRate - prev.bitgetFundingRate) * 10000;
-                const apy = (Math.abs(spread) * 3 * 365) / 100;
-                return {
-                  ...prev,
-                  symbol: symUpper,
+              if (markPrice > 0) {
+                queueThrottledUpdate({
                   binancePrice: markPrice,
                   binanceFundingRate: fundingRate,
-                  spreadBps: parseFloat(spread.toFixed(2)),
-                  annualizedYieldPct: parseFloat(apy.toFixed(2)),
-                  nextFundingTime: nextFunding || prev.nextFundingTime,
-                  lastUpdated: Date.now(),
-                };
-              });
+                  nextFundingTime: nextFunding > 0 ? nextFunding : undefined,
+                  binanceWsConnected: true,
+                });
+              }
             }
           } catch {}
         };
 
         ws.onerror = () => {
-          setData((prev) => ({ ...prev, binanceWsConnected: false }));
+          queueThrottledUpdate({ binanceWsConnected: false });
         };
 
         ws.onclose = () => {
-          setData((prev) => ({ ...prev, binanceWsConnected: false }));
+          queueThrottledUpdate({ binanceWsConnected: false });
           binanceReconnectTimer = setTimeout(connectBinance, 3000);
         };
       } catch {
@@ -126,30 +156,23 @@ export function useDualExchangeWebSockets(symbol: string = "BTCUSDT"): DualStrea
 
     connectBinance();
 
-    // 2. BITGET FUTURES WEBSOCKET (Supports V3 Demo wspap with automatic V2 fallback)
+    // 3. BITGET FUTURES WEBSOCKET (V2 Public Stream)
     let bitgetReconnectTimer: any;
     let bitgetPingInterval: any;
-    let endpointIdx = 0;
-    const bitgetEndpoints = [
-      {
-        url: "wss://wspap.bitget.com/v3/ws/public",
-        sub: { op: "subscribe", args: [{ instType: "usdt-futures", topic: "ticker", symbol: symUpper }] },
-      },
-      {
-        url: "wss://ws.bitget.com/v2/ws/public",
-        sub: { op: "subscribe", args: [{ instType: "USDT-FUTURES", channel: "ticker", instId: symUpper }] },
-      },
-    ];
 
     const connectBitget = () => {
       try {
-        const ep = bitgetEndpoints[endpointIdx % bitgetEndpoints.length];
-        const ws = new WebSocket(ep.url);
+        const ws = new WebSocket("wss://ws.bitget.com/v2/ws/public");
         bitgetWsRef.current = ws;
 
         ws.onopen = () => {
-          setData((prev) => ({ ...prev, bitgetWsConnected: true }));
-          ws.send(JSON.stringify(ep.sub));
+          queueThrottledUpdate({ bitgetWsConnected: true });
+          ws.send(
+            JSON.stringify({
+              op: "subscribe",
+              args: [{ instType: "USDT-FUTURES", channel: "ticker", instId: symUpper }],
+            })
+          );
 
           // Bitget ping keep-alive every 25s
           bitgetPingInterval = setInterval(() => {
@@ -166,39 +189,31 @@ export function useDualExchangeWebSockets(symbol: string = "BTCUSDT"): DualStrea
             if (msg.action === "snapshot" || msg.action === "update") {
               const ticker = msg.data?.[0];
               if (ticker) {
-                const lastPrice = parseFloat(ticker.lastPrice || ticker.lastPr || ticker.markPrice || String(defaultPrice));
+                const lastPrice = parseFloat(ticker.lastPr || ticker.markPrice || "0");
                 const fundingRate = parseFloat(ticker.fundingRate || "0.0002");
 
-                setData((prev) => {
-                  const spread = (prev.binanceFundingRate - fundingRate) * 10000;
-                  const apy = (Math.abs(spread) * 3 * 365) / 100;
-                  return {
-                    ...prev,
-                    symbol: symUpper,
+                if (lastPrice > 0) {
+                  queueThrottledUpdate({
                     bitgetPrice: lastPrice,
                     bitgetFundingRate: fundingRate,
-                    spreadBps: parseFloat(spread.toFixed(2)),
-                    annualizedYieldPct: parseFloat(apy.toFixed(2)),
-                    lastUpdated: Date.now(),
-                  };
-                });
+                    bitgetWsConnected: true,
+                  });
+                }
               }
             }
           } catch {}
         };
 
         ws.onerror = () => {
-          setData((prev) => ({ ...prev, bitgetWsConnected: false }));
+          queueThrottledUpdate({ bitgetWsConnected: false });
         };
 
         ws.onclose = () => {
           clearInterval(bitgetPingInterval);
-          setData((prev) => ({ ...prev, bitgetWsConnected: false }));
-          endpointIdx++;
+          queueThrottledUpdate({ bitgetWsConnected: false });
           bitgetReconnectTimer = setTimeout(connectBitget, 3000);
         };
       } catch {
-        endpointIdx++;
         bitgetReconnectTimer = setTimeout(connectBitget, 5000);
       }
     };
@@ -210,6 +225,10 @@ export function useDualExchangeWebSockets(symbol: string = "BTCUSDT"): DualStrea
       clearTimeout(bitgetReconnectTimer);
       clearInterval(bitgetPingInterval);
       clearInterval(fallbackTickerInterval);
+      if (throttleTimerRef.current) {
+        clearTimeout(throttleTimerRef.current);
+        throttleTimerRef.current = null;
+      }
       if (binanceWsRef.current) binanceWsRef.current.close();
       if (bitgetWsRef.current) bitgetWsRef.current.close();
     };

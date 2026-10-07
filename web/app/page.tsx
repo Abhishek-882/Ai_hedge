@@ -41,6 +41,7 @@ export default function DashboardPage() {
 
   // Persistent Trade History State
   const [tradeHistory, setTradeHistory] = useState<HedgeTradeRecord[]>([]);
+  const [closeError, setCloseError] = useState<string | null>(null);
 
   const fetchTradeHistory = useCallback(async () => {
     try {
@@ -271,22 +272,31 @@ export default function DashboardPage() {
       });
       const data = await res.json();
       if (data.success) {
+        setCloseError(null);
         fetchData();
       } else {
-        alert(data.error || data.message || "Failed to close position");
+        const errMsg = data.error || data.message || "Failed to close position";
+        setCloseError(errMsg);
+        setTimeout(() => setCloseError(null), 6000);
       }
     } catch (err: any) {
-      alert(`Error: ${err.message}`);
+      setCloseError(`Error: ${err.message}`);
+      setTimeout(() => setCloseError(null), 6000);
     }
   };
 
   // Dynamic real-time combined unrealized PnL across all open positions
   const dynamicNetPnl = positions.reduce((acc, pos) => {
-    const isCurrentAsset = pos.symbol === selectedSymbol;
-    const liveMarkPrice = isCurrentAsset
-      ? (pos.venue === "Bitget" ? (wsData.bitgetPrice || pos.markPrice) : (wsData.binancePrice || pos.markPrice))
-      : pos.markPrice;
-    const pnl = (pos.amount !== 0 && pos.entryPrice > 0 && liveMarkPrice > 0)
+    const isCurrentAsset = Boolean(selectedSymbol && pos.symbol === selectedSymbol);
+    const rawLivePrice = pos.venue === "Bitget" ? wsData.bitgetPrice : wsData.binancePrice;
+    const baselinePrice = pos.markPrice || pos.entryPrice;
+    const isPlausible = Boolean(
+      rawLivePrice > 0 &&
+      baselinePrice > 0 &&
+      Math.abs(rawLivePrice - baselinePrice) / baselinePrice < 0.20
+    );
+    const liveMarkPrice = (isCurrentAsset && isPlausible) ? rawLivePrice : baselinePrice;
+    const pnl = (isCurrentAsset && isPlausible && pos.amount !== 0 && pos.entryPrice > 0)
       ? (liveMarkPrice - pos.entryPrice) * pos.amount
       : (pos.unrealizedPnl || 0);
     return acc + pnl;
@@ -539,12 +549,28 @@ export default function DashboardPage() {
       {/* Spread Comparison Tracker with Live WebSocket Values */}
       <div className="mb-6">
         <SpreadTracker
+          symbol={selectedSymbol}
           binanceFundingRate={wsData.binanceFundingRate}
           bitgetFundingRate={wsData.bitgetFundingRate}
           spreadBps={wsData.spreadBps}
           markPrice={wsData.binancePrice}
         />
       </div>
+
+      {closeError && (
+        <div className="mb-4 px-4 py-2.5 rounded-lg bg-rose-950/80 border border-rose-800 text-rose-300 text-xs flex items-center justify-between shadow-lg shadow-rose-950/30 animate-fadeIn">
+          <div className="flex items-center space-x-2">
+            <span className="font-bold">⚠️ Close Position Notice:</span>
+            <span>{closeError}</span>
+          </div>
+          <button
+            onClick={() => setCloseError(null)}
+            className="text-rose-400 hover:text-rose-200 text-xs font-mono ml-4 px-1.5 py-0.5 rounded border border-rose-800/60"
+          >
+            ✕
+          </button>
+        </div>
+      )}
 
       {/* Live Positions Table with Real-Time Dynamic 4-Decimal Mark-to-Market PnL */}
       <div className="mb-6">
