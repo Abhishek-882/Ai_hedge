@@ -1,12 +1,14 @@
 "use client";
 
 import React, { useState, useEffect, useCallback, useRef } from "react";
-import { KeyRound, RefreshCw, Wallet, ShieldCheck, ExternalLink, Activity, Radio } from "lucide-react";
+import { KeyRound, RefreshCw, Wallet, ShieldCheck, ExternalLink, Activity, Radio, History } from "lucide-react";
 import PrismaticCore3D from "@/components/PrismaticCore3D";
 import TelemetryHUD from "@/components/TelemetryHUD";
 import SpreadTracker from "@/components/SpreadTracker";
 import ControlCockpit, { SupportedAsset } from "@/components/ControlCockpit";
 import PositionsTable from "@/components/PositionsTable";
+import AllCoinsScanner from "@/components/AllCoinsScanner";
+import HedgeHistoryTable, { HedgeTradeRecord } from "@/components/HedgeHistoryTable";
 import SettingsModal from "@/components/SettingsModal";
 import { useDualExchangeWebSockets } from "@/hooks/useDualExchangeWebSockets";
 
@@ -33,6 +35,37 @@ export default function DashboardPage() {
   const [minSpreadEntry, setMinSpreadEntry] = useState<number>(12);
   const [exitSpreadTarget, setExitSpreadTarget] = useState<number>(2);
   const lastAutopilotActionRef = useRef<number>(0);
+
+  // Persistent Trade History State
+  const [tradeHistory, setTradeHistory] = useState<HedgeTradeRecord[]>([]);
+
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      try {
+        const saved = localStorage.getItem("HEDGE_TRADE_HISTORY");
+        if (saved) {
+          setTradeHistory(JSON.parse(saved));
+        }
+      } catch {}
+    }
+  }, []);
+
+  const handleClearHistory = useCallback(() => {
+    setTradeHistory([]);
+    if (typeof window !== "undefined") {
+      try {
+        localStorage.removeItem("HEDGE_TRADE_HISTORY");
+      } catch {}
+    }
+  }, []);
+
+  const handleSelectCoinFromScanner = useCallback((symbol: string) => {
+    setSelectedSymbol(symbol as any);
+    const el = document.getElementById("execution-cockpit-section");
+    if (el) {
+      el.scrollIntoView({ behavior: "smooth" });
+    }
+  }, []);
 
   const getVaultHeaders = useCallback((): Record<string, string> => {
     if (typeof window === "undefined") return {};
@@ -118,6 +151,19 @@ export default function DashboardPage() {
     fetchData();
     const interval = setInterval(fetchData, 8000);
     return () => clearInterval(interval);
+  }, [fetchData]);
+
+  const handleTradeExecuted = useCallback((trade: HedgeTradeRecord) => {
+    setTradeHistory((prev) => {
+      const updated = [trade, ...prev].slice(0, 100);
+      if (typeof window !== "undefined") {
+        try {
+          localStorage.setItem("HEDGE_TRADE_HISTORY", JSON.stringify(updated));
+        } catch {}
+      }
+      return updated;
+    });
+    fetchData();
   }, [fetchData]);
 
   // 24/7 Autonomous Scanner & Auto-Hedger Loop
@@ -218,6 +264,8 @@ export default function DashboardPage() {
     return acc + pnl;
   }, 0);
 
+  const sessionRealizedPnl = tradeHistory.reduce((acc, t) => acc + (t.realizedPnl || 0), 0);
+
   return (
     <main className="min-h-screen bg-background text-zinc-100 p-4 md:p-8 max-w-7xl mx-auto font-mono">
       {/* Top Header Bar */}
@@ -287,7 +335,7 @@ export default function DashboardPage() {
               <div className="text-[10px] text-zinc-500">BINANCE WALLET</div>
               <div className="font-bold text-zinc-200">
                 {account?.totalWalletBalance !== undefined
-                  ? `$${account.totalWalletBalance.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} USDT`
+                  ? `$${account.totalWalletBalance.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 4 })} USDT`
                   : accountError
                   ? <span className="text-accent-rose">AUTH ERROR</span>
                   : "LOADING..."}
@@ -302,10 +350,21 @@ export default function DashboardPage() {
               <div className="text-[10px] text-zinc-500">BITGET EQUITY</div>
               <div className="font-bold text-zinc-200">
                 {bitgetAccount?.equity !== undefined
-                  ? `$${bitgetAccount.equity.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} USDT`
+                  ? `$${bitgetAccount.equity.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 4 })} USDT`
                   : bitgetError
                   ? <span className="text-accent-rose">AUTH ERROR</span>
                   : "SYNCING..."}
+              </div>
+            </div>
+          </div>
+
+          {/* Session Realized PnL Tracker */}
+          <div className="flex items-center space-x-2 bg-surface px-3 py-2 rounded-lg border border-border text-xs">
+            <History className="w-4 h-4 text-accent-cyan" />
+            <div>
+              <div className="text-[10px] text-zinc-500">SESSION REALIZED PnL</div>
+              <div className={`font-bold ${sessionRealizedPnl >= 0 ? "text-accent-emerald" : "text-accent-rose"}`}>
+                {sessionRealizedPnl >= 0 ? "+" : ""}${sessionRealizedPnl.toFixed(4)} USDT
               </div>
             </div>
           </div>
@@ -417,9 +476,10 @@ export default function DashboardPage() {
         </div>
 
         {/* Right Column: Execution Cockpit */}
-        <div className="lg:col-span-5">
+        <div id="execution-cockpit-section" className="lg:col-span-5">
           <ControlCockpit
             onRefresh={fetchData}
+            onTradeExecuted={handleTradeExecuted}
             getVaultHeaders={getVaultHeaders}
             selectedSymbol={selectedSymbol}
             onSymbolChange={setSelectedSymbol}
@@ -453,6 +513,22 @@ export default function DashboardPage() {
           liveBinancePrice={wsData.binancePrice}
           liveBitgetPrice={wsData.bitgetPrice}
           onClosePosition={handleClosePosition}
+        />
+      </div>
+
+      {/* Traded Hedges History & Execution Audit Log */}
+      <div className="mb-6">
+        <HedgeHistoryTable
+          history={tradeHistory}
+          onClearHistory={handleClearHistory}
+        />
+      </div>
+
+      {/* All Coins Funding Arbitrage Scanner Matrix */}
+      <div className="mb-6">
+        <AllCoinsScanner
+          onSelectCoin={handleSelectCoinFromScanner}
+          selectedSymbol={selectedSymbol}
         />
       </div>
 

@@ -28,6 +28,7 @@ const ASSET_CONFIGS: Record<SupportedAsset, { label: string; base: string; prese
 interface ControlCockpitProps {
   onRefresh?: () => void;
   onOrderSuccess?: (receipt: any) => void;
+  onTradeExecuted?: (trade: any) => void;
   getVaultHeaders: () => Record<string, string>;
   selectedSymbol?: SupportedAsset;
   onSymbolChange?: (sym: SupportedAsset) => void;
@@ -44,6 +45,7 @@ interface ControlCockpitProps {
 export default function ControlCockpit({
   onRefresh,
   onOrderSuccess,
+  onTradeExecuted,
   getVaultHeaders,
   selectedSymbol = "BTCUSDT",
   onSymbolChange,
@@ -125,6 +127,27 @@ export default function ControlCockpit({
         direction,
         data,
       });
+      if (onTradeExecuted) {
+        onTradeExecuted({
+          id: `HDG-${Date.now().toString().slice(-6)}`,
+          timestamp: Date.now(),
+          symbol: currentAsset,
+          type: "HEDGE_ENTRY",
+          directionLabel: direction === "SHORT_BINANCE_LONG_BITGET" ? "Short BN + Long BG" : "Long BN + Short BG",
+          quantity,
+          leg1Venue: "Binance",
+          leg1Side: leg1Side,
+          leg1Price: data.leg1?.price || 0,
+          leg1OrderId: data.leg1?.orderId,
+          leg2Venue: "Bitget",
+          leg2Side: leg1Side === "SELL" ? "BUY" : "SELL",
+          leg2Price: data.leg2?.price || 0,
+          leg2OrderId: data.leg2?.orderId,
+          interLegDeltaMs: data.interLegDeltaMs || 0,
+          realizedPnl: 0,
+          status: "ACTIVE",
+        });
+      }
       if (onOrderSuccess) onOrderSuccess(data);
       if (onRefresh) onRefresh();
     } catch (err: any) {
@@ -152,6 +175,27 @@ export default function ControlCockpit({
         message: data.message,
         data,
       });
+      if (onTradeExecuted) {
+        onTradeExecuted({
+          id: `CLS-${Date.now().toString().slice(-6)}`,
+          timestamp: Date.now(),
+          symbol: currentAsset,
+          type: "MANUAL_CLOSE",
+          directionLabel: "Dual Flatten / Close All",
+          quantity,
+          leg1Venue: "Binance",
+          leg1Side: "CLOSE",
+          leg1Price: 0,
+          leg1OrderId: data.binance?.orders?.[0]?.orderId,
+          leg2Venue: "Bitget",
+          leg2Side: "CLOSE",
+          leg2Price: 0,
+          leg2OrderId: data.bitget?.orders?.[0]?.orderId,
+          interLegDeltaMs: data.interLegCloseDeltaMs || 0,
+          realizedPnl: 0,
+          status: "CLOSED",
+        });
+      }
       if (onRefresh) onRefresh();
     } catch (err: any) {
       alert(`Close Failed: ${err.message}`);
@@ -185,6 +229,27 @@ export default function ControlCockpit({
         type: "HEDGE_BENCHMARK",
         data,
       });
+      if (onTradeExecuted) {
+        onTradeExecuted({
+          id: `BMK-${Date.now().toString().slice(-6)}`,
+          timestamp: Date.now(),
+          symbol: currentAsset,
+          type: "BENCHMARK",
+          directionLabel: "Short BN + Long BG (1.2s Auto-Closed)",
+          quantity,
+          leg1Venue: "Binance",
+          leg1Side: "SELL -> BUY",
+          leg1Price: data.entry?.leg1?.price || 0,
+          leg1OrderId: data.entry?.leg1?.orderId,
+          leg2Venue: "Bitget",
+          leg2Side: "BUY -> SELL",
+          leg2Price: data.entry?.leg2?.price || 0,
+          leg2OrderId: data.entry?.leg2?.orderId,
+          interLegDeltaMs: data.entry?.interLegDeltaMs || 0,
+          realizedPnl: data.pnl?.netPnl || 0,
+          status: "DELTA_NEUTRAL",
+        });
+      }
       if (onRefresh) onRefresh();
     } catch (err: any) {
       alert(`Hedge Benchmark Failed: ${err.message}`);
@@ -395,34 +460,46 @@ export default function ControlCockpit({
         </div>
 
         {/* Dual-Leg Real-Time Hedging Controls */}
-        <div className="mt-4 grid grid-cols-2 gap-3">
-          <button
-            onClick={() => executeHedge("SHORT_BINANCE_LONG_BITGET")}
-            disabled={!!loadingAction}
-            className="flex flex-col items-center justify-center p-2.5 rounded-lg bg-amber-500/10 border border-amber-500/30 text-accent-amber hover:bg-amber-500/20 active:scale-[0.98] transition-all disabled:opacity-50 text-xs font-bold"
-          >
-            {loadingAction === "SHORT_BINANCE_LONG_BITGET" ? (
-              <RefreshCw className="w-3.5 h-3.5 animate-spin mb-1" />
-            ) : (
-              <ArrowDownRight className="w-4 h-4 mb-1" />
-            )}
-            <span>SHORT BINANCE</span>
-            <span className="text-[10px] text-accent-cyan font-medium">+ LONG BITGET ({quantity} {assetMeta.base})</span>
-          </button>
+        <div className="mt-4">
+          <div className="flex items-center justify-between mb-1.5">
+            <label className="text-[10px] text-zinc-400 uppercase font-semibold">
+              LIVE PERSISTENT HEDGE ENTRY (STAYS OPEN)
+            </label>
+            <span className="text-[9px] text-emerald-400 font-mono">
+              Positions reflect in Live Table
+            </span>
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <button
+              onClick={() => executeHedge("SHORT_BINANCE_LONG_BITGET")}
+              disabled={!!loadingAction}
+              className="flex flex-col items-center justify-center p-2.5 rounded-lg bg-amber-500/10 border border-amber-500/30 text-accent-amber hover:bg-amber-500/20 active:scale-[0.98] transition-all disabled:opacity-50 text-xs font-bold"
+            >
+              {loadingAction === "SHORT_BINANCE_LONG_BITGET" ? (
+                <RefreshCw className="w-3.5 h-3.5 animate-spin mb-1" />
+              ) : (
+                <ArrowDownRight className="w-4 h-4 mb-1" />
+              )}
+              <span>SHORT BINANCE</span>
+              <span className="text-[10px] text-accent-cyan font-medium">+ LONG BITGET ({quantity} {assetMeta.base})</span>
+              <span className="text-[9px] text-zinc-400 mt-0.5">Keep Open In Table</span>
+            </button>
 
-          <button
-            onClick={() => executeHedge("LONG_BINANCE_SHORT_BITGET")}
-            disabled={!!loadingAction}
-            className="flex flex-col items-center justify-center p-2.5 rounded-lg bg-cyan-500/10 border border-cyan-500/30 text-accent-cyan hover:bg-cyan-500/20 active:scale-[0.98] transition-all disabled:opacity-50 text-xs font-bold"
-          >
-            {loadingAction === "LONG_BINANCE_SHORT_BITGET" ? (
-              <RefreshCw className="w-3.5 h-3.5 animate-spin mb-1" />
-            ) : (
-              <ArrowUpRight className="w-4 h-4 mb-1" />
-            )}
-            <span>LONG BINANCE</span>
-            <span className="text-[10px] text-accent-amber font-medium">+ SHORT BITGET ({quantity} {assetMeta.base})</span>
-          </button>
+            <button
+              onClick={() => executeHedge("LONG_BINANCE_SHORT_BITGET")}
+              disabled={!!loadingAction}
+              className="flex flex-col items-center justify-center p-2.5 rounded-lg bg-cyan-500/10 border border-cyan-500/30 text-accent-cyan hover:bg-cyan-500/20 active:scale-[0.98] transition-all disabled:opacity-50 text-xs font-bold"
+            >
+              {loadingAction === "LONG_BINANCE_SHORT_BITGET" ? (
+                <RefreshCw className="w-3.5 h-3.5 animate-spin mb-1" />
+              ) : (
+                <ArrowUpRight className="w-4 h-4 mb-1" />
+              )}
+              <span>LONG BINANCE</span>
+              <span className="text-[10px] text-accent-amber font-medium">+ SHORT BITGET ({quantity} {assetMeta.base})</span>
+              <span className="text-[9px] text-zinc-400 mt-0.5">Keep Open In Table</span>
+            </button>
+          </div>
         </div>
 
         {/* Dual Hedge Latency Test Suite */}
@@ -432,10 +509,12 @@ export default function ControlCockpit({
               <Play className="w-3.5 h-3.5 text-accent-cyan" />
               <span>DUAL HEDGE BENCHMARK ({currentAsset})</span>
             </span>
-            <span className="text-[10px] text-zinc-500">Sub-250ms Target</span>
+            <span className="text-[9px] px-1.5 py-0.5 rounded bg-cyan-950/40 text-accent-cyan border border-cyan-800/40">
+              1.2s AUTO-CLOSE SPEED TEST
+            </span>
           </div>
           <p className="text-[10px] text-zinc-400 mb-2.5">
-            Dispatches Binance Short & Bitget Long concurrently with Aggressive Fill Chase and tests simultaneous dual-close.
+            ⚡ Executes sub-250ms simultaneous entry & exit to calibrate lead stagger without ongoing risk. (To keep positions open, use the buttons above).
           </p>
           <button
             onClick={executeHedgeBenchmark}
