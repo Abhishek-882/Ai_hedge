@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useEffect, useMemo } from "react";
-import { Search, Flame, ArrowUpRight, ArrowDownRight, RefreshCw, Zap, Clock, ShieldAlert } from "lucide-react";
+import { Search, Flame, ArrowUpRight, ArrowDownRight, RefreshCw, Zap, Clock, ShieldAlert, Check } from "lucide-react";
 import { getDeterministicNextFundingTime, formatCountdown } from "@/lib/settlementTime";
 
 export interface CoinOpportunity {
@@ -21,9 +21,10 @@ export interface CoinOpportunity {
 interface AllCoinsScannerProps {
   onSelectCoin: (symbol: string, direction?: "SHORT_BINANCE_LONG_BITGET" | "LONG_BINANCE_SHORT_BITGET") => void;
   selectedSymbol?: string;
+  onTradeExecuted?: (trade: any) => void;
 }
 
-export default function AllCoinsScanner({ onSelectCoin, selectedSymbol }: AllCoinsScannerProps) {
+export default function AllCoinsScanner({ onSelectCoin, selectedSymbol, onTradeExecuted }: AllCoinsScannerProps) {
   const [coins, setCoins] = useState<CoinOpportunity[]>([]);
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
@@ -32,6 +33,10 @@ export default function AllCoinsScanner({ onSelectCoin, selectedSymbol }: AllCoi
   const [sortBy, setSortBy] = useState<"funding" | "spread" | "apr" | "countdown" | "volume" | "symbol">("funding");
   const [lastUpdated, setLastUpdated] = useState<number>(Date.now());
   const [currentTime, setCurrentTime] = useState<number>(Date.now());
+
+  // 1-Click Quick Hedge Execution State
+  const [executingSymbol, setExecutingSymbol] = useState<string | null>(null);
+  const [filledSymbol, setFilledSymbol] = useState<string | null>(null);
 
   // Second-by-second ticker for real-time countdowns
   useEffect(() => {
@@ -62,7 +67,8 @@ export default function AllCoinsScanner({ onSelectCoin, selectedSymbol }: AllCoi
 
   useEffect(() => {
     fetchCoins();
-    const interval = setInterval(fetchCoins, 20_000); // refresh every 20s
+    // Fast 5-second polling for live updates
+    const interval = setInterval(fetchCoins, 5000);
     return () => clearInterval(interval);
   }, []);
 
@@ -90,7 +96,6 @@ export default function AllCoinsScanner({ onSelectCoin, selectedSymbol }: AllCoi
     // Sorting
     list.sort((a, b) => {
       if (sortBy === "funding") {
-        // Sort by highest 8h funding rate descending
         if (b.binanceRate !== a.binanceRate) return b.binanceRate - a.binanceRate;
         return b.spreadBps - a.spreadBps;
       }
@@ -108,6 +113,78 @@ export default function AllCoinsScanner({ onSelectCoin, selectedSymbol }: AllCoi
 
     return list;
   }, [coins, searchQuery, filterMode, sortBy, fallbackTarget]);
+
+  // 1-Click Quick Hedge on ANY coin row
+  const handleQuickHedge = async (coin: CoinOpportunity) => {
+    setExecutingSymbol(coin.symbol);
+    try {
+      // Calculate safe dynamic lot quantity ensuring notional >= $10.00
+      let safeQty = 10;
+      if (coin.binanceMarkPrice > 0) {
+        if (coin.binanceMarkPrice > 500) {
+          safeQty = parseFloat((15 / coin.binanceMarkPrice).toFixed(3));
+        } else if (coin.binanceMarkPrice > 50) {
+          safeQty = parseFloat((15 / coin.binanceMarkPrice).toFixed(2));
+        } else if (coin.binanceMarkPrice > 1) {
+          safeQty = parseFloat((15 / coin.binanceMarkPrice).toFixed(1));
+        } else {
+          safeQty = Math.max(10, Math.round(15 / coin.binanceMarkPrice));
+        }
+      }
+
+      const leg1Side = coin.direction === "SHORT_BINANCE_LONG_BITGET" ? "SELL" : "BUY";
+
+      const res = await fetch("/api/hedge", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "entry",
+          symbol: coin.symbol,
+          quantity: safeQty,
+          leg1Side,
+        }),
+      });
+
+      const data = await res.json();
+      if (!data.success) throw new Error(data.error || "Hedge execution failed");
+
+      setFilledSymbol(coin.symbol);
+      setTimeout(() => setFilledSymbol(null), 4000);
+
+      // Record trade and update history
+      const tradeRecord = {
+        id: `HDG-${Date.now().toString().slice(-6)}`,
+        timestamp: Date.now(),
+        symbol: coin.symbol,
+        type: "QUICK_HEDGE_1CLICK",
+        directionLabel: coin.direction === "SHORT_BINANCE_LONG_BITGET" ? "Short BN + Long BG" : "Long BN + Short BG",
+        quantity: safeQty.toString(),
+        leg1Venue: "Binance",
+        leg1Side: leg1Side,
+        leg1Price: data.leg1?.price || coin.binanceMarkPrice,
+        leg1OrderId: data.leg1?.orderId,
+        leg2Venue: "Bitget",
+        leg2Side: leg1Side === "SELL" ? "BUY" : "SELL",
+        leg2Price: data.leg2?.price || coin.bitgetMarkPrice,
+        leg2OrderId: data.leg2?.orderId,
+        interLegDeltaMs: data.interLegDeltaMs || 0,
+        realizedPnl: 0,
+        status: "ACTIVE",
+      };
+
+      if (onTradeExecuted) {
+        onTradeExecuted(tradeRecord);
+      }
+
+      // Also set as active symbol
+      onSelectCoin(coin.symbol, coin.direction);
+
+    } catch (err: any) {
+      alert(`Quick Hedge Failed for ${coin.symbol}: ${err.message}`);
+    } finally {
+      setExecutingSymbol(null);
+    }
+  };
 
   return (
     <div className="bg-surface rounded-xl border border-border p-5 font-mono">
@@ -258,7 +335,7 @@ export default function AllCoinsScanner({ onSelectCoin, selectedSymbol }: AllCoi
                 <th className="pb-2 cursor-pointer" onClick={() => setSortBy("volume")}>
                   24h Vol {sortBy === "volume" && "▾"}
                 </th>
-                <th className="pb-2 text-right">Quick Action</th>
+                <th className="pb-2 text-right">Actions</th>
               </tr>
             </thead>
             <tbody className="divide-y border-border">
@@ -267,6 +344,8 @@ export default function AllCoinsScanner({ onSelectCoin, selectedSymbol }: AllCoi
                 const isShortBn = coin.direction === "SHORT_BINANCE_LONG_BITGET";
                 const coinFundingTarget = coin.nextFundingTime > 0 ? coin.nextFundingTime : fallbackTarget;
                 const countdownDisplay = formatCountdown(coinFundingTarget, currentTime);
+                const isExecuting = executingSymbol === coin.symbol;
+                const isFilled = filledSymbol === coin.symbol;
 
                 return (
                   <tr
@@ -281,7 +360,7 @@ export default function AllCoinsScanner({ onSelectCoin, selectedSymbol }: AllCoi
                         <span className="text-[10px] text-zinc-500 font-mono">USDT</span>
                         {isSelected && (
                           <span className="text-[9px] px-1 py-0.2 rounded bg-amber-500/20 text-accent-amber border border-amber-500/30">
-                            ACTIVE
+                            LOADED
                           </span>
                         )}
                       </div>
@@ -321,17 +400,39 @@ export default function AllCoinsScanner({ onSelectCoin, selectedSymbol }: AllCoi
                       ${(coin.volume24h / 1_000_000).toFixed(1)}M
                     </td>
                     <td className="py-2.5 text-right">
-                      <button
-                        onClick={() => onSelectCoin(coin.symbol, coin.direction)}
-                        className={`px-2.5 py-1 text-[10px] font-bold rounded transition-colors flex items-center space-x-1 ml-auto ${
-                          isSelected
-                            ? "bg-amber-500 text-zinc-950 hover:bg-amber-400"
-                            : "bg-zinc-800 hover:bg-zinc-700 text-zinc-200 border border-zinc-700"
-                        }`}
-                      >
-                        <Zap className="w-3 h-3" />
-                        <span>{isSelected ? "LOADED" : "HEDGE"}</span>
-                      </button>
+                      <div className="flex items-center justify-end space-x-1.5">
+                        {/* 1-Click Direct Quick Hedge */}
+                        <button
+                          onClick={() => handleQuickHedge(coin)}
+                          disabled={isExecuting}
+                          className={`px-2.5 py-1 text-[10px] font-bold rounded transition-all flex items-center space-x-1 ${
+                            isFilled
+                              ? "bg-emerald-500 text-zinc-950 shadow-md shadow-emerald-500/20"
+                              : isExecuting
+                              ? "bg-amber-600 text-white animate-pulse"
+                              : "bg-accent-amber hover:bg-amber-400 text-zinc-950 shadow-sm shadow-amber-500/10"
+                          }`}
+                          title={`1-Click Instant Dual Hedge on ${coin.symbol}`}
+                        >
+                          <Zap className="w-3 h-3" />
+                          <span>
+                            {isFilled ? "FILLED ✓" : isExecuting ? "HEDGING..." : "QUICK HEDGE"}
+                          </span>
+                        </button>
+
+                        {/* Load into Cockpit */}
+                        <button
+                          onClick={() => onSelectCoin(coin.symbol, coin.direction)}
+                          className={`px-2 py-1 text-[10px] font-bold rounded transition-colors ${
+                            isSelected
+                              ? "bg-amber-500/20 text-accent-amber border border-amber-500/40"
+                              : "bg-zinc-800 hover:bg-zinc-700 text-zinc-300 border border-zinc-700"
+                          }`}
+                          title={`Load ${coin.symbol} into Execution Cockpit`}
+                        >
+                          {isSelected ? "LOADED" : "LOAD"}
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 );
@@ -347,8 +448,8 @@ export default function AllCoinsScanner({ onSelectCoin, selectedSymbol }: AllCoi
           Showing top {Math.min(filteredCoins.length, 50)} opportunities of {filteredCoins.length} filtered coins (Ranked by 8h Funding)
         </span>
         <div className="flex items-center space-x-3">
-          <span>Settlement intervals: 00:00 / 08:00 / 16:00 UTC</span>
-          <span>Click <strong>HEDGE</strong> to load into Control Cockpit</span>
+          <span>Click <strong>QUICK HEDGE</strong> for 1-click dual fill</span>
+          <span>Click <strong>LOAD</strong> to configure in Execution Cockpit</span>
         </div>
       </div>
     </div>

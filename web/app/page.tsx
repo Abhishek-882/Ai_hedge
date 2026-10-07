@@ -152,7 +152,8 @@ export default function DashboardPage() {
 
   useEffect(() => {
     fetchData();
-    const interval = setInterval(fetchData, 8000);
+    // Fast 3-second polling for live open positions and balance synchronization
+    const interval = setInterval(fetchData, 3000);
     return () => clearInterval(interval);
   }, [fetchData]);
 
@@ -545,6 +546,7 @@ export default function DashboardPage() {
         <AllCoinsScanner
           onSelectCoin={handleSelectCoinFromScanner}
           selectedSymbol={selectedSymbol}
+          onTradeExecuted={handleTradeExecuted}
         />
       </div>
 

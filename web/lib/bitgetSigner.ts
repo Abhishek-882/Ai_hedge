@@ -219,12 +219,38 @@ export async function getBitgetAccount(creds?: BitgetCredentials) {
     const available = parseFloat(usdtAccount.available || usdtAccount.maxTransferOut || "0.0");
     const unrealizedPnL = parseFloat(usdtAccount.unrealizedPL || "0.0");
 
+    let positions: any[] = [];
+    try {
+      const posPath = "/api/v2/mix/position/all-position?productType=USDT-FUTURES";
+      const posHeaders = await getBitgetHeaders(creds, "GET", posPath);
+      const posRes = await fetch(`${baseUrl}${posPath}`, { headers: posHeaders, cache: "no-store" });
+      const posData = await posRes.json();
+      if (posData.code === "00000" && Array.isArray(posData.data)) {
+        positions = posData.data
+          .filter((p: any) => parseFloat(p.total || p.available || p.pos || "0") > 0)
+          .map((p: any) => {
+            const rawTotal = parseFloat(p.total || p.available || p.pos || "0");
+            const amt = (p.holdSide || p.posSide) === "short" ? -rawTotal : rawTotal;
+            return {
+              venue: "Bitget",
+              symbol: p.symbol || "BTCUSDT",
+              amount: amt,
+              entryPrice: parseFloat(p.openPriceAvg || p.averageOpenPrice || p.avgPrice || "0"),
+              markPrice: parseFloat(p.markPrice || "0"),
+              unrealizedPnl: parseFloat(p.unrealizedPL || p.unrealisedPnl || "0"),
+              leverage: parseInt(p.leverage || "20", 10),
+            };
+          });
+      }
+    } catch {}
+
     return {
       success: true,
       venue: "Bitget-Classic-Futures",
       equity,
       available,
       unrealizedPnL,
+      positions,
       raw: data.data,
       isSimulated: false,
     };

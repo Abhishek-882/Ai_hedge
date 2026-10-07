@@ -6,14 +6,19 @@ import { checkRateLimit } from "@/lib/rateLimiter";
 
 export const dynamic = "force-dynamic";
 
-function formatSymbolQuantity(qty: number, symbol: string): string {
+function formatSymbolQuantity(qty: number, symbol: string, refPrice: number = 0): string {
   const s = symbol.toUpperCase();
-  if (s.startsWith("BTC")) return qty.toFixed(3);
-  if (s.startsWith("ETH")) return qty.toFixed(2);
-  if (s.startsWith("SOL")) return qty.toFixed(1);
-  if (s.startsWith("DOGE")) return Math.round(qty).toString();
-  if (s.startsWith("XRP")) return qty.toFixed(1);
-  return qty.toFixed(3);
+  if (s.startsWith("BTC")) return Math.max(0.001, qty).toFixed(3);
+  if (s.startsWith("ETH")) return Math.max(0.01, qty).toFixed(2);
+  if (s.startsWith("SOL")) return Math.max(0.1, qty).toFixed(1);
+  if (s.startsWith("DOGE")) return Math.max(50, Math.round(qty)).toString();
+  if (s.startsWith("XRP")) return Math.max(10, Math.round(qty)).toString();
+
+  // Dynamic formatting for arbitrary coins based on price magnitude
+  if (refPrice > 500) return qty.toFixed(3);
+  if (refPrice > 50) return qty.toFixed(2);
+  if (refPrice > 1) return qty.toFixed(1);
+  return Math.max(1, Math.round(qty)).toString();
 }
 
 export async function POST(req: NextRequest) {
@@ -61,8 +66,7 @@ export async function POST(req: NextRequest) {
     const body = await req.json();
     const action = body.action || "benchmark"; // "entry", "benchmark", "exit"
     const symbol = (body.symbol || "BTCUSDT").toUpperCase();
-    const quantity = parseFloat(body.quantity || "0.005");
-    const formattedQty = formatSymbolQuantity(quantity, symbol);
+    const rawQuantity = parseFloat(body.quantity || "0.005");
     
     // Direction & Leg Side Resolution
     let leg1Side: "BUY" | "SELL" = body.leg1Side || "SELL";
@@ -89,18 +93,14 @@ export async function POST(req: NextRequest) {
       binanceEndpoint
     );
     const refPrice = parseFloat(prem?.markPrice || "86400");
-    const notional = refPrice * quantity;
 
-    // PRE-FLIGHT SAFETY 1: Enforce minimum exchange notional ($5.00)
-    if (notional < 5.0) {
-      return NextResponse.json(
-        {
-          success: false,
-          error: `Order notional ($${notional.toFixed(2)}) is below exchange minimum threshold ($5.00). Increase quantity.`,
-        },
-        { status: 400 }
-      );
+    // Auto-scale quantity if below $5.50 exchange minimum threshold
+    let effectiveQuantity = rawQuantity;
+    if (refPrice > 0 && refPrice * effectiveQuantity < 5.5) {
+      effectiveQuantity = Math.max(0.001, 10.0 / refPrice);
     }
+    const formattedQty = formatSymbolQuantity(effectiveQuantity, symbol, refPrice);
+    const notional = refPrice * parseFloat(formattedQty);
 
     // PRE-FLIGHT SAFETY 2: Collateral & Margin Check
     const estRequiredMargin = (notional / 20) * 1.1; // 20x leverage + 10% safety buffer
@@ -389,8 +389,8 @@ export async function POST(req: NextRequest) {
     const binanceDir = leg1Side === "BUY" ? 1 : -1;
     const bitgetDir = leg2Side === "buy" ? 1 : -1;
 
-    const binancePnl = binanceDir * (leg1ExitRes.price - leg1EntryRes.price) * quantity;
-    const bitgetPnl = bitgetDir * (leg2ExitRes.price - leg2EntryRes.price) * quantity;
+    const binancePnl = binanceDir * (leg1ExitRes.price - leg1EntryRes.price) * effectiveQuantity;
+    const bitgetPnl = bitgetDir * (leg2ExitRes.price - leg2EntryRes.price) * effectiveQuantity;
     const netPnl = binancePnl + bitgetPnl;
 
     return NextResponse.json({

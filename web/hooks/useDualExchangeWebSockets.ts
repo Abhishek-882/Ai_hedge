@@ -50,6 +50,30 @@ export function useDualExchangeWebSockets(symbol: string = "BTCUSDT"): DualStrea
   const bitgetWsRef = useRef<WebSocket | null>(null);
 
   useEffect(() => {
+    // Immediate initial ticker fetch for real price/rates on symbol change
+    const fetchInitialTicker = () => {
+      fetch(`/api/ticker?symbol=${symUpper}`, { cache: "no-store" })
+        .then((res) => res.json())
+        .then((t) => {
+          if (t.success && t.binancePrice) {
+            setData((prev) => ({
+              ...prev,
+              symbol: symUpper,
+              binancePrice: t.binancePrice,
+              binanceFundingRate: t.binanceFundingRate || prev.binanceFundingRate,
+              bitgetPrice: t.bitgetPrice || t.binancePrice,
+              bitgetFundingRate: t.bitgetFundingRate || prev.bitgetFundingRate,
+              spreadBps: t.spreadBps !== undefined ? t.spreadBps : prev.spreadBps,
+              annualizedYieldPct: t.annualizedYieldPct !== undefined ? t.annualizedYieldPct : prev.annualizedYieldPct,
+              lastUpdated: Date.now(),
+            }));
+          }
+        })
+        .catch(() => {});
+    };
+
+    fetchInitialTicker();
+    const fallbackTickerInterval = setInterval(fetchInitialTicker, 3000); // 3s fallback poll
     // 1. BINANCE FUTURES WEBSOCKET
     let binanceReconnectTimer: any;
     const connectBinance = () => {
@@ -185,6 +209,7 @@ export function useDualExchangeWebSockets(symbol: string = "BTCUSDT"): DualStrea
       clearTimeout(binanceReconnectTimer);
       clearTimeout(bitgetReconnectTimer);
       clearInterval(bitgetPingInterval);
+      clearInterval(fallbackTickerInterval);
       if (binanceWsRef.current) binanceWsRef.current.close();
       if (bitgetWsRef.current) bitgetWsRef.current.close();
     };

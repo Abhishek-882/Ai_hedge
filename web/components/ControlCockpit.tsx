@@ -15,15 +15,27 @@ import {
   Cpu,
 } from "lucide-react";
 
-export type SupportedAsset = "BTCUSDT" | "ETHUSDT" | "SOLUSDT" | "DOGEUSDT" | "XRPUSDT";
+export type SupportedAsset = string;
 
-const ASSET_CONFIGS: Record<SupportedAsset, { label: string; base: string; presets: string[]; step: string; defaultQty: string }> = {
+const DEFAULT_ASSET_CONFIGS: Record<string, { label: string; base: string; presets: string[]; step: string; defaultQty: string }> = {
   BTCUSDT: { label: "BTC", base: "BTC", presets: ["0.002", "0.005", "0.010", "0.020"], step: "0.001", defaultQty: "0.005" },
   ETHUSDT: { label: "ETH", base: "ETH", presets: ["0.02", "0.05", "0.10", "0.20"], step: "0.01", defaultQty: "0.05" },
   SOLUSDT: { label: "SOL", base: "SOL", presets: ["0.2", "0.5", "1.0", "2.0"], step: "0.1", defaultQty: "0.5" },
   DOGEUSDT: { label: "DOGE", base: "DOGE", presets: ["200", "500", "1000", "2000"], step: "10", defaultQty: "500" },
   XRPUSDT: { label: "XRP", base: "XRP", presets: ["50", "100", "200", "500"], step: "1", defaultQty: "100" },
 };
+
+function getAssetMeta(sym: string) {
+  if (DEFAULT_ASSET_CONFIGS[sym]) return DEFAULT_ASSET_CONFIGS[sym];
+  const base = sym.replace("USDT", "");
+  return {
+    label: base,
+    base,
+    presets: ["5", "10", "25", "50"],
+    step: "1",
+    defaultQty: "10",
+  };
+}
 
 interface ControlCockpitProps {
   onRefresh?: () => void;
@@ -58,12 +70,20 @@ export default function ControlCockpit({
   exitSpreadTarget = 2,
   onExitSpreadTargetChange,
 }: ControlCockpitProps) {
-  const currentAsset = ASSET_CONFIGS[selectedSymbol] ? selectedSymbol : "BTCUSDT";
-  const assetMeta = ASSET_CONFIGS[currentAsset];
+  const currentAsset = selectedSymbol || "BTCUSDT";
+  const assetMeta = getAssetMeta(currentAsset);
 
   const [quantity, setQuantity] = useState<string>(assetMeta.defaultQty);
   const [internalMinSpread, setInternalMinSpread] = useState<number>(12);
   const [internalExitTarget, setInternalExitTarget] = useState<number>(2);
+
+  // Auto-sync quantity when selectedSymbol updates
+  React.useEffect(() => {
+    if (selectedSymbol) {
+      const meta = getAssetMeta(selectedSymbol);
+      setQuantity(meta.defaultQty);
+    }
+  }, [selectedSymbol]);
 
   // Stagger Strategy State
   const [staggerPolicy, setStaggerPolicy] = useState<"auto_ewma" | "simultaneous" | "manual">("auto_ewma");
@@ -93,7 +113,8 @@ export default function ControlCockpit({
     if (onSymbolChange) {
       onSymbolChange(sym);
     }
-    setQuantity(ASSET_CONFIGS[sym].defaultQty);
+    const meta = getAssetMeta(sym);
+    setQuantity(meta.defaultQty);
   };
 
   const [showConfig, setShowConfig] = useState<boolean>(false);
@@ -277,12 +298,19 @@ export default function ControlCockpit({
 
         {/* Multi-Asset Selector Bar */}
         <div className="mt-4">
-          <label className="text-[10px] text-zinc-400 block mb-1.5 uppercase font-semibold">
-            SELECT TRADING ASSET
-          </label>
-          <div className="grid grid-cols-5 gap-1.5">
-            {(Object.keys(ASSET_CONFIGS) as SupportedAsset[]).map((sym) => {
-              const meta = ASSET_CONFIGS[sym];
+          <div className="flex items-center justify-between mb-1.5">
+            <label className="text-[10px] text-zinc-400 block uppercase font-semibold">
+              SELECT TRADING ASSET
+            </label>
+            {!DEFAULT_ASSET_CONFIGS[currentAsset] && (
+              <span className="text-[10px] px-2 py-0.5 rounded bg-amber-500/20 text-accent-amber border border-amber-500/30 font-bold animate-pulse">
+                LOADED: {currentAsset}
+              </span>
+            )}
+          </div>
+          <div className={`grid ${!DEFAULT_ASSET_CONFIGS[currentAsset] ? "grid-cols-6" : "grid-cols-5"} gap-1.5`}>
+            {(Object.keys(DEFAULT_ASSET_CONFIGS) as string[]).map((sym) => {
+              const meta = DEFAULT_ASSET_CONFIGS[sym];
               const isSelected = sym === currentAsset;
               return (
                 <button
@@ -298,6 +326,14 @@ export default function ControlCockpit({
                 </button>
               );
             })}
+            {!DEFAULT_ASSET_CONFIGS[currentAsset] && (
+              <button
+                onClick={() => handleAssetSelect(currentAsset)}
+                className="py-1.5 text-xs rounded border transition-all font-bold bg-accent-amber text-zinc-950 border-amber-400 shadow-sm flex items-center justify-center space-x-1"
+              >
+                <span>{assetMeta.label}</span>
+              </button>
+            )}
           </div>
         </div>
 
