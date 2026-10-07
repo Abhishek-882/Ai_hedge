@@ -74,3 +74,11 @@ We executed consecutive live test trials using real demo market orders on both B
 - Outlier-Resistant EWMA Lead-Stagger 2.0 active.
 - Universal Auto-Discovery Close (/api/close) records order duration and inter-leg close delta into EWMA latency tracker.
 - Multi-asset step size formatting enforced on both entry and close routes to prevent exchange reject latency penalties.
+
+
+### Latency Deep Audit — 2026-10-07T17:06:42.139409
+- Target: `https://ai-hedge-1.onrender.com`
+- Direction A Arrival Delta: `477.06ms` (Stagger: 180ms Bitget)
+- Direction B Arrival Delta: `147.14ms` (Stagger: 12ms Binance)
+- Benchmark Entry Delta: `47.3ms` | Exit Delta: `80.86ms`
+- Delta Neutrality Verified: `True` | Net PnL: `$0.0011 USDT`

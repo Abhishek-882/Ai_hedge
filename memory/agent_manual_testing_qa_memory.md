@@ -100,3 +100,13 @@
   - Per-row targeted Flatten in PositionsTable alongside global FLATTEN ALL.
   - Asset-aware live mark price synchronization.
   - Standard Carry vs Reverse Carry execution direction modes.
+
+
+### Multi-Agent Deep Exam Run — 2026-10-07T17:06:42.139409
+- Target: `https://ai-hedge-1.onrender.com`
+- Direction A Entry: Delta 477.06ms, Total 743.1ms
+- Direction B Entry: Delta 147.14ms, Total 510.3ms
+- Flatten A Latency: 1125.8ms (Delta: 587.1ms)
+- Flatten B Latency: 778.1ms (Delta: 175.27ms)
+- Pure Benchmark Entry Delta: 47.3ms, Exit Delta: 80.86ms
+- Status: 100% PASS
