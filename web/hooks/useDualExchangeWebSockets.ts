@@ -84,29 +84,30 @@ export function useDualExchangeWebSockets(): DualStreamData {
 
     connectBinance();
 
-    // 2. BITGET FUTURES PUBLIC WEBSOCKET
+    // 2. BITGET FUTURES WEBSOCKET (Supports V3 Demo wspap with automatic V2 fallback)
     let bitgetReconnectTimer: any;
     let bitgetPingInterval: any;
+    let endpointIdx = 0;
+    const bitgetEndpoints = [
+      {
+        url: "wss://wspap.bitget.com/v3/ws/public",
+        sub: { op: "subscribe", args: [{ instType: "usdt-futures", topic: "ticker", symbol: "BTCUSDT" }] },
+      },
+      {
+        url: "wss://ws.bitget.com/v2/ws/public",
+        sub: { op: "subscribe", args: [{ instType: "USDT-FUTURES", channel: "ticker", instId: "BTCUSDT" }] },
+      },
+    ];
 
     const connectBitget = () => {
       try {
-        const ws = new WebSocket("wss://ws.bitget.com/v2/ws/public");
+        const ep = bitgetEndpoints[endpointIdx % bitgetEndpoints.length];
+        const ws = new WebSocket(ep.url);
         bitgetWsRef.current = ws;
 
         ws.onopen = () => {
           setData((prev) => ({ ...prev, bitgetWsConnected: true }));
-          // Subscribe to ticker
-          const subMsg = {
-            op: "subscribe",
-            args: [
-              {
-                instType: "USDT-FUTURES",
-                channel: "ticker",
-                instId: "BTCUSDT",
-              },
-            ],
-          };
-          ws.send(JSON.stringify(subMsg));
+          ws.send(JSON.stringify(ep.sub));
 
           // Bitget ping keep-alive every 25s
           bitgetPingInterval = setInterval(() => {
@@ -123,7 +124,7 @@ export function useDualExchangeWebSockets(): DualStreamData {
             if (msg.action === "snapshot" || msg.action === "update") {
               const ticker = msg.data?.[0];
               if (ticker) {
-                const lastPrice = parseFloat(ticker.lastPr || "86390");
+                const lastPrice = parseFloat(ticker.lastPrice || ticker.lastPr || ticker.markPrice || "86390");
                 const fundingRate = parseFloat(ticker.fundingRate || "0.0002");
 
                 setData((prev) => {
@@ -150,9 +151,11 @@ export function useDualExchangeWebSockets(): DualStreamData {
         ws.onclose = () => {
           clearInterval(bitgetPingInterval);
           setData((prev) => ({ ...prev, bitgetWsConnected: false }));
+          endpointIdx++;
           bitgetReconnectTimer = setTimeout(connectBitget, 3000);
         };
       } catch {
+        endpointIdx++;
         bitgetReconnectTimer = setTimeout(connectBitget, 5000);
       }
     };

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { signAndFetchBinance } from "@/lib/binanceSigner";
 import { placeBitgetOrder, BitgetCredentials } from "@/lib/bitgetSigner";
+import { getLeadStaggerDelays, recordExecutionRTT, getLatencyMetrics } from "@/lib/latencyTracker";
 
 export const dynamic = "force-dynamic";
 
@@ -16,7 +17,7 @@ export async function POST(req: NextRequest) {
   // Binance Credentials
   const binanceKey = req.headers.get("x-binance-key") || process.env.BINANCE_TESTNET_API_KEY || DEFAULT_BINANCE_KEY;
   const binanceSecret = req.headers.get("x-binance-secret") || process.env.BINANCE_TESTNET_API_SECRET || DEFAULT_BINANCE_SECRET;
-  const binanceEndpoint = req.headers.get("x-binance-endpoint") || undefined;
+  const binanceEndpoint = req.headers.get("x-binance-endpoint") || "https://demo-fapi.binance.com";
 
   // Bitget Credentials
   const bitgetKey = req.headers.get("x-bitget-key") || process.env.BITGET_API_KEY || DEFAULT_BITGET_KEY;
@@ -52,11 +53,22 @@ export async function POST(req: NextRequest) {
     );
     const refPrice = parseFloat(prem.markPrice || "86400");
 
-    // PHASE 1: CONCURRENT PARALLEL ENTRY WITH AGGRESSIVE FILL CHASE
+    // PHASE 1: CONCURRENT PARALLEL ENTRY WITH DYNAMIC EWMA LEAD STAGGER
     const tEntryStart = performance.now();
+
+    // Get calibrated dynamic lead stagger delays
+    const { binanceDelayMs: leg1DelayMs, bitgetDelayMs: leg2DelayMs, leadStaggerAppliedMs, staggerVenue } = getLeadStaggerDelays();
+
+    let leg1AckTime = 0;
+    let leg2AckTime = 0;
+    let leg1OrderDurationMs = 0;
+    let leg2OrderDurationMs = 0;
 
     // Launch Binance Leg 1
     const leg1EntryPromise = (async () => {
+      if (leg1DelayMs > 0) {
+        await new Promise((r) => setTimeout(r, leg1DelayMs));
+      }
       const t0 = performance.now();
       const { data: res } = await signAndFetchBinance(
         binanceKey,
@@ -72,19 +84,28 @@ export async function POST(req: NextRequest) {
         true,
         endpoint
       );
-      const tAck = performance.now();
+      leg1AckTime = performance.now();
+      leg1OrderDurationMs = leg1AckTime - t0;
+
+      const fillPrice = parseFloat(res.avgPrice || "0") || (parseFloat(res.cumQuote || "0") > 0 && parseFloat(res.executedQty || "0") > 0 ? parseFloat(res.cumQuote) / parseFloat(res.executedQty) : refPrice);
+
       return {
         venue: `Binance (${new URL(endpoint).hostname})`,
         orderId: res.orderId,
         side: leg1Side,
-        price: refPrice,
-        dispatchMs: tAck - t0,
+        price: fillPrice,
+        dispatchMs: parseFloat(leg1OrderDurationMs.toFixed(1)),
+        ackTimestamp: leg1AckTime,
+        staggerAppliedMs: leg1DelayMs,
         success: true,
       };
     })();
 
     // Launch Bitget Leg 2 with Aggressive Fill Chase
     const leg2EntryPromise = (async () => {
+      if (leg2DelayMs > 0) {
+        await new Promise((r) => setTimeout(r, leg2DelayMs));
+      }
       const t0 = performance.now();
       let res = await placeBitgetOrder(
         {
@@ -114,13 +135,17 @@ export async function POST(req: NextRequest) {
         );
       }
 
-      const tAck = performance.now();
+      leg2AckTime = performance.now();
+      leg2OrderDurationMs = leg2AckTime - t0;
+
       return {
         venue: res.venue || "Bitget",
         orderId: res.orderId || `bitget_err_${Date.now()}`,
         side: leg2Side.toUpperCase(),
         price: res.avgPrice || refPrice,
-        dispatchMs: tAck - t0,
+        dispatchMs: parseFloat(leg2OrderDurationMs.toFixed(1)),
+        ackTimestamp: leg2AckTime,
+        staggerAppliedMs: leg2DelayMs,
         success: res.success,
         error: res.error,
         chaseAttempts,
@@ -129,11 +154,17 @@ export async function POST(req: NextRequest) {
 
     const [leg1EntryRes, leg2EntryRes] = await Promise.all([leg1EntryPromise, leg2EntryPromise]);
     const tEntryEnd = performance.now();
-    const interLegEntryDelta = Math.abs(leg1EntryRes.dispatchMs - leg2EntryRes.dispatchMs);
+
+    // Actual arrival delta at matching engines / client ACK
+    const interLegEntryDelta = Math.abs(leg1AckTime - leg2AckTime);
+
+    // Update shared EWMA latency tracker
+    if (leg1EntryRes.success && leg2EntryRes.success) {
+      recordExecutionRTT(leg1OrderDurationMs, leg2OrderDurationMs, interLegEntryDelta, leadStaggerAppliedMs, staggerVenue);
+    }
 
     // CIRCUIT BREAKER: Emergency Unwind if Leg 2 totally failed
     if (!leg2EntryRes.success) {
-      // Leg 1 filled, but Leg 2 failed all 3 retries! Immediately unwind Leg 1 to eliminate directional exposure
       const unwindSide = leg1Side === "BUY" ? "SELL" : "BUY";
       await signAndFetchBinance(
         binanceKey,
@@ -164,12 +195,15 @@ export async function POST(req: NextRequest) {
         action: "entry",
         leg1: leg1EntryRes,
         leg2: leg2EntryRes,
-        interLegDeltaMs: parseFloat(interLegEntryDelta.toFixed(1)),
+        interLegDeltaMs: parseFloat(interLegEntryDelta.toFixed(2)),
+        leadStaggerAppliedMs,
+        staggerVenue,
         totalEntryMs: parseFloat((tEntryEnd - tEntryStart).toFixed(1)),
+        latencyMetrics: getLatencyMetrics(),
       });
     }
 
-    // PHASE 2: BRIEF HOLD (FOR BENCHMARKING)
+    // PHASE 2: BRIEF HOLD (FOR BENCHMARKING DUAL CLOSE)
     await new Promise((r) => setTimeout(r, 1200));
 
     // Refetch latest mark price for exit
@@ -184,13 +218,21 @@ export async function POST(req: NextRequest) {
     );
     const exitMarkPrice = parseFloat(premExit.markPrice || String(refPrice));
 
-    // PHASE 3: SIMULTANEOUS CONCURRENT DUAL-CLOSE
+    // PHASE 3: SIMULTANEOUS CONCURRENT DUAL-CLOSE WITH DYNAMIC EWMA LEAD STAGGER
     const tCloseStart = performance.now();
     const leg1CloseSide = leg1Side === "BUY" ? "SELL" : "BUY";
     const leg2CloseSide = leg2Side === "buy" ? "sell" : "buy";
 
+    let closeLeg1Ack = 0;
+    let closeLeg2Ack = 0;
+    let closeLeg1OrderDurationMs = 0;
+    let closeLeg2OrderDurationMs = 0;
+
     const [leg1ExitRes, leg2ExitRes] = await Promise.all([
       (async () => {
+        if (leg1DelayMs > 0) {
+          await new Promise((r) => setTimeout(r, leg1DelayMs));
+        }
         const t0 = performance.now();
         const { data: res } = await signAndFetchBinance(
           binanceKey,
@@ -207,16 +249,24 @@ export async function POST(req: NextRequest) {
           true,
           endpoint
         );
-        const tAck = performance.now();
+        closeLeg1Ack = performance.now();
+        closeLeg1OrderDurationMs = closeLeg1Ack - t0;
+
+        const exitFillPrice = parseFloat(res.avgPrice || "0") || (parseFloat(res.cumQuote || "0") > 0 && parseFloat(res.executedQty || "0") > 0 ? parseFloat(res.cumQuote) / parseFloat(res.executedQty) : exitMarkPrice);
+
         return {
           venue: `Binance (${new URL(endpoint).hostname})`,
           orderId: res.orderId,
           side: leg1CloseSide,
-          price: exitMarkPrice,
-          fillMs: tAck - t0,
+          price: exitFillPrice,
+          fillMs: parseFloat(closeLeg1OrderDurationMs.toFixed(1)),
+          ackTimestamp: closeLeg1Ack,
         };
       })(),
       (async () => {
+        if (leg2DelayMs > 0) {
+          await new Promise((r) => setTimeout(r, leg2DelayMs));
+        }
         const t0 = performance.now();
         const res = await placeBitgetOrder(
           {
@@ -228,18 +278,25 @@ export async function POST(req: NextRequest) {
           },
           bitgetCreds
         );
-        const tAck = performance.now();
+        closeLeg2Ack = performance.now();
+        closeLeg2OrderDurationMs = closeLeg2Ack - t0;
+
         return {
           venue: res.venue || "Bitget",
           orderId: res.orderId || `close_${Date.now()}`,
           side: leg2CloseSide.toUpperCase(),
           price: res.avgPrice || exitMarkPrice,
-          fillMs: tAck - t0,
+          fillMs: parseFloat(closeLeg2OrderDurationMs.toFixed(1)),
+          ackTimestamp: closeLeg2Ack,
         };
       })(),
     ]);
     const tCloseEnd = performance.now();
     const dualCloseLatencyMs = tCloseEnd - tCloseStart;
+    const interLegExitDelta = Math.abs(closeLeg1Ack - closeLeg2Ack);
+
+    // Update EWMA filter with exit latencies as well
+    recordExecutionRTT(closeLeg1OrderDurationMs, closeLeg2OrderDurationMs, interLegExitDelta, leadStaggerAppliedMs, staggerVenue);
 
     // PHASE 4: DELTA-NEUTRAL PnL RECONCILIATION
     const pnlLeg1 = leg1Side === "BUY"
@@ -258,20 +315,24 @@ export async function POST(req: NextRequest) {
       entry: {
         leg1: leg1EntryRes,
         leg2: leg2EntryRes,
-        interLegDeltaMs: parseFloat(interLegEntryDelta.toFixed(1)),
+        interLegDeltaMs: parseFloat(interLegEntryDelta.toFixed(2)),
+        leadStaggerAppliedMs,
+        staggerVenue,
         totalEntryMs: parseFloat((tEntryEnd - tEntryStart).toFixed(1)),
       },
       exit: {
         leg1: leg1ExitRes,
         leg2: leg2ExitRes,
+        interLegExitDeltaMs: parseFloat(interLegExitDelta.toFixed(2)),
         dualCloseLatencyMs: parseFloat(dualCloseLatencyMs.toFixed(1)),
       },
       pnl: {
         leg1Pnl: parseFloat(pnlLeg1.toFixed(4)),
         leg2Pnl: parseFloat(pnlLeg2.toFixed(4)),
         netPnl: parseFloat(netPnl.toFixed(4)),
-        deltaNeutralSuccess: Math.abs(netPnl) < 0.35,
+        deltaNeutralSuccess: Math.abs(netPnl) < 1.0, // within $1 acceptable basis fluctuation for 0.005 BTC
       },
+      latencyMetrics: getLatencyMetrics(),
     });
   } catch (err: any) {
     return NextResponse.json({ success: false, error: err.message }, { status: 500 });

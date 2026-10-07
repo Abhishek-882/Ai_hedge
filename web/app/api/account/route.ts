@@ -47,15 +47,39 @@ export async function GET(req: NextRequest) {
     const availableBalance = parseFloat(data.availableBalance || "0");
     const totalUnrealizedProfit = parseFloat(data.totalUnrealizedProfit || "0");
 
+    let refMarkPrice = 0;
+    try {
+      const { data: prem } = await signAndFetchBinance(
+        apiKey,
+        apiSecret,
+        "GET",
+        "/fapi/v1/premiumIndex",
+        { symbol: "BTCUSDT" },
+        false,
+        endpoint
+      );
+      refMarkPrice = parseFloat(prem?.markPrice || "0");
+    } catch {
+      // non-fatal fallback
+    }
+
     const positions = (data.positions || [])
       .filter((p: any) => parseFloat(p.positionAmt || "0") !== 0)
-      .map((p: any) => ({
-        symbol: p.symbol,
-        amount: parseFloat(p.positionAmt),
-        entryPrice: parseFloat(p.entryPrice),
-        unrealizedPnl: parseFloat(p.unrealizedProfit),
-        leverage: parseInt(p.leverage, 10),
-      }));
+      .map((p: any) => {
+        const amt = parseFloat(p.positionAmt);
+        const entryPrice = parseFloat(p.entryPrice);
+        const unrealizedPnl = parseFloat(p.unrealizedProfit);
+        const markPrice = parseFloat(p.markPrice || "0") || refMarkPrice || (amt !== 0 ? entryPrice + (unrealizedPnl / amt) : entryPrice);
+        return {
+          venue: "Binance",
+          symbol: p.symbol,
+          amount: amt,
+          entryPrice,
+          markPrice: parseFloat(markPrice.toFixed(2)),
+          unrealizedPnl,
+          leverage: parseInt(p.leverage, 10),
+        };
+      });
 
     logServerEvent("INFO", "BINANCE", `Account synced [${keyMask}] on ${endpoint}. Balance: $${totalWalletBalance}`);
 

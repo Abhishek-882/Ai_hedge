@@ -21,6 +21,10 @@ interface ControlCockpitProps {
   onToggleAutopilot?: (active: boolean) => void;
   autopilotState?: string;
   spreadBps?: number;
+  minSpreadEntry?: number;
+  onMinSpreadEntryChange?: (val: number) => void;
+  exitSpreadTarget?: number;
+  onExitSpreadTargetChange?: (val: number) => void;
 }
 
 export default function ControlCockpit({
@@ -31,10 +35,34 @@ export default function ControlCockpit({
   onToggleAutopilot,
   autopilotState = "IDLE_SCANNING",
   spreadBps = 10.0,
+  minSpreadEntry = 12,
+  onMinSpreadEntryChange,
+  exitSpreadTarget = 2,
+  onExitSpreadTargetChange,
 }: ControlCockpitProps) {
   const [quantity, setQuantity] = useState<string>("0.005");
-  const [minSpreadEntry, setMinSpreadEntry] = useState<number>(12);
-  const [exitSpreadTarget, setExitSpreadTarget] = useState<number>(2);
+  const [internalMinSpread, setInternalMinSpread] = useState<number>(12);
+  const [internalExitTarget, setInternalExitTarget] = useState<number>(2);
+
+  const currentMinSpread = minSpreadEntry ?? internalMinSpread;
+  const currentExitTarget = exitSpreadTarget ?? internalExitTarget;
+
+  const handleMinSpreadChange = (val: number) => {
+    if (onMinSpreadEntryChange) {
+      onMinSpreadEntryChange(val);
+    } else {
+      setInternalMinSpread(val);
+    }
+  };
+
+  const handleExitTargetChange = (val: number) => {
+    if (onExitSpreadTargetChange) {
+      onExitSpreadTargetChange(val);
+    } else {
+      setInternalExitTarget(val);
+    }
+  };
+
   const [showConfig, setShowConfig] = useState<boolean>(false);
   const [loadingAction, setLoadingAction] = useState<string | null>(null);
   const [lastReceipt, setLastReceipt] = useState<any>(null);
@@ -78,10 +106,11 @@ export default function ControlCockpit({
         headers: getVaultHeaders(),
       });
       const data = await res.json();
-      if (!data.success) throw new Error(data.error);
+      if (!data.success) throw new Error(data.error || data.message);
       setLastReceipt({
         type: "CLOSE",
         message: data.message,
+        data,
       });
       if (onRefresh) onRefresh();
     } catch (err: any) {
@@ -180,8 +209,8 @@ export default function ControlCockpit({
                 <label className="text-zinc-500 block mb-1">ENTRY THRESHOLD (BPS)</label>
                 <input
                   type="number"
-                  value={minSpreadEntry}
-                  onChange={(e) => setMinSpreadEntry(parseFloat(e.target.value) || 12)}
+                  value={currentMinSpread}
+                  onChange={(e) => handleMinSpreadChange(parseFloat(e.target.value) || 12)}
                   className="w-full px-2 py-1 bg-zinc-900 border border-border rounded text-zinc-200 font-mono"
                 />
               </div>
@@ -189,8 +218,8 @@ export default function ControlCockpit({
                 <label className="text-zinc-500 block mb-1">EXIT TARGET (BPS)</label>
                 <input
                   type="number"
-                  value={exitSpreadTarget}
-                  onChange={(e) => setExitSpreadTarget(parseFloat(e.target.value) || 2)}
+                  value={currentExitTarget}
+                  onChange={(e) => handleExitTargetChange(parseFloat(e.target.value) || 2)}
                   className="w-full px-2 py-1 bg-zinc-900 border border-border rounded text-zinc-200 font-mono"
                 />
               </div>
@@ -316,8 +345,23 @@ export default function ControlCockpit({
             <div>Order ID: {lastReceipt.data.orderId} • Status: {lastReceipt.data.status}</div>
           )}
           {lastReceipt.data?.entry && (
-            <div className="text-accent-cyan">
-              Inter-Leg Delta: {lastReceipt.data.entry.interLegDeltaMs}ms • Dual-Close: {lastReceipt.data.exit?.dualCloseLatencyMs}ms
+            <div className="text-accent-cyan flex flex-wrap gap-x-1.5">
+              <span>Inter-Leg Delta: {lastReceipt.data.entry.interLegDeltaMs}ms</span>
+              <span>•</span>
+              <span>Dual-Close: {lastReceipt.data.exit?.dualCloseLatencyMs}ms</span>
+              {lastReceipt.data.entry.leadStaggerAppliedMs > 0 && (
+                <>
+                  <span>•</span>
+                  <span className="text-accent-amber">Stagger: {lastReceipt.data.entry.leadStaggerAppliedMs}ms ({lastReceipt.data.entry.staggerVenue})</span>
+                </>
+              )}
+            </div>
+          )}
+          {lastReceipt.data?.interLegCloseDeltaMs !== undefined && (
+            <div className="text-accent-cyan flex flex-wrap gap-x-1.5">
+              <span>Dual-Close Latency: {lastReceipt.data.dualCloseLatencyMs}ms</span>
+              <span>•</span>
+              <span>Inter-Leg Close Delta: {lastReceipt.data.interLegCloseDeltaMs}ms</span>
             </div>
           )}
           {lastReceipt.data?.pnl && (

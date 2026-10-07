@@ -1,0 +1,66 @@
+# Agent Memory: Human-Feel Manual Testing & Visual QA Audit
+
+**Agent ID:** `AGENT-QA-04`  
+**Test Suite:** End-to-End Human UI Manual Walkthrough & Platform Forensics  
+**Browser Engine:** Chromium v133 + Playwright Automation  
+**Execution Timestamp:** 2026-10-06T22:35:00+05:30  
+**Artifacts Generated:** 6 High-Resolution Full-Page Visual Screenshots in `test_screenshots/`  
+
+---
+
+## 1. Visual Inspection Stages & Screenshot Inventory
+
+### Stage 1: Initial Cockpit Dashboard Load
+- **Artifact:** [`stage1_cockpit_initial_load.png`](file:///c:/Users/Asus/Downloads/prj/funding-rate-bot/test_screenshots/stage1_cockpit_initial_load.png)
+- **Observations:**
+  - Header displays: `FUNDING RATE ARBITRAGE // COCKPIT testnet.binancefuture.com`
+  - Dual WebSocket indicators: `BN WS` (Amber) and `BG WS` (Cyan) connected and pulsing.
+  - Active credentials badge: `BN: RkqI...HVAU (ENV)`, `BG: bg_2...6e05 (ENV)`.
+  - Binance Wallet displays: `$5,033.55 USDT`.
+  - Bitget Equity displays: `$4,996.04 USDT`.
+  - Prismatic 3D Core rendered with dynamic live basis wireframe.
+  - Telemetry HUD displays settlement timer `03:59:46` and clock calibration `+633.1s`.
+
+### Stage 2: Client Session Vault Verification Modal
+- **Artifact:** [`stage2_vault_settings_modal.png`](file:///c:/Users/Asus/Downloads/prj/funding-rate-bot/test_screenshots/stage2_vault_settings_modal.png)
+- **Observations:**
+  - Bitget tab inspected: trading mode defaults to `Bitget V2 Paper Trading (Demo Mode)` (`paptrading: 1`).
+  - Test Bitget connection displays: `✓ Bitget Connected! Equity: $4,997.64 USDT (Bitget-UTA-Demo)`.
+  - Passphrase masked properly.
+
+### Stage 3: Cockpit Triggers & Size Configuration
+- **Artifact:** [`stage3_cockpit_configured.png`](file:///c:/Users/Asus/Downloads/prj/funding-rate-bot/test_screenshots/stage3_cockpit_configured.png)
+- **Observations:**
+  - Expanded "Edit Triggers" in the 24/7 Autonomous Hedger.
+  - Configured Entry Threshold (`12 bps`) and Exit Target (`2 bps`).
+  - Selected Order Quantity (`0.005 BTC`).
+  - Live Spread reflects `0.8 bps`.
+
+### Stage 4: Pure Dual Hedge Benchmark Execution & Live Receipt
+- **Artifact:** [`stage4_dual_hedge_benchmark_receipt.png`](file:///c:/Users/Asus/Downloads/prj/funding-rate-bot/test_screenshots/stage4_dual_hedge_benchmark_receipt.png)
+- **Observations:**
+  - Clicked `RUN PURE DUAL HEDGE BENCHMARK`.
+  - Dispatched Binance Short Leg 1 and Bitget Long Leg 2 concurrently with Dynamic EWMA Lead Stagger.
+  - Confirmed receipt on UI:
+    `RECEIPT: HEDGE_BENCHMARK ✓ CONFIRMED`
+    `Inter-Leg Delta: 39.44ms • Dual-Close: 180.8ms`
+    `Net Directional PnL: $0 USDT (Delta Neutral: true)`
+
+### Stage 5: Manual 1-Click Order Execution & Live Positions Table
+- **Artifact:** [`stage5_live_open_position_table.png`](file:///c:/Users/Asus/Downloads/prj/funding-rate-bot/test_screenshots/stage5_live_open_position_table.png)
+- **Observations:**
+  - Clicked `BUY / LONG 0.005 BTC`.
+  - Order executed and filled on exchange: `RECEIPT: ORDER ✓ CONFIRMED • Order ID: 28621050063 • Status: FILLED`.
+  - Positions Table populated with:
+    `BTCUSDT | SIZE: +0.005 BTC | ENTRY PRICE: $85,529.50 | MARK PRICE: $85,555.23 | PNL: +0.13 USDT | LEVERAGE: 20x | ACTION: Flatten`.
+  - Confirmed `markPrice` displays formatted number cleanly.
+
+### Stage 6: Concurrent Dual-Close Emergency Kill Switch
+- **Artifact:** [`stage6_flattened_kill_switch_success.png`](file:///c:/Users/Asus/Downloads/prj/funding-rate-bot/test_screenshots/stage6_flattened_kill_switch_success.png)
+- **Observations:**
+  - Clicked `KILL SWITCH`.
+  - Executed concurrent dual-close across Binance and Bitget.
+  - Confirmed receipt on UI:
+    `RECEIPT: CLOSE ✓ CONFIRMED`
+    `Dual-Close finished in 498.2ms. Binance: Closed, Bitget: No active position found`
+  - Live Positions count returned to `ACTIVE: 0` (`No open positions detected on Binance Futures Testnet.`).

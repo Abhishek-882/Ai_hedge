@@ -17,6 +17,7 @@ export interface BitgetOrderParams {
   orderType: "market" | "limit";
   price?: string;
   tradeSide?: "open" | "close";
+  posSide?: "long" | "short";
 }
 
 let cachedBitgetTimeOffset = 0;
@@ -149,12 +150,46 @@ export async function getBitgetAccount(creds?: BitgetCredentials) {
         const usdtEquity = parseFloat(usdt.equity || usdt.balance || raw.usdtEquity || "0");
         const available = parseFloat(usdt.available || raw.effEquity || "0");
         const unrealizedPnL = parseFloat(raw.unrealisedPnl || usdt.unrealizedPnL || "0");
+
+        // Query active positions for Bitget UTA
+        let positions: any[] = [];
+        try {
+          const posPath = "/api/v3/position/current-position?category=USDT-FUTURES&symbol=BTCUSDT";
+          const posHeaders = await getBitgetHeaders(creds, "GET", posPath);
+          const posRes = await fetch(`${baseUrl}${posPath}`, { headers: posHeaders, cache: "no-store" });
+          const posData = await posRes.json();
+          const list = posData?.data?.list || (Array.isArray(posData?.data) ? posData.data : []);
+          positions = (list || [])
+            .filter((p: any) => parseFloat(p?.total || p?.available || p?.pos || "0") > 0)
+            .map((p: any) => {
+              const posSide = p.posSide || "long";
+              const rawTotal = parseFloat(p.total || p.available || p.pos || "0");
+              const amt = posSide === "short" ? -rawTotal : rawTotal;
+              const entryPrice = parseFloat(p.avgPrice || p.openPriceAvg || "0");
+              const markPrice = parseFloat(p.markPrice || "0") || entryPrice;
+              const uPnl = parseFloat(p.unrealisedPnl || "0");
+              const leverage = parseInt(p.leverage || "20", 10);
+              return {
+                venue: "Bitget",
+                symbol: p.symbol || "BTCUSDT",
+                amount: amt,
+                entryPrice,
+                markPrice,
+                unrealizedPnl: uPnl,
+                leverage,
+              };
+            });
+        } catch {
+          // non-fatal fallback
+        }
+
         return {
           success: true,
           venue: creds.isDemo ? "Bitget-UTA-Demo" : "Bitget-Unified-UTA",
           equity: usdtEquity > 0 ? usdtEquity : parseFloat(raw.accountEquity || "0"),
           available,
           unrealizedPnL,
+          positions,
           isSimulated: false,
         };
       }
@@ -239,19 +274,26 @@ export async function placeBitgetOrder(
   }
 
   const baseUrl = "https://api.bitget.com";
-  const path = "/api/v2/mix/order/place-order";
+  const path = "/api/v3/trade/place-order";
 
-  const payload = {
+  const tradeSide = params.tradeSide || "open";
+  const posSide = params.posSide || (tradeSide === "open"
+    ? (params.side === "buy" ? "long" : "short")
+    : (params.side === "sell" ? "long" : "short"));
+
+  const payload: Record<string, any> = {
+    category: "USDT-FUTURES",
     symbol: params.symbol,
-    productType: params.productType || "USDT-FUTURES",
-    marginMode: params.marginMode || "crossed",
-    marginCoin: params.marginCoin || "USDT",
-    size: params.size,
     side: params.side,
-    orderType: params.orderType,
-    tradeSide: params.tradeSide || "open",
-    ...(params.price ? { price: params.price } : {}),
+    orderType: params.orderType || "market",
+    tradeSide,
+    posSide,
+    qty: params.size,
   };
+
+  if (params.price) {
+    payload.price = params.price;
+  }
 
   const bodyStr = JSON.stringify(payload);
 
@@ -275,13 +317,28 @@ export async function placeBitgetOrder(
       data = await res.json();
     }
 
+    const ackDurationMs = Date.now() - startTime;
+
     if (data.code !== "00000") {
       return {
         success: false,
         error: `Bitget Order Rejected [${data.code}]: ${data.msg}`,
         code: data.code,
-        latencyMs: Date.now() - startTime,
+        latencyMs: ackDurationMs,
       };
+    }
+
+    let fillPrice = parseFloat(data.data?.fillPrice || data.data?.price || "0") || undefined;
+    if (!fillPrice) {
+      try {
+        const tickerRes = await fetch(`${baseUrl}/api/v2/mix/market/ticker?symbol=${params.symbol}&productType=USDT-FUTURES`, { cache: "no-store" });
+        const tickerData = await tickerRes.json();
+        if (tickerData?.data?.[0]?.lastPr) {
+          fillPrice = parseFloat(tickerData.data[0].lastPr);
+        }
+      } catch {
+        // fallback
+      }
     }
 
     return {
@@ -290,9 +347,12 @@ export async function placeBitgetOrder(
       clientOid: data.data?.clientOid,
       symbol: params.symbol,
       side: params.side,
+      tradeSide,
+      posSide,
       size: parseFloat(params.size),
-      executionLatencyMs: Date.now() - startTime,
-      venue: "Bitget-Perpetuals",
+      avgPrice: fillPrice,
+      executionLatencyMs: ackDurationMs,
+      venue: creds.isDemo ? "Bitget-UTA-Demo" : "Bitget-Perpetuals",
       isSimulated: false,
       data: data.data,
     };

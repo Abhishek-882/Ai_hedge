@@ -21,7 +21,7 @@ export default function SettingsModal({ isOpen, onClose, onSaved }: SettingsModa
   const [bitgetKey, setBitgetKey] = useState("");
   const [bitgetSecret, setBitgetSecret] = useState("");
   const [bitgetPassphrase, setBitgetPassphrase] = useState("");
-  const [bitgetEnv, setBitgetEnv] = useState("live");
+  const [bitgetEnv, setBitgetEnv] = useState("demo");
 
   const [testingStatus, setTestingStatus] = useState<string | null>(null);
   const [testResult, setTestResult] = useState<{ success: boolean; msg: string } | null>(null);
@@ -36,7 +36,7 @@ export default function SettingsModal({ isOpen, onClose, onSaved }: SettingsModa
       setBitgetKey(localStorage.getItem("BITGET_KEY") || "");
       setBitgetSecret(localStorage.getItem("BITGET_SECRET") || "");
       setBitgetPassphrase(localStorage.getItem("BITGET_PASSPHRASE") || "");
-      setBitgetEnv(localStorage.getItem("BITGET_ENV") || "live");
+      setBitgetEnv(localStorage.getItem("BITGET_ENV") || "demo");
 
       setTestResult(null);
     }

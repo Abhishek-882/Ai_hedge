@@ -28,6 +28,8 @@ export default function DashboardPage() {
   // 24/7 Autonomous Autopilot State
   const [isAutopilotActive, setIsAutopilotActive] = useState(false);
   const [autopilotState, setAutopilotState] = useState<string>("IDLE_SCANNING");
+  const [minSpreadEntry, setMinSpreadEntry] = useState<number>(12);
+  const [exitSpreadTarget, setExitSpreadTarget] = useState<number>(2);
   const lastAutopilotActionRef = useRef<number>(0);
 
   const getVaultHeaders = useCallback((): Record<string, string> => {
@@ -44,7 +46,7 @@ export default function DashboardPage() {
     const bitgetKey = localStorage.getItem("BITGET_KEY") || "";
     const bitgetSecret = localStorage.getItem("BITGET_SECRET") || "";
     const bitgetPass = localStorage.getItem("BITGET_PASSPHRASE") || "";
-    const bitgetEnv = localStorage.getItem("BITGET_ENV") || "live";
+    const bitgetEnv = localStorage.getItem("BITGET_ENV") || "demo";
     if (bitgetKey) headers["x-bitget-key"] = bitgetKey;
     if (bitgetSecret) headers["x-bitget-secret"] = bitgetSecret;
     if (bitgetPass) headers["x-bitget-passphrase"] = bitgetPass;
@@ -63,24 +65,25 @@ export default function DashboardPage() {
       const headers = getVaultHeaders();
       const ts = Date.now();
 
+      let binancePositions: any[] = [];
+      let bitgetPositions: any[] = [];
+
       // 1. Binance Account & Positions (Strict Uncached)
       try {
         const accountRes = await fetch(`/api/account?_t=${ts}`, { headers, cache: "no-store" });
         const accountData = await accountRes.json();
         if (accountData.success) {
           setAccount(accountData);
-          setPositions(accountData.positions || []);
+          binancePositions = (accountData.positions || []).map((p: any) => ({ ...p, venue: p.venue || "Binance" }));
           setAccountError(null);
           if (accountData.endpoint) setAccountEndpoint(accountData.endpoint);
         } else {
           setAccount(null);
-          setPositions([]);
           setAccountError(accountData.error || "Failed to authenticate with Binance");
           if (accountData.endpoint) setAccountEndpoint(accountData.endpoint);
         }
       } catch (err: any) {
         setAccount(null);
-        setPositions([]);
         setAccountError(err.message || "Network error fetching Binance");
       }
 
@@ -90,6 +93,7 @@ export default function DashboardPage() {
         const bitgetData = await bitgetRes.json();
         if (bitgetData.success) {
           setBitgetAccount(bitgetData);
+          bitgetPositions = (bitgetData.positions || []).map((p: any) => ({ ...p, venue: p.venue || "Bitget" }));
           setBitgetError(null);
         } else {
           setBitgetAccount(null);
@@ -99,6 +103,8 @@ export default function DashboardPage() {
         setBitgetAccount(null);
         setBitgetError(err.message || "Network error fetching Bitget");
       }
+
+      setPositions([...binancePositions, ...bitgetPositions]);
     } catch (err: any) {
       console.error("Dashboard fetch error:", err);
     } finally {
@@ -122,8 +128,8 @@ export default function DashboardPage() {
 
       const spread = wsData.spreadBps;
 
-      // Rule: Spread >= 12 bps -> Enter Dual Hedge (Binance Short + Bitget Long)
-      if (autopilotState === "IDLE_SCANNING" && spread >= 12.0) {
+      // Rule: Spread >= minSpreadEntry bps -> Enter Dual Hedge (Binance Short + Bitget Long)
+      if (autopilotState === "IDLE_SCANNING" && spread >= minSpreadEntry) {
         try {
           setAutopilotState("ENTERING_HEDGE");
           lastAutopilotActionRef.current = now;
@@ -152,8 +158,8 @@ export default function DashboardPage() {
         }
       }
 
-      // Rule: Spread <= 2.0 bps -> Close Dual Hedge (Mean Reverted)
-      if (autopilotState === "HEDGED_MONITORING" && spread <= 2.0) {
+      // Rule: Spread <= exitSpreadTarget bps -> Close Dual Hedge (Mean Reverted)
+      if (autopilotState === "HEDGED_MONITORING" && spread <= exitSpreadTarget) {
         try {
           setAutopilotState("CLOSING_HEDGE");
           lastAutopilotActionRef.current = now;
@@ -175,7 +181,7 @@ export default function DashboardPage() {
     }, 3000);
 
     return () => clearInterval(autopilotInterval);
-  }, [isAutopilotActive, autopilotState, wsData.spreadBps, getVaultHeaders, fetchData]);
+  }, [isAutopilotActive, autopilotState, wsData.spreadBps, minSpreadEntry, exitSpreadTarget, getVaultHeaders, fetchData]);
 
   const handleClosePosition = async () => {
     try {
@@ -193,6 +199,17 @@ export default function DashboardPage() {
       alert(`Error: ${err.message}`);
     }
   };
+
+  // Dynamic real-time combined unrealized PnL across all open positions
+  const dynamicNetPnl = positions.reduce((acc, pos) => {
+    const liveMarkPrice = pos.venue === "Bitget"
+      ? (wsData.bitgetPrice || pos.markPrice)
+      : (wsData.binancePrice || pos.markPrice);
+    const pnl = (pos.amount !== 0 && pos.entryPrice > 0 && liveMarkPrice > 0)
+      ? (liveMarkPrice - pos.entryPrice) * pos.amount
+      : (pos.unrealizedPnl || 0);
+    return acc + pnl;
+  }, 0);
 
   return (
     <main className="min-h-screen bg-background text-zinc-100 p-4 md:p-8 max-w-7xl mx-auto font-mono">
@@ -286,13 +303,17 @@ export default function DashboardPage() {
             </div>
           </div>
 
-          {/* Unrealized PnL */}
+          {/* Unrealized PnL (Combined Live Binance + Bitget with 4 decimals) */}
           <div className="flex items-center space-x-2 bg-surface px-3 py-2 rounded-lg border border-border text-xs">
             <ShieldCheck className="w-4 h-4 text-accent-emerald" />
             <div>
               <div className="text-[10px] text-zinc-500">NET UNREALIZED PnL</div>
-              <div className={`font-bold ${(account?.totalUnrealizedProfit || 0) >= 0 ? "text-accent-emerald" : "text-accent-rose"}`}>
-                {account ? `${(account.totalUnrealizedProfit || 0) >= 0 ? "+" : ""}$${account.totalUnrealizedProfit?.toFixed(2)} USDT` : "---"}
+              <div className={`font-bold ${dynamicNetPnl >= 0 ? "text-accent-emerald" : "text-accent-rose"}`}>
+                {positions.length > 0
+                  ? `${dynamicNetPnl >= 0 ? "+" : ""}$${dynamicNetPnl.toFixed(4)} USDT`
+                  : ((account?.totalUnrealizedProfit !== undefined || bitgetAccount?.unrealizedPnL !== undefined)
+                      ? `$0.0000 USDT`
+                      : "---")}
               </div>
             </div>
           </div>
@@ -397,6 +418,10 @@ export default function DashboardPage() {
             onToggleAutopilot={setIsAutopilotActive}
             autopilotState={autopilotState}
             spreadBps={wsData.spreadBps}
+            minSpreadEntry={minSpreadEntry}
+            onMinSpreadEntryChange={setMinSpreadEntry}
+            exitSpreadTarget={exitSpreadTarget}
+            onExitSpreadTargetChange={setExitSpreadTarget}
           />
         </div>
       </div>
