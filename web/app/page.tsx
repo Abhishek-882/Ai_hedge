@@ -42,6 +42,21 @@ export default function DashboardPage() {
   // Persistent Trade History State
   const [tradeHistory, setTradeHistory] = useState<HedgeTradeRecord[]>([]);
 
+  const fetchTradeHistory = useCallback(async () => {
+    try {
+      const res = await fetch("/api/trades", { cache: "no-store" });
+      const data = await res.json();
+      if (data.success && Array.isArray(data.trades) && data.trades.length > 0) {
+        setTradeHistory(data.trades);
+        if (typeof window !== "undefined") {
+          try {
+            localStorage.setItem("HEDGE_TRADE_HISTORY", JSON.stringify(data.trades));
+          } catch {}
+        }
+      }
+    } catch {}
+  }, []);
+
   useEffect(() => {
     if (typeof window !== "undefined") {
       try {
@@ -51,15 +66,23 @@ export default function DashboardPage() {
         }
       } catch {}
     }
-  }, []);
+    fetchTradeHistory();
+  }, [fetchTradeHistory]);
 
-  const handleClearHistory = useCallback(() => {
+  const handleClearHistory = useCallback(async () => {
     setTradeHistory([]);
     if (typeof window !== "undefined") {
       try {
         localStorage.removeItem("HEDGE_TRADE_HISTORY");
       } catch {}
     }
+    try {
+      await fetch("/api/trades", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "clear" }),
+      });
+    } catch {}
   }, []);
 
   const handleSelectCoinFromScanner = useCallback((symbol: string) => {
@@ -168,7 +191,8 @@ export default function DashboardPage() {
       return updated;
     });
     fetchData();
-  }, [fetchData]);
+    fetchTradeHistory();
+  }, [fetchData, fetchTradeHistory]);
 
   // 24/7 Autonomous Scanner & Auto-Hedger Loop
   useEffect(() => {

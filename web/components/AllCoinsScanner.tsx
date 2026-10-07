@@ -37,6 +37,8 @@ export default function AllCoinsScanner({ onSelectCoin, selectedSymbol, onTradeE
   // 1-Click Quick Hedge Execution State
   const [executingSymbol, setExecutingSymbol] = useState<string | null>(null);
   const [filledSymbol, setFilledSymbol] = useState<string | null>(null);
+  const [errorFeedback, setErrorFeedback] = useState<{ symbol: string; message: string } | null>(null);
+  const [errorSymbol, setErrorSymbol] = useState<string | null>(null);
 
   // Second-by-second ticker for real-time countdowns
   useEffect(() => {
@@ -117,18 +119,32 @@ export default function AllCoinsScanner({ onSelectCoin, selectedSymbol, onTradeE
   // 1-Click Quick Hedge on ANY coin row
   const handleQuickHedge = async (coin: CoinOpportunity) => {
     setExecutingSymbol(coin.symbol);
+    setErrorSymbol(null);
+    setErrorFeedback(null);
     try {
-      // Calculate safe dynamic lot quantity ensuring notional >= $10.00
+      // Calculate safe dynamic lot quantity ensuring notional >= exchange minimums ($60 for BTC, $30 for ETH, $15 for others)
+      let minRequiredNotional = 15.0;
+      if (coin.symbol.startsWith("BTC")) minRequiredNotional = 60.0;
+      else if (coin.symbol.startsWith("ETH")) minRequiredNotional = 30.0;
+
       let safeQty = 10;
       if (coin.binanceMarkPrice > 0) {
-        if (coin.binanceMarkPrice > 500) {
-          safeQty = parseFloat((15 / coin.binanceMarkPrice).toFixed(3));
+        if (coin.symbol.startsWith("BTC")) {
+          safeQty = 0.001;
+        } else if (coin.symbol.startsWith("ETH")) {
+          safeQty = 0.01;
+        } else if (coin.symbol.startsWith("SOL")) {
+          safeQty = 0.2;
+        } else if (coin.binanceMarkPrice > 500) {
+          safeQty = parseFloat((minRequiredNotional / coin.binanceMarkPrice).toFixed(2));
+          if (safeQty <= 0) safeQty = 0.05;
         } else if (coin.binanceMarkPrice > 50) {
-          safeQty = parseFloat((15 / coin.binanceMarkPrice).toFixed(2));
+          safeQty = parseFloat((minRequiredNotional / coin.binanceMarkPrice).toFixed(1));
+          if (safeQty <= 0) safeQty = 0.5;
         } else if (coin.binanceMarkPrice > 1) {
-          safeQty = parseFloat((15 / coin.binanceMarkPrice).toFixed(1));
+          safeQty = Math.max(1, Math.round(minRequiredNotional / coin.binanceMarkPrice));
         } else {
-          safeQty = Math.max(10, Math.round(15 / coin.binanceMarkPrice));
+          safeQty = Math.max(10, Math.round(minRequiredNotional / coin.binanceMarkPrice));
         }
       }
 
@@ -176,11 +192,23 @@ export default function AllCoinsScanner({ onSelectCoin, selectedSymbol, onTradeE
         onTradeExecuted(tradeRecord);
       }
 
+      // Persist to server trade registry as well
+      fetch("/api/trades", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(tradeRecord),
+      }).catch(() => {});
+
       // Also set as active symbol
       onSelectCoin(coin.symbol, coin.direction);
 
     } catch (err: any) {
-      alert(`Quick Hedge Failed for ${coin.symbol}: ${err.message}`);
+      setErrorSymbol(coin.symbol);
+      setErrorFeedback({ symbol: coin.symbol, message: err.message || "Execution rejected" });
+      setTimeout(() => {
+        setErrorFeedback(null);
+        setErrorSymbol(null);
+      }, 6000);
     } finally {
       setExecutingSymbol(null);
     }
@@ -195,8 +223,8 @@ export default function AllCoinsScanner({ onSelectCoin, selectedSymbol, onTradeE
           <h2 className="text-sm font-semibold text-zinc-100 tracking-wide uppercase">
             ALL COINS FUNDING ARBITRAGE SCANNER
           </h2>
-          <span className="text-[10px] px-2 py-0.5 rounded bg-zinc-800 text-zinc-400 border border-zinc-700">
-            {coins.length > 0 ? `${coins.length} Coins Live` : "Scanning..."}
+          <span className="text-[10px] px-2 py-0.5 rounded bg-zinc-800 text-zinc-300 border border-zinc-700">
+            {coins.length > 0 ? `${coins.length} Verified Pairs (Binance & Bitget)` : "Scanning..."}
           </span>
           <span className="text-[10px] px-2 py-0.5 rounded bg-emerald-950/60 text-accent-emerald border border-emerald-800/50">
             Ranked by Highest Funding (8h)
@@ -289,6 +317,24 @@ export default function AllCoinsScanner({ onSelectCoin, selectedSymbol, onTradeE
         </div>
       </div>
 
+      {/* Execution Alert Banner */}
+      {errorFeedback && (
+        <div className="my-3 px-3.5 py-2.5 rounded-lg bg-rose-950/80 border border-rose-800 text-rose-300 text-xs flex items-center justify-between shadow-lg shadow-rose-950/30 animate-fadeIn">
+          <div className="flex items-center space-x-2">
+            <ShieldAlert className="w-4 h-4 text-rose-400 shrink-0" />
+            <span>
+              <strong>{errorFeedback.symbol}</strong> execution notice: {errorFeedback.message}
+            </span>
+          </div>
+          <button
+            onClick={() => setErrorFeedback(null)}
+            className="text-zinc-400 hover:text-zinc-100 text-xs px-2 py-0.5 rounded hover:bg-rose-900/50 transition-colors"
+          >
+            ✕ Dismiss
+          </button>
+        </div>
+      )}
+
       {/* Table Content */}
       {error ? (
         <div className="py-8 text-center text-xs text-rose-400 flex items-center justify-center space-x-2">
@@ -346,6 +392,7 @@ export default function AllCoinsScanner({ onSelectCoin, selectedSymbol, onTradeE
                 const countdownDisplay = formatCountdown(coinFundingTarget, currentTime);
                 const isExecuting = executingSymbol === coin.symbol;
                 const isFilled = filledSymbol === coin.symbol;
+                const isError = errorSymbol === coin.symbol;
 
                 return (
                   <tr
@@ -408,15 +455,17 @@ export default function AllCoinsScanner({ onSelectCoin, selectedSymbol, onTradeE
                           className={`px-2.5 py-1 text-[10px] font-bold rounded transition-all flex items-center space-x-1 ${
                             isFilled
                               ? "bg-emerald-500 text-zinc-950 shadow-md shadow-emerald-500/20"
+                              : isError
+                              ? "bg-rose-900/90 text-rose-100 border border-rose-700 shadow-sm shadow-rose-900/40"
                               : isExecuting
                               ? "bg-amber-600 text-white animate-pulse"
                               : "bg-accent-amber hover:bg-amber-400 text-zinc-950 shadow-sm shadow-amber-500/10"
                           }`}
-                          title={`1-Click Instant Dual Hedge on ${coin.symbol}`}
+                          title={isError ? (errorFeedback?.message || "Execution rejected") : `1-Click Instant Dual Hedge on ${coin.symbol}`}
                         >
                           <Zap className="w-3 h-3" />
                           <span>
-                            {isFilled ? "FILLED ✓" : isExecuting ? "HEDGING..." : "QUICK HEDGE"}
+                            {isFilled ? "FILLED ✓" : isError ? "ERROR ✕" : isExecuting ? "HEDGING..." : "QUICK HEDGE"}
                           </span>
                         </button>
 

@@ -3,6 +3,7 @@ import { signAndFetchBinance } from "@/lib/binanceSigner";
 import { placeBitgetOrder, BitgetCredentials } from "@/lib/bitgetSigner";
 import { getLeadStaggerDelays, recordExecutionRTT, getLatencyMetrics, StaggerPolicy } from "@/lib/latencyTracker";
 import { checkRateLimit } from "@/lib/rateLimiter";
+import { recordServerTrade } from "@/lib/serverTradeStore";
 
 export const dynamic = "force-dynamic";
 
@@ -15,10 +16,10 @@ function formatSymbolQuantity(qty: number, symbol: string, refPrice: number = 0)
   if (s.startsWith("XRP")) return Math.max(10, Math.round(qty)).toString();
 
   // Dynamic formatting for arbitrary coins based on price magnitude
-  if (refPrice > 500) return qty.toFixed(3);
-  if (refPrice > 50) return qty.toFixed(2);
-  if (refPrice > 1) return qty.toFixed(1);
-  return Math.max(1, Math.round(qty)).toString();
+  if (refPrice > 500) return Math.max(0.01, qty).toFixed(2);
+  if (refPrice > 50) return Math.max(0.1, qty).toFixed(1);
+  if (refPrice > 1) return Math.max(1, Math.round(qty)).toString();
+  return Math.max(10, Math.round(qty)).toString();
 }
 
 export async function POST(req: NextRequest) {
@@ -94,10 +95,14 @@ export async function POST(req: NextRequest) {
     );
     const refPrice = parseFloat(prem?.markPrice || "86400");
 
-    // Auto-scale quantity if below $5.50 exchange minimum threshold
+    // Auto-scale quantity to satisfy exchange minimum notionals ($55 for BTC, $25 for ETH, $12 for others)
+    let minNotional = 12.0;
+    if (symbol.startsWith("BTC")) minNotional = 55.0;
+    else if (symbol.startsWith("ETH")) minNotional = 25.0;
+
     let effectiveQuantity = rawQuantity;
-    if (refPrice > 0 && refPrice * effectiveQuantity < 5.5) {
-      effectiveQuantity = Math.max(0.001, 10.0 / refPrice);
+    if (refPrice > 0 && refPrice * effectiveQuantity < minNotional) {
+      effectiveQuantity = Math.max(0.001, minNotional / refPrice);
     }
     const formattedQty = formatSymbolQuantity(effectiveQuantity, symbol, refPrice);
     const notional = refPrice * parseFloat(formattedQty);
@@ -276,6 +281,28 @@ export async function POST(req: NextRequest) {
     }
 
     if (action === "entry") {
+      try {
+        recordServerTrade({
+          symbol,
+          type: "QUICK_HEDGE_1CLICK",
+          directionLabel: leg1Side === "SELL" ? "Short BN + Long BG" : "Long BN + Short BG",
+          quantity: formattedQty,
+          leg1Venue: "Binance",
+          leg1Side: leg1Side,
+          leg1Price: leg1EntryRes.price,
+          leg1OrderId: leg1EntryRes.orderId,
+          leg2Venue: "Bitget",
+          leg2Side: leg2Side.toUpperCase(),
+          leg2Price: leg2EntryRes.price,
+          leg2OrderId: leg2EntryRes.orderId,
+          interLegDeltaMs: interLegEntryDelta,
+          realizedPnl: 0,
+          status: "ACTIVE",
+        });
+      } catch (logErr) {
+        console.error("Failed to persist server trade record:", logErr);
+      }
+
       return NextResponse.json({
         success: true,
         action: "entry",
@@ -392,6 +419,27 @@ export async function POST(req: NextRequest) {
     const binancePnl = binanceDir * (leg1ExitRes.price - leg1EntryRes.price) * effectiveQuantity;
     const bitgetPnl = bitgetDir * (leg2ExitRes.price - leg2EntryRes.price) * effectiveQuantity;
     const netPnl = binancePnl + bitgetPnl;
+    try {
+      recordServerTrade({
+        symbol,
+        type: "BENCHMARK_DUAL_FILL",
+        directionLabel: leg1Side === "SELL" ? "Short BN + Long BG" : "Long BN + Short BG",
+        quantity: formattedQty,
+        leg1Venue: "Binance",
+        leg1Side: leg1Side,
+        leg1Price: leg1EntryRes.price,
+        leg1OrderId: leg1EntryRes.orderId,
+        leg2Venue: "Bitget",
+        leg2Side: leg2Side.toUpperCase(),
+        leg2Price: leg2EntryRes.price,
+        leg2OrderId: leg2EntryRes.orderId,
+        interLegDeltaMs: interLegEntryDelta,
+        realizedPnl: parseFloat(netPnl.toFixed(4)),
+        status: "DELTA_NEUTRAL",
+      });
+    } catch (logErr) {
+      console.error("Failed to persist server trade benchmark:", logErr);
+    }
 
     return NextResponse.json({
       success: true,

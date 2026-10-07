@@ -1,9 +1,9 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { getDeterministicNextFundingTime } from "@/lib/settlementTime";
 
 export const dynamic = "force-dynamic";
 
-interface CoinArbitrageOpportunity {
+export interface CoinArbitrageOpportunity {
   symbol: string;
   baseAsset: string;
   binanceRate: number;
@@ -15,15 +15,53 @@ interface CoinArbitrageOpportunity {
   direction: "SHORT_BINANCE_LONG_BITGET" | "LONG_BINANCE_SHORT_BITGET";
   volume24h: number;
   nextFundingTime: number;
+  isTestnetSupported: boolean;
 }
 
 let cachedCoins: CoinArbitrageOpportunity[] = [];
 let lastFetchTime = 0;
-const CACHE_TTL_MS = 10_000; // 10 second in-memory cache
+const CACHE_TTL_MS = 6_000; // 6 second in-memory cache for ultra-fresh rates
 
-export async function GET() {
+// Testnet symbols cache (valid for 15 minutes)
+let cachedTestnetSymbols: Set<string> | null = null;
+let lastTestnetFetch = 0;
+const TESTNET_CACHE_TTL_MS = 15 * 60 * 1000;
+
+async function getBinanceTestnetSymbols(): Promise<Set<string>> {
   const now = Date.now();
-  if (cachedCoins.length > 0 && now - lastFetchTime < CACHE_TTL_MS) {
+  if (cachedTestnetSymbols && now - lastTestnetFetch < TESTNET_CACHE_TTL_MS) {
+    return cachedTestnetSymbols;
+  }
+
+  try {
+    const res = await fetch("https://testnet.binancefuture.com/fapi/v1/exchangeInfo", {
+      cache: "no-store",
+    });
+    const data = await res.json();
+    if (Array.isArray(data.symbols)) {
+      const set = new Set<string>();
+      for (const s of data.symbols) {
+        if (s.status === "TRADING" && s.quoteAsset === "USDT" && s.symbol) {
+          set.add(s.symbol);
+        }
+      }
+      cachedTestnetSymbols = set;
+      lastTestnetFetch = now;
+      return set;
+    }
+  } catch (err) {
+    console.error("Failed to fetch Binance testnet symbols:", err);
+  }
+
+  return cachedTestnetSymbols || new Set<string>();
+}
+
+export async function GET(req: NextRequest) {
+  const now = Date.now();
+  const searchParams = req.nextUrl?.searchParams;
+  const includeAllProduction = searchParams?.get("allProduction") === "true";
+
+  if (cachedCoins.length > 0 && now - lastFetchTime < CACHE_TTL_MS && !includeAllProduction) {
     return NextResponse.json({
       success: true,
       count: cachedCoins.length,
@@ -34,7 +72,7 @@ export async function GET() {
   }
 
   try {
-    const [binanceRes, bitgetRes] = await Promise.all([
+    const [binanceRes, bitgetRes, testnetSet] = await Promise.all([
       fetch("https://fapi.binance.com/fapi/v1/premiumIndex", {
         headers: { "User-Agent": "FundingArbitrage/2.0" },
         cache: "no-store",
@@ -46,6 +84,7 @@ export async function GET() {
         headers: { "User-Agent": "FundingArbitrage/2.0" },
         cache: "no-store",
       }),
+      getBinanceTestnetSymbols(),
     ]);
 
     const binanceData: any[] = await binanceRes.json().catch(() => []);
@@ -66,12 +105,23 @@ export async function GET() {
       const sym = bn.symbol;
       if (!sym || !sym.endsWith("USDT")) continue;
 
+      // 1. CRITICAL: Coin MUST exist on Bitget (Arbitrage requires both legs)
       const bg = bitgetMap.get(sym);
+      if (!bg) continue;
+
+      // 2. Check testnet support
+      const isTestnetSupported = testnetSet.size > 0 ? testnetSet.has(sym) : true;
+
+      // In default demo mode, strictly enforce testnet compatibility so Quick Hedge never fails
+      if (!includeAllProduction && !isTestnetSupported) {
+        continue;
+      }
+
       const bnRate = parseFloat(bn.lastFundingRate || "0");
-      const bgRate = bg ? parseFloat(bg.fundingRate || "0") : 0.0001; // default baseline
+      const bgRate = parseFloat(bg.fundingRate || "0");
 
       const bnMark = parseFloat(bn.markPrice || "0");
-      const bgMark = bg ? parseFloat(bg.markPrice || bg.lastPr || "0") : bnMark;
+      const bgMark = parseFloat(bg.markPrice || bg.lastPr || "0") || bnMark;
 
       const spreadBps = parseFloat((Math.abs(bnRate - bgRate) * 10000).toFixed(2));
       // 3 funding intervals per day * 365 days = 1095 intervals/year
@@ -80,7 +130,7 @@ export async function GET() {
       const direction: "SHORT_BINANCE_LONG_BITGET" | "LONG_BINANCE_SHORT_BITGET" =
         bnRate >= bgRate ? "SHORT_BINANCE_LONG_BITGET" : "LONG_BINANCE_SHORT_BITGET";
 
-      const vol24h = bg ? parseFloat(bg.quoteVolume || bg.usdtVolume || "0") : 0;
+      const vol24h = parseFloat(bg.quoteVolume || bg.usdtVolume || "0");
       const baseAsset = sym.replace("USDT", "");
 
       const rawNextFunding = parseInt(bn.nextFundingTime || "0", 10);
@@ -98,6 +148,7 @@ export async function GET() {
         direction,
         volume24h: Math.round(vol24h),
         nextFundingTime,
+        isTestnetSupported,
       });
     }
 
@@ -109,8 +160,10 @@ export async function GET() {
       return b.spreadBps - a.spreadBps;
     });
 
-    cachedCoins = opportunities;
-    lastFetchTime = now;
+    if (!includeAllProduction) {
+      cachedCoins = opportunities;
+      lastFetchTime = now;
+    }
 
     return NextResponse.json({
       success: true,
