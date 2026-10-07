@@ -60,3 +60,17 @@ We executed consecutive live test trials using real demo market orders on both B
 - Direction B Arrival Delta: `183.06ms` (Stagger: 46ms Binance)
 - Benchmark Entry Delta: `110.1ms` | Exit Delta: `0ms`
 - Delta Neutrality Verified: `True` | Net PnL: `$0.0839 USDT`
+
+
+### Latency Deep Audit — 2026-10-07T16:51:03.347314
+- Target: `https://ai-hedge-1.onrender.com`
+- Direction A Arrival Delta: `500.52ms` (Stagger: 180ms Bitget)
+- Direction B Arrival Delta: `209.49ms` (Stagger: 42ms Binance)
+- Benchmark Entry Delta: `320.99ms` | Exit Delta: `118.85ms`
+- Delta Neutrality Verified: `True` | Net PnL: `$-0.0165 USDT`
+
+
+### Institutional Upgrade Audit — 2026-10-07T17:05:00+05:30
+- Outlier-Resistant EWMA Lead-Stagger 2.0 active.
+- Universal Auto-Discovery Close (/api/close) records order duration and inter-leg close delta into EWMA latency tracker.
+- Multi-asset step size formatting enforced on both entry and close routes to prevent exchange reject latency penalties.

@@ -101,18 +101,17 @@ def audit_exchange_accounts(target_url: str) -> dict:
 
     return results
 
-# =====================================================================
-# AGENT 2: Dual-Leg Hedging & Inter-Leg Latency Profiling
-# =====================================================================
-def test_dual_hedge_execution(target_url: str, direction: str, quantity: float = 0.005) -> dict:
+def test_dual_hedge_execution(target_url: str, direction: str, quantity: float = 0.005, symbol: str = "BTCUSDT", stagger_policy: str = "auto_ewma") -> dict:
     leg1_side = "SELL" if direction == "SHORT_BINANCE_LONG_BITGET" else "BUY"
     desc = "Short Binance + Long Bitget" if leg1_side == "SELL" else "Long Binance + Short Bitget"
-    log_agent("AGENT_LATENCY_SPECIALIST", f"Executing Dual Hedge [{desc}] (Size: {quantity} BTC)...")
+    log_agent("AGENT_LATENCY_SPECIALIST", f"Executing Dual Hedge [{desc}] ({symbol}, Size: {quantity}, Policy: {stagger_policy})...")
     
     payload = {
         "action": "entry",
+        "symbol": symbol,
         "quantity": quantity,
-        "leg1Side": leg1_side
+        "leg1Side": leg1_side,
+        "staggerPolicy": stagger_policy,
     }
     
     t0 = time.time()
@@ -126,10 +125,11 @@ def test_dual_hedge_execution(target_url: str, direction: str, quantity: float =
         total_entry = res.get("totalEntryMs", duration_ms)
         
         log_agent("AGENT_LATENCY_SPECIALIST", 
-                  f"Hedge Entry SUCCESS: Arrival Delta = {arrival_delta}ms | Stagger = {stagger_applied}ms ({venue}) | Total = {total_entry}ms")
+                  f"Hedge Entry SUCCESS [{symbol}]: Arrival Delta = {arrival_delta}ms | Stagger = {stagger_applied}ms ({venue}) | Total = {total_entry}ms")
         
         return {
             "success": res.get("success", False),
+            "symbol": symbol,
             "direction": direction,
             "leg1Side": leg1_side,
             "arrivalDeltaMs": arrival_delta,
@@ -238,6 +238,22 @@ def run_browser_ui_tests(target_url: str):
                 page.keyboard.press("Escape")
             time.sleep(1)
 
+        # Step 2b: Multi-Asset Switching (ETH / SOL / DOGE)
+        log_agent("AGENT_BROWSER_QA", "Step 2b: Testing Asset Switcher Tabs (ETH)...")
+        eth_tab = page.locator("button:has-text('ETH')")
+        if eth_tab.count() > 0:
+            eth_tab.click()
+            time.sleep(1.5)
+            shot_asset = SCREENSHOT_DIR / "render_stage2b_asset_switch_eth.png"
+            page.screenshot(path=str(shot_asset), full_page=True)
+            log_agent("AGENT_BROWSER_QA", f"Captured {shot_asset.name} (ETH asset selected)")
+
+        # Switch back to BTC for benchmark
+        btc_tab = page.locator("button:has-text('BTC')")
+        if btc_tab.count() > 0:
+            btc_tab.click()
+            time.sleep(1)
+
         # Step 3: Click Benchmark Button from UI
         log_agent("AGENT_BROWSER_QA", "Step 3: Triggering 'RUN PURE DUAL HEDGE BENCHMARK' from web cockpit...")
         bench_btn = page.locator("button:has-text('RUN PURE DUAL HEDGE BENCHMARK')")
@@ -287,6 +303,13 @@ def run_full_deep_examination():
 
     # 6. Flatten Direction B
     flatten_b = test_dual_flatten(TARGET_URL)
+    time.sleep(2)
+
+    # 6b. Multi-Asset Test: ETHUSDT Dual Hedge (0.05 ETH)
+    log_agent("AGENT_MULTI_ASSET", "Testing Multi-Asset Flexibility: ETHUSDT Dual Hedge (0.05 ETH)...")
+    hedge_eth = test_dual_hedge_execution(TARGET_URL, "SHORT_BINANCE_LONG_BITGET", quantity=0.05, symbol="ETHUSDT")
+    time.sleep(2)
+    flatten_eth = test_dual_flatten(TARGET_URL)
     time.sleep(2)
 
     # 7. Pure Dual Hedge Benchmark

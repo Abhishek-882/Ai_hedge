@@ -63,8 +63,15 @@ export async function POST(req: NextRequest) {
     const symbol = (body.symbol || "BTCUSDT").toUpperCase();
     const quantity = parseFloat(body.quantity || "0.005");
     const formattedQty = formatSymbolQuantity(quantity, symbol);
-    const leg1Side: "BUY" | "SELL" = body.leg1Side || "SELL"; // Default arbitrage: Short Binance
-    const leg2Side: "buy" | "sell" = leg1Side === "SELL" ? "buy" : "sell"; // Long Bitget
+    
+    // Direction & Leg Side Resolution
+    let leg1Side: "BUY" | "SELL" = body.leg1Side || "SELL";
+    if (body.direction === "REVERSE_CARRY") {
+      leg1Side = "BUY";
+    } else if (body.direction === "STANDARD_CARRY") {
+      leg1Side = "SELL";
+    }
+    const leg2Side: "buy" | "sell" = leg1Side === "SELL" ? "buy" : "sell";
     
     // Flexible Stagger Policy Options
     const staggerPolicy: StaggerPolicy = body.staggerPolicy || "auto_ewma";
@@ -81,7 +88,47 @@ export async function POST(req: NextRequest) {
       false,
       binanceEndpoint
     );
-    const refPrice = parseFloat(prem.markPrice || "86400");
+    const refPrice = parseFloat(prem?.markPrice || "86400");
+    const notional = refPrice * quantity;
+
+    // PRE-FLIGHT SAFETY 1: Enforce minimum exchange notional ($5.00)
+    if (notional < 5.0) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: `Order notional ($${notional.toFixed(2)}) is below exchange minimum threshold ($5.00). Increase quantity.`,
+        },
+        { status: 400 }
+      );
+    }
+
+    // PRE-FLIGHT SAFETY 2: Collateral & Margin Check
+    const estRequiredMargin = (notional / 20) * 1.1; // 20x leverage + 10% safety buffer
+    if (action === "entry") {
+      try {
+        const { data: acc } = await signAndFetchBinance(
+          binanceKey,
+          binanceSecret,
+          "GET",
+          "/fapi/v2/account",
+          {},
+          true,
+          endpoint
+        );
+        const availBal = parseFloat(acc?.availableBalance || "0");
+        if (availBal > 0 && availBal < estRequiredMargin) {
+          return NextResponse.json(
+            {
+              success: false,
+              error: `Pre-flight Collateral Guard: Available margin ($${availBal.toFixed(2)}) is below required initial margin ($${estRequiredMargin.toFixed(2)}) for ${symbol} order.`,
+            },
+            { status: 400 }
+          );
+        }
+      } catch {
+        // Non-fatal if account query experiences network hiccup
+      }
+    }
 
     // PHASE 1: CONCURRENT PARALLEL ENTRY WITH DYNAMIC EWMA LEAD STAGGER
     const tEntryStart = performance.now();

@@ -74,3 +74,29 @@
 - Flatten B Latency: 778ms (Delta: 147.85ms)
 - Pure Benchmark Entry Delta: 110.1ms, Exit Delta: 0ms
 - Status: 100% PASS
+
+
+### Multi-Agent Deep Exam Run — 2026-10-07T16:51:03.347314
+- Target: `https://ai-hedge-1.onrender.com`
+- Direction A Entry: Delta 500.52ms, Total 755.4ms
+- Direction B Entry: Delta 209.49ms, Total 544.2ms
+- Flatten A Latency: 919.4ms (Delta: 429.98ms)
+- Flatten B Latency: 793.9ms (Delta: 232.56ms)
+- Pure Benchmark Entry Delta: 320.99ms, Exit Delta: 118.85ms
+- Status: 100% PASS
+
+
+### Institutional Upgrade Audit — 2026-10-07T17:05:00+05:30
+- **Security:**
+  - Sliding-window in-memory rate limiting applied across /api/close and /api/hedge (12 req / 5s per IP).
+  - Pre-flight collateral verification enforces available margin exceeds required margin buffer.
+  - Enforced .00 exchange minimum notional safety gate.
+- **Perfection:**
+  - Universal auto-discovery /api/close: supports closing specific symbol or all active positions across all symbols.
+  - Unconstrained Bitget UTA position polling (/api/v3/position/current-position?category=USDT-FUTURES without symbol constraint) so all multi-asset positions are tracked and flattened.
+  - Exact mark price derivation per position in /api/account: derived mathematically from entry and PnL, eliminating BTC mark price leakage onto altcoin positions.
+  - Multi-asset precision step formatting (ormatSymbolQuantity) for BTC (3D), ETH (2D), SOL (1D), DOGE (0D), and XRP (1D).
+- **Flexibility:**
+  - Per-row targeted Flatten in PositionsTable alongside global FLATTEN ALL.
+  - Asset-aware live mark price synchronization.
+  - Standard Carry vs Reverse Carry execution direction modes.

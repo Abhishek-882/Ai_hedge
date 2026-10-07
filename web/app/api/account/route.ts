@@ -69,7 +69,11 @@ export async function GET(req: NextRequest) {
         const amt = parseFloat(p.positionAmt);
         const entryPrice = parseFloat(p.entryPrice);
         const unrealizedPnl = parseFloat(p.unrealizedProfit);
-        const markPrice = parseFloat(p.markPrice || "0") || refMarkPrice || (amt !== 0 ? entryPrice + (unrealizedPnl / amt) : entryPrice);
+        const rawMark = parseFloat(p.markPrice || "0");
+        const derivedMark = (amt !== 0 && entryPrice > 0) ? entryPrice + (unrealizedPnl / amt) : 0;
+        const markPrice = rawMark > 0
+          ? rawMark
+          : (derivedMark > 0 ? derivedMark : (p.symbol === "BTCUSDT" ? refMarkPrice : entryPrice));
         return {
           venue: "Binance",
           symbol: p.symbol,

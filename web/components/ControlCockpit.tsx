@@ -139,7 +139,11 @@ export default function ControlCockpit({
     try {
       const res = await fetch("/api/close", {
         method: "POST",
-        headers: getVaultHeaders(),
+        headers: {
+          "Content-Type": "application/json",
+          ...getVaultHeaders(),
+        },
+        body: JSON.stringify({ symbol: "ALL" }),
       });
       const data = await res.json();
       if (!data.success) throw new Error(data.error || data.message);

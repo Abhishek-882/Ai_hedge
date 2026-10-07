@@ -185,17 +185,21 @@ export default function DashboardPage() {
     return () => clearInterval(autopilotInterval);
   }, [isAutopilotActive, autopilotState, wsData.spreadBps, minSpreadEntry, exitSpreadTarget, getVaultHeaders, fetchData]);
 
-  const handleClosePosition = async () => {
+  const handleClosePosition = async (targetSymbol?: string) => {
     try {
       const res = await fetch("/api/close", {
         method: "POST",
-        headers: getVaultHeaders(),
+        headers: {
+          "Content-Type": "application/json",
+          ...getVaultHeaders(),
+        },
+        body: JSON.stringify({ symbol: targetSymbol || "ALL" }),
       });
       const data = await res.json();
       if (data.success) {
         fetchData();
       } else {
-        alert(data.error || "Failed to close position");
+        alert(data.error || data.message || "Failed to close position");
       }
     } catch (err: any) {
       alert(`Error: ${err.message}`);
@@ -204,9 +208,10 @@ export default function DashboardPage() {
 
   // Dynamic real-time combined unrealized PnL across all open positions
   const dynamicNetPnl = positions.reduce((acc, pos) => {
-    const liveMarkPrice = pos.venue === "Bitget"
-      ? (wsData.bitgetPrice || pos.markPrice)
-      : (wsData.binancePrice || pos.markPrice);
+    const isCurrentAsset = pos.symbol === selectedSymbol;
+    const liveMarkPrice = isCurrentAsset
+      ? (pos.venue === "Bitget" ? (wsData.bitgetPrice || pos.markPrice) : (wsData.binancePrice || pos.markPrice))
+      : pos.markPrice;
     const pnl = (pos.amount !== 0 && pos.entryPrice > 0 && liveMarkPrice > 0)
       ? (liveMarkPrice - pos.entryPrice) * pos.amount
       : (pos.unrealizedPnl || 0);
@@ -444,6 +449,7 @@ export default function DashboardPage() {
       <div className="mb-6">
         <PositionsTable
           positions={positions}
+          currentSymbol={selectedSymbol}
           liveBinancePrice={wsData.binancePrice}
           liveBitgetPrice={wsData.bitgetPrice}
           onClosePosition={handleClosePosition}

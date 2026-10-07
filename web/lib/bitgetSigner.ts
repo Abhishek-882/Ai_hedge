@@ -151,10 +151,10 @@ export async function getBitgetAccount(creds?: BitgetCredentials) {
         const available = parseFloat(usdt.available || raw.effEquity || "0");
         const unrealizedPnL = parseFloat(raw.unrealisedPnl || usdt.unrealizedPnL || "0");
 
-        // Query active positions for Bitget UTA
+        // Query active positions for Bitget UTA across all symbols
         let positions: any[] = [];
         try {
-          const posPath = "/api/v3/position/current-position?category=USDT-FUTURES&symbol=BTCUSDT";
+          const posPath = "/api/v3/position/current-position?category=USDT-FUTURES";
           const posHeaders = await getBitgetHeaders(creds, "GET", posPath);
           const posRes = await fetch(`${baseUrl}${posPath}`, { headers: posHeaders, cache: "no-store" });
           const posData = await posRes.json();

@@ -15,13 +15,15 @@ interface Position {
 
 interface PositionsTableProps {
   positions: Position[];
+  currentSymbol?: string;
   liveBinancePrice?: number;
   liveBitgetPrice?: number;
-  onClosePosition?: () => void;
+  onClosePosition?: (symbol?: string) => void;
 }
 
 export default function PositionsTable({
   positions,
+  currentSymbol,
   liveBinancePrice,
   liveBitgetPrice,
   onClosePosition,
@@ -68,9 +70,10 @@ export default function PositionsTable({
             <tbody className="divide-y border-border">
               {positions.map((pos) => {
                 const isLong = pos.amount > 0;
-                const venueMarkPrice = pos.venue === "Bitget"
-                  ? (liveBitgetPrice || pos.markPrice)
-                  : (liveBinancePrice || pos.markPrice);
+                const matchesCurrentAsset = !currentSymbol || pos.symbol === currentSymbol;
+                const venueMarkPrice = matchesCurrentAsset
+                  ? (pos.venue === "Bitget" ? (liveBitgetPrice || pos.markPrice) : (liveBinancePrice || pos.markPrice))
+                  : pos.markPrice;
 
                 const dynamicPnl = (pos.amount !== 0 && pos.entryPrice > 0 && venueMarkPrice > 0)
                   ? (venueMarkPrice - pos.entryPrice) * pos.amount
@@ -141,10 +144,11 @@ export default function PositionsTable({
                     <td className="py-2.5">{leverage}x</td>
                     <td className="py-2.5 text-right">
                       <button
-                        onClick={onClosePosition}
+                        onClick={() => onClosePosition?.(pos.symbol)}
                         className="px-2 py-1 text-[10px] rounded bg-zinc-800 hover:bg-zinc-700 text-zinc-300 border border-zinc-700 transition-colors"
+                        title={`Flatten ${pos.symbol}`}
                       >
-                        Flatten
+                        Flatten {assetSymbol}
                       </button>
                     </td>
                   </tr>
