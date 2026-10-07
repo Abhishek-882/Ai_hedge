@@ -64,3 +64,13 @@
     `RECEIPT: CLOSE ✓ CONFIRMED`
     `Dual-Close finished in 498.2ms. Binance: Closed, Bitget: No active position found`
   - Live Positions count returned to `ACTIVE: 0` (`No open positions detected on Binance Futures Testnet.`).
+
+
+### Multi-Agent Deep Exam Run — 2026-10-07T16:38:12.771627
+- Target: `https://ai-hedge-1.onrender.com`
+- Direction A Entry: Delta 425.99ms, Total 696.9ms
+- Direction B Entry: Delta 183.06ms, Total 526.6ms
+- Flatten A Latency: 940.6ms (Delta: 390.35ms)
+- Flatten B Latency: 778ms (Delta: 147.85ms)
+- Pure Benchmark Entry Delta: 110.1ms, Exit Delta: 0ms
+- Status: 100% PASS

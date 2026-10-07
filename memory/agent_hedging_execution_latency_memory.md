@@ -52,3 +52,11 @@ We executed consecutive live test trials using real demo market orders on both B
    - Both Binance and Bitget core matching engines are hosted in AWS Tokyo (`ap-northeast-1`).
    - Testing from India introduces ~110–130ms base RTT.
    - Deploying on AWS Tokyo or GCP Tokyo will compress single-leg latencies to **<15 ms** and inter-leg gaps consistently to **<1 ms**.
+
+
+### Latency Deep Audit — 2026-10-07T16:38:12.771627
+- Target: `https://ai-hedge-1.onrender.com`
+- Direction A Arrival Delta: `425.99ms` (Stagger: 180ms Bitget)
+- Direction B Arrival Delta: `183.06ms` (Stagger: 46ms Binance)
+- Benchmark Entry Delta: `110.1ms` | Exit Delta: `0ms`
+- Delta Neutrality Verified: `True` | Net PnL: `$0.0839 USDT`
