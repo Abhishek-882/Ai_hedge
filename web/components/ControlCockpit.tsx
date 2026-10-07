@@ -67,32 +67,33 @@ export default function ControlCockpit({
   const [loadingAction, setLoadingAction] = useState<string | null>(null);
   const [lastReceipt, setLastReceipt] = useState<any>(null);
 
-  const executeOrder = async (side: "BUY" | "SELL") => {
-    setLoadingAction(side);
+  const executeHedge = async (direction: "SHORT_BINANCE_LONG_BITGET" | "LONG_BINANCE_SHORT_BITGET") => {
+    setLoadingAction(direction);
     try {
-      const res = await fetch("/api/order", {
+      const leg1Side = direction === "SHORT_BINANCE_LONG_BITGET" ? "SELL" : "BUY";
+      const res = await fetch("/api/hedge", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
           ...getVaultHeaders(),
         },
         body: JSON.stringify({
-          symbol: "BTCUSDT",
-          side,
+          action: "entry",
           quantity: parseFloat(quantity),
+          leg1Side,
         }),
       });
       const data = await res.json();
       if (!data.success) throw new Error(data.error);
       setLastReceipt({
-        type: "ORDER",
-        side,
+        type: "HEDGE_ENTRY",
+        direction,
         data,
       });
       if (onOrderSuccess) onOrderSuccess(data);
       if (onRefresh) onRefresh();
     } catch (err: any) {
-      alert(`Order Failed: ${err.message}`);
+      alert(`Hedge Entry Failed: ${err.message}`);
     } finally {
       setLoadingAction(null);
     }
@@ -252,32 +253,34 @@ export default function ControlCockpit({
           </div>
         </div>
 
-        {/* 1-Click Manual Execution */}
+        {/* Dual-Leg Real-Time Hedging Controls */}
         <div className="mt-4 grid grid-cols-2 gap-3">
           <button
-            onClick={() => executeOrder("BUY")}
+            onClick={() => executeHedge("SHORT_BINANCE_LONG_BITGET")}
             disabled={!!loadingAction}
-            className="flex items-center justify-center space-x-2 py-2.5 px-4 rounded-lg bg-emerald-500/10 border border-emerald-500/30 text-accent-emerald hover:bg-emerald-500/20 active:scale-[0.98] transition-all disabled:opacity-50 text-xs font-bold"
+            className="flex flex-col items-center justify-center p-2.5 rounded-lg bg-amber-500/10 border border-amber-500/30 text-accent-amber hover:bg-amber-500/20 active:scale-[0.98] transition-all disabled:opacity-50 text-xs font-bold"
           >
-            {loadingAction === "BUY" ? (
-              <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+            {loadingAction === "SHORT_BINANCE_LONG_BITGET" ? (
+              <RefreshCw className="w-3.5 h-3.5 animate-spin mb-1" />
             ) : (
-              <ArrowUpRight className="w-4 h-4" />
+              <ArrowDownRight className="w-4 h-4 mb-1" />
             )}
-            <span>BUY / LONG {quantity}</span>
+            <span>SHORT BINANCE</span>
+            <span className="text-[10px] text-accent-cyan font-medium">+ LONG BITGET ({quantity})</span>
           </button>
 
           <button
-            onClick={() => executeOrder("SELL")}
+            onClick={() => executeHedge("LONG_BINANCE_SHORT_BITGET")}
             disabled={!!loadingAction}
-            className="flex items-center justify-center space-x-2 py-2.5 px-4 rounded-lg bg-rose-500/10 border border-rose-500/30 text-accent-rose hover:bg-rose-500/20 active:scale-[0.98] transition-all disabled:opacity-50 text-xs font-bold"
+            className="flex flex-col items-center justify-center p-2.5 rounded-lg bg-cyan-500/10 border border-cyan-500/30 text-accent-cyan hover:bg-cyan-500/20 active:scale-[0.98] transition-all disabled:opacity-50 text-xs font-bold"
           >
-            {loadingAction === "SELL" ? (
-              <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+            {loadingAction === "LONG_BINANCE_SHORT_BITGET" ? (
+              <RefreshCw className="w-3.5 h-3.5 animate-spin mb-1" />
             ) : (
-              <ArrowDownRight className="w-4 h-4" />
+              <ArrowUpRight className="w-4 h-4 mb-1" />
             )}
-            <span>SELL / SHORT {quantity}</span>
+            <span>LONG BINANCE</span>
+            <span className="text-[10px] text-accent-amber font-medium">+ SHORT BITGET ({quantity})</span>
           </button>
         </div>
 
@@ -343,6 +346,19 @@ export default function ControlCockpit({
           </div>
           {lastReceipt.data?.orderId && (
             <div>Order ID: {lastReceipt.data.orderId} • Status: {lastReceipt.data.status}</div>
+          )}
+          {lastReceipt.type === "HEDGE_ENTRY" && lastReceipt.data && (
+            <div className="text-accent-cyan flex flex-wrap gap-x-1.5">
+              <span>Arrival Delta: {lastReceipt.data.interLegDeltaMs}ms</span>
+              <span>•</span>
+              <span>Total Entry: {lastReceipt.data.totalEntryMs}ms</span>
+              {lastReceipt.data.leadStaggerAppliedMs > 0 && (
+                <>
+                  <span>•</span>
+                  <span className="text-accent-amber">Stagger: {lastReceipt.data.leadStaggerAppliedMs}ms ({lastReceipt.data.staggerVenue})</span>
+                </>
+              )}
+            </div>
           )}
           {lastReceipt.data?.entry && (
             <div className="text-accent-cyan flex flex-wrap gap-x-1.5">
