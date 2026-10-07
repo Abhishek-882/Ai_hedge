@@ -87,9 +87,21 @@ export async function GET(req: NextRequest) {
       getBinanceTestnetSymbols(),
     ]);
 
-    const binanceData: any[] = await binanceRes.json().catch(() => []);
+    const binanceRaw = await binanceRes.json().catch(() => []);
+    const binanceData: any[] = Array.isArray(binanceRaw) ? binanceRaw : [];
     const bitgetRaw = await bitgetRes.json().catch(() => ({}));
-    const bitgetData: any[] = bitgetRaw?.data || [];
+    const bitgetData: any[] = Array.isArray(bitgetRaw?.data) ? bitgetRaw.data : [];
+
+    // If exchange returns empty array or error payload, retain cached coins if available
+    if (binanceData.length === 0 && cachedCoins.length > 0) {
+      return NextResponse.json({
+        success: true,
+        count: cachedCoins.length,
+        cached: true,
+        coins: cachedCoins,
+        updatedAt: lastFetchTime,
+      });
+    }
 
     // Map Bitget by symbol
     const bitgetMap = new Map<string, any>();

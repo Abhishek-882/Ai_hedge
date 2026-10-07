@@ -49,19 +49,28 @@ export default function AllCoinsScanner({ onSelectCoin, selectedSymbol, onTradeE
   }, []);
 
   const fetchCoins = async () => {
-    setIsLoading(true);
     try {
       const res = await fetch("/api/coins", { cache: "no-store" });
       const data = await res.json();
-      if (data.success && Array.isArray(data.coins)) {
+      if (data.success && Array.isArray(data.coins) && data.coins.length > 0) {
         setCoins(data.coins);
         setLastUpdated(data.updatedAt || Date.now());
         setError(null);
       } else {
-        setError(data.error || "Failed to load coin scanner");
+        setCoins((prev) => {
+          if (prev.length === 0) {
+            setError(data.error || "Failed to load coin scanner");
+          }
+          return prev;
+        });
       }
     } catch (err: any) {
-      setError(err.message || "Network error loading coins");
+      setCoins((prev) => {
+        if (prev.length === 0) {
+          setError(err.message || "Network error loading coins");
+        }
+        return prev;
+      });
     } finally {
       setIsLoading(false);
     }
