@@ -2,6 +2,7 @@
 
 import React, { useEffect, useState } from "react";
 import { Activity, Clock, ShieldCheck, Zap } from "lucide-react";
+import { getDeterministicNextFundingTime, formatCountdown } from "@/lib/settlementTime";
 
 interface TelemetryHUDProps {
   spreadBps?: number;
@@ -12,22 +13,23 @@ interface TelemetryHUDProps {
 export default function TelemetryHUD({
   spreadBps = 0,
   nextFundingTime = 0,
-  clockOffsetMs = 633110,
+  clockOffsetMs = 24,
 }: TelemetryHUDProps) {
-  const [countdown, setCountdown] = useState<string>("00:00:00");
+  const effectiveFundingTime = nextFundingTime && nextFundingTime > Date.now() 
+    ? nextFundingTime 
+    : getDeterministicNextFundingTime();
+
+  const [countdown, setCountdown] = useState<string>(() => formatCountdown(effectiveFundingTime));
 
   useEffect(() => {
-    if (!nextFundingTime) return;
+    const targetTime = nextFundingTime && nextFundingTime > Date.now() 
+      ? nextFundingTime 
+      : getDeterministicNextFundingTime();
+
+    setCountdown(formatCountdown(targetTime));
 
     const interval = setInterval(() => {
-      const remaining = Math.max(0, nextFundingTime - Date.now());
-      const hours = Math.floor(remaining / (1000 * 60 * 60));
-      const minutes = Math.floor((remaining % (1000 * 60 * 60)) / (1000 * 60));
-      const seconds = Math.floor((remaining % (1000 * 60)) / 1000);
-
-      setCountdown(
-        `${String(hours).padStart(2, "0")}:${String(minutes).padStart(2, "0")}:${String(seconds).padStart(2, "0")}`
-      );
+      setCountdown(formatCountdown(targetTime));
     }, 1000);
 
     return () => clearInterval(interval);
@@ -52,7 +54,7 @@ export default function TelemetryHUD({
           <Activity className="w-3.5 h-3.5 text-accent-emerald" />
         </div>
         <div className="mt-2 text-xl font-bold tracking-tight text-accent-emerald">
-          +{(clockOffsetMs / 1000).toFixed(1)}s
+          {clockOffsetMs >= 0 ? "+" : ""}{Math.abs(clockOffsetMs) < 1000 ? `${clockOffsetMs}ms` : `${(clockOffsetMs / 1000).toFixed(1)}s`}
         </div>
         <div className="mt-1 text-[10px] text-zinc-500">Auto-synced with Binance</div>
       </div>

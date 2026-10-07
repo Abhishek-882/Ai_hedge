@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useEffect, useCallback, useRef } from "react";
-import { KeyRound, RefreshCw, Wallet, ShieldCheck, ExternalLink, Activity, Radio, History } from "lucide-react";
+import { KeyRound, RefreshCw, Wallet, ShieldCheck, ExternalLink, Activity, Radio, History, User } from "lucide-react";
 import PrismaticCore3D from "@/components/PrismaticCore3D";
 import TelemetryHUD from "@/components/TelemetryHUD";
 import SpreadTracker from "@/components/SpreadTracker";
@@ -10,6 +10,8 @@ import PositionsTable from "@/components/PositionsTable";
 import AllCoinsScanner from "@/components/AllCoinsScanner";
 import HedgeHistoryTable, { HedgeTradeRecord } from "@/components/HedgeHistoryTable";
 import SettingsModal from "@/components/SettingsModal";
+import UserProfileModal from "@/components/UserProfileModal";
+import ServerDaemonIndicator from "@/components/ServerDaemonIndicator";
 import { useDualExchangeWebSockets } from "@/hooks/useDualExchangeWebSockets";
 
 export default function DashboardPage() {
@@ -26,6 +28,7 @@ export default function DashboardPage() {
   const [accountEndpoint, setAccountEndpoint] = useState<string | null>(null);
   const [hasCustomKey, setHasCustomKey] = useState(false);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+  const [isProfileOpen, setIsProfileOpen] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [isStudioMode, setIsStudioMode] = useState(false);
 
@@ -384,6 +387,19 @@ export default function DashboardPage() {
             </div>
           </div>
 
+          {/* 24/7 Server Autonomous Bot Status Indicator */}
+          <ServerDaemonIndicator onOpenProfile={() => setIsProfileOpen(true)} />
+
+          {/* User Profile Button */}
+          <button
+            onClick={() => setIsProfileOpen(true)}
+            className="flex items-center space-x-1.5 px-3 py-2 rounded-lg bg-surface hover:bg-zinc-800 border border-border text-xs text-zinc-300 transition-colors"
+            title="Institutional Profile & Settings"
+          >
+            <User className="w-3.5 h-3.5 text-accent-cyan" />
+            <span className="hidden sm:inline">Profile</span>
+          </button>
+
           <button
             onClick={() => setIsSettingsOpen(true)}
             className="flex items-center space-x-1.5 px-3 py-2 rounded-lg bg-surface hover:bg-zinc-800 border border-border text-xs text-zinc-300 transition-colors"
@@ -471,7 +487,7 @@ export default function DashboardPage() {
           <TelemetryHUD
             spreadBps={wsData.spreadBps}
             nextFundingTime={wsData.nextFundingTime}
-            clockOffsetMs={633110}
+            clockOffsetMs={wsData.clockOffsetMs || 24}
           />
         </div>
 
@@ -559,6 +575,12 @@ export default function DashboardPage() {
         isOpen={isSettingsOpen}
         onClose={() => setIsSettingsOpen(false)}
         onSaved={fetchData}
+      />
+
+      {/* Institutional User Profile & 24/7 Autonomous Bot Modal */}
+      <UserProfileModal
+        isOpen={isProfileOpen}
+        onClose={() => setIsProfileOpen(false)}
       />
     </main>
   );

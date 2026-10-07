@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { getDeterministicNextFundingTime } from "@/lib/settlementTime";
 
 export const dynamic = "force-dynamic";
 
@@ -82,23 +83,31 @@ export async function GET() {
       const vol24h = bg ? parseFloat(bg.quoteVolume || bg.usdtVolume || "0") : 0;
       const baseAsset = sym.replace("USDT", "");
 
+      const rawNextFunding = parseInt(bn.nextFundingTime || "0", 10);
+      const nextFundingTime = rawNextFunding > now ? rawNextFunding : getDeterministicNextFundingTime(now);
+
       opportunities.push({
         symbol: sym,
         baseAsset,
-        binanceRate: parseFloat((bnRate * 100).toFixed(4)), // as %
-        bitgetRate: parseFloat((bgRate * 100).toFixed(4)), // as %
+        binanceRate: parseFloat((bnRate * 100).toFixed(5)), // as % with 5 decimals (e.g. 0.01000%)
+        bitgetRate: parseFloat((bgRate * 100).toFixed(5)), // as % with 5 decimals
         spreadBps,
         annualizedApr,
         binanceMarkPrice: bnMark,
         bitgetMarkPrice: bgMark > 0 ? bgMark : bnMark,
         direction,
         volume24h: Math.round(vol24h),
-        nextFundingTime: parseInt(bn.nextFundingTime || "0", 10),
+        nextFundingTime,
       });
     }
 
-    // Sort opportunities by highest spread BPS descending
-    opportunities.sort((a, b) => b.spreadBps - a.spreadBps);
+    // Sort opportunities by highest 8h funding rate descending by default
+    opportunities.sort((a, b) => {
+      if (b.binanceRate !== a.binanceRate) {
+        return b.binanceRate - a.binanceRate;
+      }
+      return b.spreadBps - a.spreadBps;
+    });
 
     cachedCoins = opportunities;
     lastFetchTime = now;

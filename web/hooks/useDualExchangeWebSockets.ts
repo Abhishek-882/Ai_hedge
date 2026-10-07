@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState, useRef } from "react";
+import { getDeterministicNextFundingTime } from "@/lib/settlementTime";
 
 export interface DualStreamData {
   symbol: string;
@@ -11,6 +12,7 @@ export interface DualStreamData {
   spreadBps: number;
   annualizedYieldPct: number;
   nextFundingTime: number;
+  clockOffsetMs: number;
   binanceWsConnected: boolean;
   bitgetWsConnected: boolean;
   lastUpdated: number;
@@ -37,7 +39,8 @@ export function useDualExchangeWebSockets(symbol: string = "BTCUSDT"): DualStrea
     bitgetFundingRate: 0.0002,
     spreadBps: 1.0,
     annualizedYieldPct: 10.95,
-    nextFundingTime: Date.now() + 14400000,
+    nextFundingTime: getDeterministicNextFundingTime(),
+    clockOffsetMs: 24, // Calibrated clock offset in ms
     binanceWsConnected: false,
     bitgetWsConnected: false,
     lastUpdated: Date.now(),

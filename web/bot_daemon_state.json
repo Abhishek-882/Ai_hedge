@@ -1,0 +1,17 @@
+{
+  "isRunning": true,
+  "runInBackgroundWhenClosed": true,
+  "mode": "AUTONOMOUS_SERVER_24_7",
+  "targetSpreadBps": 2,
+  "startedAt": 1791382174180,
+  "lastCycleAt": 1791382174180,
+  "cyclesCompleted": 1,
+  "activeHedges": 0,
+  "logs": [
+    {
+      "timestamp": "2026-10-07T14:09:34.180Z",
+      "message": "Server background daemon initialized. Configured to run 24/7 even when browser is closed.",
+      "level": "info"
+    }
+  ]
+}
