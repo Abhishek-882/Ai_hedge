@@ -563,6 +563,7 @@ export default function TerminalPage() {
                 onClick={() => {
                   setSelectedSymbol(item.sym as any);
                   setSelectedCoinFundingTime(null);
+                  setSelectedCoinSeed(null);
                   setLoadedPulse(true);
                   setTimeout(() => setLoadedPulse(false), 2000);
                 }}
@@ -581,12 +582,25 @@ export default function TerminalPage() {
         </div>
 
         {(() => {
+          const isMatchingSeed = selectedCoinSeed?.symbol === selectedSymbol;
+          const isMatchingWs = wsData.symbol === selectedSymbol;
+
           const effectiveFundingTime = (selectedCoinFundingTime && selectedCoinFundingTime > Date.now())
             ? selectedCoinFundingTime
-            : (wsData.nextFundingTime || 0);
+            : (isMatchingWs && wsData.nextFundingTime ? wsData.nextFundingTime : 0);
 
-          const liveBnPrice = wsData.binancePrice || selectedCoinSeed?.binancePrice || account?.markPrice || 0;
-          const liveBgPrice = wsData.bitgetPrice || selectedCoinSeed?.bitgetPrice || (liveBnPrice > 0 ? liveBnPrice : 0);
+          const liveBnPrice = isMatchingWs && wsData.binancePrice > 0
+            ? wsData.binancePrice
+            : isMatchingSeed && selectedCoinSeed.binancePrice > 0
+            ? selectedCoinSeed.binancePrice
+            : 0;
+
+          const liveBgPrice = isMatchingWs && wsData.bitgetPrice > 0
+            ? wsData.bitgetPrice
+            : isMatchingSeed && selectedCoinSeed.bitgetPrice > 0
+            ? selectedCoinSeed.bitgetPrice
+            : liveBnPrice;
+
           const livePriceDiff = Math.abs(liveBnPrice - liveBgPrice);
           const livePriceDivergencePct = liveBnPrice > 0 ? (livePriceDiff / liveBnPrice) * 100 : 0;
 
@@ -633,6 +647,7 @@ export default function TerminalPage() {
                     onSymbolChange={(sym) => {
                       setSelectedSymbol(sym);
                       setSelectedCoinFundingTime(null);
+                      setSelectedCoinSeed(null);
                     }}
                     isAutopilotActive={isAutopilotActive}
                     onToggleAutopilot={setIsAutopilotActive}

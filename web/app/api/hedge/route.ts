@@ -139,20 +139,27 @@ export async function POST(req: NextRequest) {
     const formattedQty = formatSymbolQuantity(effectiveQuantity, symbol, refPrice);
     const notional = refPrice * parseFloat(formattedQty);
 
-    // PRE-FLIGHT SAFETY 2: Leverage Calibration & Collateral Check
-    const targetLeverage = body.leverage ? Math.max(1, Math.min(100, parseInt(body.leverage, 10))) : 20;
+    // PRE-FLIGHT SAFETY 2: Dual-Venue Leverage Calibration & Collateral Check
+    const binanceTargetLeverage = body.binanceLeverage
+      ? Math.max(1, Math.min(125, parseInt(body.binanceLeverage, 10)))
+      : body.leverage ? Math.max(1, Math.min(125, parseInt(body.leverage, 10))) : 50;
+
+    const bitgetTargetLeverage = body.bitgetLeverage
+      ? Math.max(1, Math.min(100, parseInt(body.bitgetLeverage, 10)))
+      : body.leverage ? Math.max(1, Math.min(100, parseInt(body.leverage, 10))) : 50;
+
     if (action === "entry") {
       try {
         await Promise.allSettled([
-          setBinanceLeverage(binanceKey, binanceSecret, symbol, targetLeverage, endpoint),
-          bitgetCreds ? setBitgetLeverage(bitgetCreds, symbol, targetLeverage) : Promise.resolve(),
+          setBinanceLeverage(binanceKey, binanceSecret, symbol, binanceTargetLeverage, endpoint),
+          bitgetCreds ? setBitgetLeverage(bitgetCreds, symbol, bitgetTargetLeverage) : Promise.resolve(),
         ]);
       } catch (levErr) {
         console.warn("Leverage calibration notice:", levErr);
       }
     }
 
-    const estRequiredMargin = (notional / targetLeverage) * 1.1; // Configured leverage + 10% safety buffer
+    const estRequiredMarginBinance = (notional / binanceTargetLeverage) * 1.1; // Configured Binance leverage + 10% buffer
     if (action === "entry") {
       try {
         const { data: acc } = await signAndFetchBinance(
@@ -165,11 +172,11 @@ export async function POST(req: NextRequest) {
           endpoint
         );
         const availBal = parseFloat(acc?.availableBalance || "0");
-        if (availBal > 0 && availBal < estRequiredMargin) {
+        if (availBal > 0 && availBal < estRequiredMarginBinance) {
           return NextResponse.json(
             {
               success: false,
-              error: `Pre-flight Collateral Guard: Available margin ($${availBal.toFixed(2)}) is below required initial margin ($${estRequiredMargin.toFixed(2)}) for ${symbol} order.`,
+              error: `Pre-flight Collateral Guard: Available margin ($${availBal.toFixed(2)}) is below required initial margin ($${estRequiredMarginBinance.toFixed(2)}) for ${symbol} order at ${binanceTargetLeverage}x leverage.`,
             },
             { status: 400 }
           );

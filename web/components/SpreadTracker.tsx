@@ -182,7 +182,7 @@ export default function SpreadTracker({
       </div>
 
       {/* High Price Divergence Warning Alert Banner (If Applicable) */}
-      {isHighDivergence && (
+      {isHighDivergence && bnPrice > 0 && bgPrice > 0 && (
         <div className="p-2.5 rounded-lg bg-rose-500/10 border border-rose-500/30 text-rose-300 text-xs flex items-center space-x-2">
           <ShieldAlert className="w-4 h-4 text-rose-400 flex-shrink-0 animate-bounce" />
           <div>

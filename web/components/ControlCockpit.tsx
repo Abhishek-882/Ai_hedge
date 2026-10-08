@@ -30,17 +30,13 @@ const DEFAULT_ASSET_CONFIGS: Record<string, { label: string; base: string; prese
   XRPUSDT: { label: "XRP", base: "XRP", presets: ["50", "100", "200", "500"], step: "1", defaultQty: "100" },
 };
 
-const COIN_MAX_LEVERAGE: Record<string, { binance: number; bitget: number }> = {
-  BTCUSDT: { binance: 50, bitget: 25 },
-  ETHUSDT: { binance: 50, bitget: 25 },
-  SOLUSDT: { binance: 20, bitget: 20 },
-  LTCUSDT: { binance: 50, bitget: 25 },
-  DOGEUSDT: { binance: 20, bitget: 20 },
-  XRPUSDT: { binance: 50, bitget: 25 },
-  NEARUSDT: { binance: 20, bitget: 20 },
-  AVAXUSDT: { binance: 20, bitget: 20 },
-  ADAUSDT: { binance: 20, bitget: 20 },
-};
+function getCoinMaxLeverage(sym: string): { binance: number; bitget: number } {
+  const upper = sym.toUpperCase();
+  if (["BTCUSDT", "ETHUSDT", "LTCUSDT", "XRPUSDT", "SOLUSDT", "BNBUSDT", "BCHUSDT", "DOGEUSDT"].includes(upper)) {
+    return { binance: 50, bitget: 50 };
+  }
+  return { binance: 20, bitget: 20 };
+}
 
 function getAssetMeta(sym: string) {
   if (DEFAULT_ASSET_CONFIGS[sym]) return DEFAULT_ASSET_CONFIGS[sym];
@@ -127,11 +123,50 @@ export default function ControlCockpit({
   const [maxPriceDivergencePct, setMaxPriceDivergencePct] = useState<number>(0.25);
   const [sniperWaitingDirection, setSniperWaitingDirection] = useState<"SHORT_BINANCE_LONG_BITGET" | "LONG_BINANCE_SHORT_BITGET" | null>(null);
 
-  // Max Leverage Engine State
-  const [leverageMode, setLeverageMode] = useState<"MAX" | "20" | "10" | "5" | "2" | "1">("MAX");
-  const coinLimits = COIN_MAX_LEVERAGE[currentAsset] || { binance: 20, bitget: 20 };
-  const effectiveBinanceLeverage = leverageMode === "MAX" ? coinLimits.binance : parseInt(leverageMode, 10);
-  const effectiveBitgetLeverage = leverageMode === "MAX" ? coinLimits.bitget : parseInt(leverageMode, 10);
+  // Dynamic Leverage Engine State
+  const coinLimits = getCoinMaxLeverage(currentAsset);
+  const [leveragePreset, setLeveragePreset] = useState<"MAX" | "50" | "30" | "20" | "10" | "5" | "CUSTOM">("MAX");
+  const [binanceLeverage, setBinanceLeverage] = useState<number>(coinLimits.binance);
+  const [bitgetLeverage, setBitgetLeverage] = useState<number>(coinLimits.bitget);
+  const [showCustomSplit, setShowCustomSplit] = useState<boolean>(false);
+
+  // Sync leverage when coin changes or preset changes
+  useEffect(() => {
+    const limits = getCoinMaxLeverage(currentAsset);
+    if (leveragePreset === "MAX") {
+      setBinanceLeverage(limits.binance);
+      setBitgetLeverage(limits.bitget);
+    } else if (leveragePreset !== "CUSTOM") {
+      const target = parseInt(leveragePreset, 10);
+      setBinanceLeverage(Math.min(target, limits.binance));
+      setBitgetLeverage(Math.min(target, limits.bitget));
+    }
+  }, [currentAsset, leveragePreset]);
+
+  const effectiveBinanceLeverage = Math.max(1, binanceLeverage);
+  const effectiveBitgetLeverage = Math.max(1, bitgetLeverage);
+
+  const handlePresetSelect = (preset: "MAX" | "50" | "30" | "20" | "10" | "5") => {
+    setLeveragePreset(preset);
+    const limits = getCoinMaxLeverage(currentAsset);
+    if (preset === "MAX") {
+      setBinanceLeverage(limits.binance);
+      setBitgetLeverage(limits.bitget);
+      setShowCustomSplit(false);
+    } else {
+      const val = parseInt(preset, 10);
+      setBinanceLeverage(Math.min(val, limits.binance));
+      setBitgetLeverage(Math.min(val, limits.bitget));
+    }
+  };
+
+  const handleEqualizeMax = () => {
+    const limits = getCoinMaxLeverage(currentAsset);
+    setLeveragePreset("MAX");
+    setBinanceLeverage(limits.binance);
+    setBitgetLeverage(limits.bitget);
+    setShowCustomSplit(false);
+  };
 
   // Emergency Kill Switch Safety State
   const [isKillSwitchArmed, setIsKillSwitchArmed] = useState<boolean>(false);
@@ -226,6 +261,8 @@ export default function ControlCockpit({
           manualVenue,
           maxPriceDivergencePct,
           bypassSniper,
+          binanceLeverage: effectiveBinanceLeverage,
+          bitgetLeverage: effectiveBitgetLeverage,
           leverage: effectiveBinanceLeverage,
         }),
       });
@@ -345,6 +382,9 @@ export default function ControlCockpit({
           manualDelayMs,
           manualVenue,
           bypassSniper: true,
+          binanceLeverage: effectiveBinanceLeverage,
+          bitgetLeverage: effectiveBitgetLeverage,
+          leverage: effectiveBinanceLeverage,
         }),
       });
       const data = await res.json();
@@ -388,6 +428,23 @@ export default function ControlCockpit({
   const notionalDollars = numQty * effectivePrice;
   const estMarginBinance = notionalDollars / effectiveBinanceLeverage;
   const estMarginBitget = notionalDollars / effectiveBitgetLeverage;
+  const totalMargin = estMarginBinance + estMarginBitget;
+
+  const hasDisparity = effectiveBinanceLeverage !== effectiveBitgetLeverage;
+  const disparityRatio = hasDisparity
+    ? Math.max(effectiveBinanceLeverage, effectiveBitgetLeverage) / Math.min(effectiveBinanceLeverage, effectiveBitgetLeverage)
+    : 1;
+  const lowerLeverageVenue = effectiveBinanceLeverage < effectiveBitgetLeverage
+    ? "Binance"
+    : effectiveBitgetLeverage < effectiveBinanceLeverage
+    ? "Bitget"
+    : null;
+
+  const DEFAULT_SYMBOLS = ["BTCUSDT", "ETHUSDT", "SOLUSDT", "DOGEUSDT", "XRPUSDT"];
+  const normalizedCurrent = currentAsset.toUpperCase().endsWith("USDT")
+    ? currentAsset.toUpperCase()
+    : `${currentAsset.toUpperCase()}USDT`;
+  const isCustomAsset = !DEFAULT_SYMBOLS.includes(normalizedCurrent);
 
   return (
     <div className="bg-surface rounded-xl border border-border p-3.5 sm:p-5 flex flex-col justify-between font-mono">
@@ -429,74 +486,259 @@ export default function ControlCockpit({
               SELECT TRADING ASSET
             </label>
             <span className="text-[10px] text-accent-amber font-mono">
-              LOADED: {currentAsset}
+              LOADED: {normalizedCurrent}
             </span>
           </div>
           <div className="grid grid-cols-6 gap-1.5">
-            {Object.keys(DEFAULT_ASSET_CONFIGS).map((sym) => (
+            {DEFAULT_SYMBOLS.map((sym) => {
+              const isSelected = normalizedCurrent === sym;
+              const label = sym.replace("USDT", "");
+              return (
+                <button
+                  key={sym}
+                  onClick={() => handleAssetSelect(sym)}
+                  className={`py-1.5 px-2 rounded text-xs font-bold transition-all ${
+                    isSelected
+                      ? "bg-accent-amber text-zinc-950 shadow-md font-black ring-1 ring-amber-400"
+                      : "bg-surface-card hover:bg-zinc-800 border border-border text-zinc-400 hover:text-zinc-200"
+                  }`}
+                >
+                  {label}
+                </button>
+              );
+            })}
+            {isCustomAsset ? (
               <button
-                key={sym}
-                onClick={() => handleAssetSelect(sym)}
-                className={`py-1.5 px-2 rounded text-xs font-bold transition-all ${
-                  currentAsset === sym
-                    ? "bg-accent-amber text-zinc-950 shadow-md font-black ring-1 ring-amber-400"
-                    : "bg-surface-card hover:bg-zinc-800 border border-border text-zinc-400 hover:text-zinc-200"
-                }`}
+                onClick={() => handleAssetSelect(normalizedCurrent)}
+                className="py-1.5 px-2 rounded text-xs font-bold bg-accent-amber text-zinc-950 shadow-md font-black ring-1 ring-amber-400 truncate flex items-center justify-center space-x-1"
+                title={`Active custom asset: ${normalizedCurrent}`}
               >
-                {DEFAULT_ASSET_CONFIGS[sym].label}
+                <span>{normalizedCurrent.replace("USDT", "")}</span>
+                <span className="w-1.5 h-1.5 rounded-full bg-zinc-950 animate-pulse shrink-0" />
               </button>
-            ))}
-            {!DEFAULT_ASSET_CONFIGS[currentAsset] && (
-              <button
-                disabled
-                className="py-1.5 px-2 rounded text-xs font-bold bg-accent-amber text-zinc-950 ring-1 ring-amber-400"
+            ) : (
+              <div
+                className="py-1.5 px-2 rounded text-[10px] text-zinc-600 bg-zinc-900/40 border border-dashed border-zinc-800 flex items-center justify-center select-none"
+                title="Select any ranked coin from the scanner table below"
               >
-                {assetMeta.label}
-              </button>
+                + COIN
+              </div>
             )}
           </div>
         </div>
 
-        {/* MAX LEVERAGE CONTROL ENGINE & COLLATERAL BALANCER */}
-        <div className="mt-4 p-3 rounded-lg bg-zinc-950 border border-zinc-800 space-y-2">
+        {/* DYNAMIC LEVERAGE CONTROL ENGINE & COLLATERAL BALANCER */}
+        <div className="mt-4 p-3 rounded-lg bg-zinc-950 border border-zinc-800 space-y-2.5">
           <div className="flex items-center justify-between text-xs">
             <span className="text-zinc-300 font-bold flex items-center space-x-1.5 text-[11px]">
               <Gauge className="w-3.5 h-3.5 text-accent-amber" />
               <span>DYNAMIC LEVERAGE ENGINE</span>
             </span>
-            <span className="text-[10px] font-mono text-zinc-400">
-              BN: <strong className="text-accent-amber">{effectiveBinanceLeverage}x</strong> • BG:{" "}
-              <strong className="text-cyan-400">{effectiveBitgetLeverage}x</strong>
-            </span>
-          </div>
-
-          <div className="grid grid-cols-6 gap-1.5">
-            {(["MAX", "20", "10", "5", "2", "1"] as const).map((m) => (
+            <div className="flex items-center space-x-2">
+              <span className="text-[10px] font-mono text-zinc-400">
+                BN: <strong className="text-accent-amber">{effectiveBinanceLeverage}x</strong> • BG:{" "}
+                <strong className="text-cyan-400">{effectiveBitgetLeverage}x</strong>
+              </span>
               <button
-                key={m}
-                onClick={() => setLeverageMode(m)}
-                className={`py-1 rounded text-[10px] font-bold transition-all border ${
-                  leverageMode === m
-                    ? "bg-amber-500/20 text-accent-amber border-amber-500/50 shadow-sm"
-                    : "bg-surface-card border-border text-zinc-400 hover:text-zinc-200 hover:border-zinc-700"
+                onClick={() => setShowCustomSplit((prev) => !prev)}
+                className={`px-1.5 py-0.5 rounded text-[9px] font-bold border transition-colors ${
+                  showCustomSplit
+                    ? "bg-amber-500/20 text-accent-amber border-amber-500/40"
+                    : "bg-zinc-900 text-zinc-400 border-zinc-800 hover:text-zinc-200"
                 }`}
+                title="Toggle independent venue leverage split sliders"
               >
-                {m === "MAX" ? "MAX LEV" : `${m}x`}
+                ⚡ {showCustomSplit ? "Hide Split" : "Custom Split"}
               </button>
-            ))}
+            </div>
           </div>
 
-          {/* Collateral Margin Allocation Breakdown */}
-          <div className="grid grid-cols-2 gap-2 text-[10px] pt-1 border-t border-zinc-800/80">
-            <div className="p-1.5 rounded bg-zinc-900 border border-zinc-800 flex justify-between items-center">
-              <span className="text-zinc-500">Binance Margin ({effectiveBinanceLeverage}x):</span>
-              <strong className="text-accent-amber font-mono">${estMarginBinance.toFixed(2)}</strong>
+          {/* Quick Preset Buttons */}
+          <div className="grid grid-cols-6 gap-1.5">
+            {(["MAX", "50", "30", "20", "10", "5"] as const).map((m) => {
+              const isSelected = leveragePreset === m && !showCustomSplit;
+              return (
+                <button
+                  key={m}
+                  onClick={() => handlePresetSelect(m)}
+                  className={`py-1 rounded text-[10px] font-bold transition-all border ${
+                    isSelected
+                      ? "bg-amber-500/20 text-accent-amber border-amber-500/50 shadow-sm"
+                      : "bg-surface-card border-border text-zinc-400 hover:text-zinc-200 hover:border-zinc-700"
+                  }`}
+                >
+                  {m === "MAX" ? "MAX LEV" : `${m}x`}
+                </button>
+              );
+            })}
+          </div>
+
+          {/* Expandable Custom Venue Split Panel */}
+          {showCustomSplit && (
+            <div className="p-2.5 rounded bg-zinc-900/90 border border-zinc-800 space-y-2.5 text-[10px] animate-fadeIn">
+              <div className="flex items-center justify-between text-zinc-300 font-bold border-b border-zinc-800 pb-1.5">
+                <span className="flex items-center space-x-1">
+                  <Sliders className="w-3 h-3 text-accent-amber" />
+                  <span>INDEPENDENT VENUE LEVERAGE SPLIT</span>
+                </span>
+                <button
+                  onClick={handleEqualizeMax}
+                  className="px-2 py-0.5 rounded bg-amber-500 text-zinc-950 font-black text-[9px] hover:bg-amber-400 transition-colors shadow-sm"
+                >
+                  ⚡ Try to Use Max ({coinLimits.binance}x / {coinLimits.bitget}x)
+                </button>
+              </div>
+
+              {/* Binance Slider */}
+              <div className="space-y-1">
+                <div className="flex items-center justify-between">
+                  <span className="text-zinc-400 flex items-center space-x-1">
+                    <span className="w-1.5 h-1.5 rounded-full bg-accent-amber" />
+                    <span>Binance Leverage:</span>
+                  </span>
+                  <div className="flex items-center space-x-1">
+                    <strong className="text-accent-amber font-mono text-xs">{binanceLeverage}x</strong>
+                    <span className="text-zinc-500 text-[9px]">(Max {coinLimits.binance}x)</span>
+                  </div>
+                </div>
+                <div className="flex items-center space-x-2">
+                  <input
+                    type="range"
+                    min="1"
+                    max={coinLimits.binance}
+                    step="1"
+                    value={binanceLeverage}
+                    onChange={(e) => {
+                      setBinanceLeverage(parseInt(e.target.value, 10));
+                      setLeveragePreset("CUSTOM");
+                    }}
+                    className="w-full accent-amber-400 h-1 bg-zinc-800 rounded cursor-pointer"
+                  />
+                  <div className="flex space-x-1 shrink-0">
+                    {[10, 20, 30, coinLimits.binance].filter((v, i, a) => a.indexOf(v) === i).map((v) => (
+                      <button
+                        key={v}
+                        onClick={() => {
+                          setBinanceLeverage(v);
+                          setLeveragePreset("CUSTOM");
+                        }}
+                        className={`px-1.5 py-0.5 rounded text-[9px] font-mono font-bold border ${
+                          binanceLeverage === v
+                            ? "bg-amber-500/20 text-accent-amber border-amber-500/40"
+                            : "bg-zinc-800 text-zinc-400 border-zinc-700 hover:text-zinc-200"
+                        }`}
+                      >
+                        {v}x
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              </div>
+
+              {/* Bitget Slider */}
+              <div className="space-y-1">
+                <div className="flex items-center justify-between">
+                  <span className="text-zinc-400 flex items-center space-x-1">
+                    <span className="w-1.5 h-1.5 rounded-full bg-cyan-400" />
+                    <span>Bitget Leverage:</span>
+                  </span>
+                  <div className="flex items-center space-x-1">
+                    <strong className="text-cyan-400 font-mono text-xs">{bitgetLeverage}x</strong>
+                    <span className="text-zinc-500 text-[9px]">(Max {coinLimits.bitget}x)</span>
+                  </div>
+                </div>
+                <div className="flex items-center space-x-2">
+                  <input
+                    type="range"
+                    min="1"
+                    max={coinLimits.bitget}
+                    step="1"
+                    value={bitgetLeverage}
+                    onChange={(e) => {
+                      setBitgetLeverage(parseInt(e.target.value, 10));
+                      setLeveragePreset("CUSTOM");
+                    }}
+                    className="w-full accent-cyan-400 h-1 bg-zinc-800 rounded cursor-pointer"
+                  />
+                  <div className="flex space-x-1 shrink-0">
+                    {[10, 20, 30, coinLimits.bitget].filter((v, i, a) => a.indexOf(v) === i).map((v) => (
+                      <button
+                        key={v}
+                        onClick={() => {
+                          setBitgetLeverage(v);
+                          setLeveragePreset("CUSTOM");
+                        }}
+                        className={`px-1.5 py-0.5 rounded text-[9px] font-mono font-bold border ${
+                          bitgetLeverage === v
+                            ? "bg-cyan-500/20 text-cyan-400 border-cyan-500/40"
+                            : "bg-zinc-800 text-zinc-400 border-zinc-700 hover:text-zinc-200"
+                        }`}
+                      >
+                        {v}x
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              </div>
             </div>
-            <div className="p-1.5 rounded bg-zinc-900 border border-zinc-800 flex justify-between items-center">
-              <span className="text-zinc-500">Bitget Margin ({effectiveBitgetLeverage}x):</span>
-              <strong className="text-cyan-400 font-mono">${estMarginBitget.toFixed(2)}</strong>
+          )}
+
+          {/* Adaptable Collateral Margin Breakdown */}
+          <div className="grid grid-cols-2 gap-2 text-[10px] pt-1 border-t border-zinc-800/80">
+            <div className="p-2 rounded bg-zinc-900 border border-zinc-800 flex justify-between items-center">
+              <div className="flex flex-col">
+                <span className="text-zinc-400 font-medium">Binance Margin ({effectiveBinanceLeverage}x):</span>
+                <span className="text-[9px] text-zinc-500 font-mono">Notional: ${notionalDollars.toFixed(2)}</span>
+              </div>
+              <strong className="text-accent-amber font-mono text-xs">${estMarginBinance.toFixed(2)}</strong>
+            </div>
+            <div className="p-2 rounded bg-zinc-900 border border-zinc-800 flex justify-between items-center">
+              <div className="flex flex-col">
+                <span className="text-zinc-400 font-medium">Bitget Margin ({effectiveBitgetLeverage}x):</span>
+                <span className="text-[9px] text-zinc-500 font-mono">Notional: ${notionalDollars.toFixed(2)}</span>
+              </div>
+              <strong className="text-cyan-400 font-mono text-xs">${estMarginBitget.toFixed(2)}</strong>
             </div>
           </div>
+
+          {/* Combined Margin Requirement */}
+          <div className="flex items-center justify-between px-2.5 py-1.5 rounded bg-zinc-900/60 border border-zinc-800/60 text-[10px]">
+            <span className="text-zinc-400 flex items-center space-x-1.5">
+              <span>Total Combined Collateral:</span>
+              <span className="text-[9px] text-zinc-500">(Binance + Bitget)</span>
+            </span>
+            <strong className="text-zinc-100 font-mono text-xs">${totalMargin.toFixed(2)}</strong>
+          </div>
+
+          {/* Collateral Parity / Disparity Analyzer */}
+          {!hasDisparity ? (
+            <div className="px-2.5 py-1.5 rounded bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-[10px] flex items-center justify-between">
+              <span className="flex items-center space-x-1.5">
+                <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+                <span>1:1 Leverage Parity ({effectiveBinanceLeverage}x) — Equal capital utilization (${estMarginBinance.toFixed(2)} each)</span>
+              </span>
+              <span className="font-bold font-mono text-[9px] uppercase px-1.5 py-0.2 rounded bg-emerald-500/20 text-emerald-300">
+                1:1 MATCH
+              </span>
+            </div>
+          ) : (
+            <div className="px-2.5 py-1.5 rounded bg-amber-500/10 border border-amber-500/30 text-amber-300 text-[10px] flex items-center justify-between gap-2">
+              <div className="flex items-center space-x-1.5">
+                <AlertTriangle className="w-3.5 h-3.5 text-amber-400 shrink-0" />
+                <span>
+                  Disparity ({disparityRatio.toFixed(1)}x): {lowerLeverageVenue} ({Math.min(effectiveBinanceLeverage, effectiveBitgetLeverage)}x) consumes{" "}
+                  <strong>{disparityRatio.toFixed(1)}x more margin</strong> (${(lowerLeverageVenue === "Binance" ? estMarginBinance : estMarginBitget).toFixed(2)}) due to lower leverage.
+                </span>
+              </div>
+              <button
+                onClick={handleEqualizeMax}
+                className="px-2 py-0.5 rounded bg-amber-500 text-zinc-950 font-black text-[9px] whitespace-nowrap hover:bg-amber-400 transition-colors shadow-sm shrink-0"
+                title="Equalize to coin max leverage to minimize margin commitment"
+              >
+                ⚡ Try Max
+              </button>
+            </div>
+          )}
         </div>
 
         {/* AUTO-WAIT LIMIT SNIPER & PRICE DIVERGENCE GUARD */}
