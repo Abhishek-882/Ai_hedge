@@ -1,639 +1,293 @@
 "use client";
 
-import React, { useState, useEffect, useCallback, useRef } from "react";
-import { KeyRound, RefreshCw, Wallet, ShieldCheck, ExternalLink, Activity, Radio, History, User } from "lucide-react";
+import React, { useState, useEffect } from "react";
+import Link from "next/link";
+import Navbar from "@/components/Navbar";
+import Footer from "@/components/Footer";
 import PrismaticCore3D from "@/components/PrismaticCore3D";
-import TelemetryHUD from "@/components/TelemetryHUD";
-import SpreadTracker from "@/components/SpreadTracker";
-import ControlCockpit, { SupportedAsset } from "@/components/ControlCockpit";
-import PositionsTable from "@/components/PositionsTable";
-import AllCoinsScanner from "@/components/AllCoinsScanner";
-import HedgeHistoryTable, { HedgeTradeRecord } from "@/components/HedgeHistoryTable";
-import SettingsModal from "@/components/SettingsModal";
-import UserProfileModal from "@/components/UserProfileModal";
-import ServerDaemonIndicator from "@/components/ServerDaemonIndicator";
-import { useDualExchangeWebSockets } from "@/hooks/useDualExchangeWebSockets";
+import {
+  ShieldCheck,
+  Zap,
+  TrendingUp,
+  Activity,
+  ArrowRight,
+  Radio,
+  Lock,
+  Layers,
+  Clock,
+  Coins,
+  CheckCircle2,
+  ExternalLink,
+  ChevronRight,
+  Terminal,
+} from "lucide-react";
 
-export default function DashboardPage() {
-  const [selectedSymbol, setSelectedSymbol] = useState<SupportedAsset>("BTCUSDT");
-
-  // Live Dual-Exchange WebSockets Stream
-  const wsData = useDualExchangeWebSockets(selectedSymbol);
-
-  const [account, setAccount] = useState<any>(null);
-  const [bitgetAccount, setBitgetAccount] = useState<any>(null);
-  const [positions, setPositions] = useState<any[]>([]);
-  const [accountError, setAccountError] = useState<string | null>(null);
-  const [bitgetError, setBitgetError] = useState<string | null>(null);
-  const [accountEndpoint, setAccountEndpoint] = useState<string | null>(null);
-  const [hasCustomKey, setHasCustomKey] = useState(false);
-  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
-  const [isProfileOpen, setIsProfileOpen] = useState(false);
-  const [isRefreshing, setIsRefreshing] = useState(false);
-  const [isStudioMode, setIsStudioMode] = useState(false);
-
-  // 24/7 Autonomous Autopilot State
-  const [isAutopilotActive, setIsAutopilotActive] = useState(false);
-  const [autopilotState, setAutopilotState] = useState<string>("IDLE_SCANNING");
-  const [minSpreadEntry, setMinSpreadEntry] = useState<number>(12);
-  const [exitSpreadTarget, setExitSpreadTarget] = useState<number>(2);
-  const lastAutopilotActionRef = useRef<number>(0);
-
-  // Persistent Trade History State
-  const [tradeHistory, setTradeHistory] = useState<HedgeTradeRecord[]>([]);
-  const [closeError, setCloseError] = useState<string | null>(null);
-
-  const fetchTradeHistory = useCallback(async () => {
-    try {
-      const res = await fetch("/api/trades", { cache: "no-store" });
-      const data = await res.json();
-      if (data.success && Array.isArray(data.trades) && data.trades.length > 0) {
-        setTradeHistory(data.trades);
-        if (typeof window !== "undefined") {
-          try {
-            localStorage.setItem("HEDGE_TRADE_HISTORY", JSON.stringify(data.trades));
-          } catch {}
-        }
-      }
-    } catch {}
-  }, []);
+export default function IntroPage() {
+  const [user, setUser] = useState<{ email: string; role: string; username: string } | null>(null);
+  const [spreadBps, setSpreadBps] = useState<number>(14.2);
 
   useEffect(() => {
-    if (typeof window !== "undefined") {
-      try {
-        const saved = localStorage.getItem("HEDGE_TRADE_HISTORY");
-        if (saved) {
-          setTradeHistory(JSON.parse(saved));
+    fetch("/api/auth", { cache: "no-store" })
+      .then((res) => res.json())
+      .then((data) => {
+        if (data.success && data.isLoggedIn && data.user) {
+          setUser(data.user);
         }
-      } catch {}
-    }
-    fetchTradeHistory();
-  }, [fetchTradeHistory]);
+      })
+      .catch(() => {});
 
-  const handleClearHistory = useCallback(async () => {
-    setTradeHistory([]);
-    if (typeof window !== "undefined") {
-      try {
-        localStorage.removeItem("HEDGE_TRADE_HISTORY");
-      } catch {}
-    }
-    try {
-      await fetch("/api/trades", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action: "clear" }),
-      });
-    } catch {}
-  }, []);
-
-  const handleSelectCoinFromScanner = useCallback((symbol: string) => {
-    setSelectedSymbol(symbol as any);
-    const el = document.getElementById("execution-cockpit-section");
-    if (el) {
-      el.scrollIntoView({ behavior: "smooth" });
-    }
-  }, []);
-
-  const getVaultHeaders = useCallback((): Record<string, string> => {
-    if (typeof window === "undefined") return {};
-    const headers: Record<string, string> = {};
-
-    const key = localStorage.getItem("BINANCE_KEY") || "";
-    const secret = localStorage.getItem("BINANCE_SECRET") || "";
-    const endpoint = localStorage.getItem("BINANCE_ENDPOINT") || "";
-    if (key) headers["x-binance-key"] = key;
-    if (secret) headers["x-binance-secret"] = secret;
-    if (endpoint) headers["x-binance-endpoint"] = endpoint;
-
-    const bitgetKey = localStorage.getItem("BITGET_KEY") || "";
-    const bitgetSecret = localStorage.getItem("BITGET_SECRET") || "";
-    const bitgetPass = localStorage.getItem("BITGET_PASSPHRASE") || "";
-    const bitgetEnv = localStorage.getItem("BITGET_ENV") || "demo";
-    if (bitgetKey) headers["x-bitget-key"] = bitgetKey;
-    if (bitgetSecret) headers["x-bitget-secret"] = bitgetSecret;
-    if (bitgetPass) headers["x-bitget-passphrase"] = bitgetPass;
-    if (bitgetEnv) headers["x-bitget-env"] = bitgetEnv;
-
-    return headers;
-  }, []);
-
-  const fetchData = useCallback(async () => {
-    setIsRefreshing(true);
-    try {
-      if (typeof window !== "undefined") {
-        setHasCustomKey(Boolean(localStorage.getItem("BINANCE_KEY")));
-      }
-
-      const headers = getVaultHeaders();
-      const ts = Date.now();
-
-      let binancePositions: any[] = [];
-      let bitgetPositions: any[] = [];
-
-      // 1. Binance Account & Positions (Strict Uncached)
-      try {
-        const accountRes = await fetch(`/api/account?_t=${ts}`, { headers, cache: "no-store" });
-        const accountData = await accountRes.json();
-        if (accountData.success) {
-          setAccount(accountData);
-          binancePositions = (accountData.positions || []).map((p: any) => ({ ...p, venue: p.venue || "Binance" }));
-          setAccountError(null);
-          if (accountData.endpoint) setAccountEndpoint(accountData.endpoint);
-        } else {
-          setAccount(null);
-          setAccountError(accountData.error || "Failed to authenticate with Binance");
-          if (accountData.endpoint) setAccountEndpoint(accountData.endpoint);
-        }
-      } catch (err: any) {
-        setAccount(null);
-        setAccountError(err.message || "Network error fetching Binance");
-      }
-
-      // 2. Bitget Account (Strict Uncached)
-      try {
-        const bitgetRes = await fetch(`/api/bitget/account?_t=${ts}`, { headers, cache: "no-store" });
-        const bitgetData = await bitgetRes.json();
-        if (bitgetData.success) {
-          setBitgetAccount(bitgetData);
-          bitgetPositions = (bitgetData.positions || []).map((p: any) => ({ ...p, venue: p.venue || "Bitget" }));
-          setBitgetError(null);
-        } else {
-          setBitgetAccount(null);
-          setBitgetError(bitgetData.error || "Failed to authenticate with Bitget");
-        }
-      } catch (err: any) {
-        setBitgetAccount(null);
-        setBitgetError(err.message || "Network error fetching Bitget");
-      }
-
-      setPositions([...binancePositions, ...bitgetPositions]);
-    } catch (err: any) {
-      console.error("Dashboard fetch error:", err);
-    } finally {
-      setIsRefreshing(false);
-    }
-  }, [getVaultHeaders]);
-
-  useEffect(() => {
-    fetchData();
-    // Fast 3-second polling for live open positions and balance synchronization
-    const interval = setInterval(fetchData, 3000);
+    // Subtle gentle basis oscillation for hero 3D visualizer
+    const interval = setInterval(() => {
+      setSpreadBps(10 + Math.sin(Date.now() / 2000) * 6);
+    }, 2000);
     return () => clearInterval(interval);
-  }, [fetchData]);
+  }, []);
 
-  const handleTradeExecuted = useCallback((trade: HedgeTradeRecord) => {
-    setTradeHistory((prev) => {
-      const updated = [trade, ...prev].slice(0, 100);
-      if (typeof window !== "undefined") {
-        try {
-          localStorage.setItem("HEDGE_TRADE_HISTORY", JSON.stringify(updated));
-        } catch {}
-      }
-      return updated;
-    });
-    fetchData();
-    fetchTradeHistory();
-  }, [fetchData, fetchTradeHistory]);
-
-  // 24/7 Autonomous Scanner & Auto-Hedger Loop
-  useEffect(() => {
-    if (!isAutopilotActive) return;
-
-    const autopilotInterval = setInterval(async () => {
-      const now = Date.now();
-      if (now - lastAutopilotActionRef.current < 10000) return; // 10s minimum throttle
-
-      const spread = wsData.spreadBps;
-
-      // Rule: Spread >= minSpreadEntry bps -> Enter Dual Hedge (Binance Short + Bitget Long)
-      if (autopilotState === "IDLE_SCANNING" && spread >= minSpreadEntry) {
-        try {
-          setAutopilotState("ENTERING_HEDGE");
-          lastAutopilotActionRef.current = now;
-
-          const res = await fetch("/api/hedge", {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-              ...getVaultHeaders(),
-            },
-            body: JSON.stringify({
-              action: "entry",
-              quantity: 0.005,
-              leg1Side: "SELL",
-            }),
-          });
-          const data = await res.json();
-          if (data.success) {
-            setAutopilotState("HEDGED_MONITORING");
-            fetchData();
-          } else {
-            setAutopilotState("IDLE_SCANNING");
-          }
-        } catch {
-          setAutopilotState("IDLE_SCANNING");
-        }
-      }
-
-      // Rule: Spread <= exitSpreadTarget bps -> Close Dual Hedge (Mean Reverted)
-      if (autopilotState === "HEDGED_MONITORING" && spread <= exitSpreadTarget) {
-        try {
-          setAutopilotState("CLOSING_HEDGE");
-          lastAutopilotActionRef.current = now;
-
-          const res = await fetch("/api/close", {
-            method: "POST",
-            headers: getVaultHeaders(),
-          });
-          const data = await res.json();
-          if (data.success) {
-            setAutopilotState("COOLDOWN");
-            fetchData();
-            setTimeout(() => setAutopilotState("IDLE_SCANNING"), 30000); // 30s cooldown
-          }
-        } catch {
-          setAutopilotState("HEDGED_MONITORING");
-        }
-      }
-    }, 3000);
-
-    return () => clearInterval(autopilotInterval);
-  }, [isAutopilotActive, autopilotState, wsData.spreadBps, minSpreadEntry, exitSpreadTarget, getVaultHeaders, fetchData]);
-
-  const handleClosePosition = async (targetSymbol?: string) => {
-    try {
-      const res = await fetch("/api/close", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          ...getVaultHeaders(),
-        },
-        body: JSON.stringify({ symbol: targetSymbol || "ALL" }),
-      });
-      const data = await res.json();
-      if (data.success) {
-        setCloseError(null);
-        fetchData();
-      } else {
-        const errMsg = data.error || data.message || "Failed to close position";
-        setCloseError(errMsg);
-        setTimeout(() => setCloseError(null), 6000);
-      }
-    } catch (err: any) {
-      setCloseError(`Error: ${err.message}`);
-      setTimeout(() => setCloseError(null), 6000);
-    }
-  };
-
-  // Dynamic real-time combined unrealized PnL across all open positions
-  const dynamicNetPnl = positions.reduce((acc, pos) => {
-    const isCurrentAsset = Boolean(selectedSymbol && pos.symbol === selectedSymbol);
-    const rawLivePrice = pos.venue === "Bitget" ? wsData.bitgetPrice : wsData.binancePrice;
-    const baselinePrice = pos.markPrice || pos.entryPrice;
-    const isPlausible = Boolean(
-      rawLivePrice > 0 &&
-      baselinePrice > 0 &&
-      Math.abs(rawLivePrice - baselinePrice) / baselinePrice < 0.20
-    );
-    const liveMarkPrice = (isCurrentAsset && isPlausible) ? rawLivePrice : baselinePrice;
-    const pnl = (isCurrentAsset && isPlausible && pos.amount !== 0 && pos.entryPrice > 0)
-      ? (liveMarkPrice - pos.entryPrice) * pos.amount
-      : (pos.unrealizedPnl || 0);
-    return acc + pnl;
-  }, 0);
-
-  const sessionRealizedPnl = tradeHistory.reduce((acc, t) => acc + (t.realizedPnl || 0), 0);
+  const marketHighlights = [
+    { symbol: "BTCUSDT", bnRate: "+0.0100%", bgRate: "+0.0245%", spread: "14.5 bps", apy: "15.8%", dir: "Short BN + Long BG" },
+    { symbol: "ETHUSDT", bnRate: "+0.0080%", bgRate: "+0.0210%", spread: "13.0 bps", apy: "14.2%", dir: "Short BN + Long BG" },
+    { symbol: "SOLUSDT", bnRate: "-0.0050%", bgRate: "+0.0180%", spread: "23.0 bps", apy: "25.1%", dir: "Short BN + Long BG" },
+    { symbol: "DOGEUSDT", bnRate: "+0.0120%", bgRate: "+0.0350%", spread: "23.0 bps", apy: "25.1%", dir: "Short BN + Long BG" },
+  ];
 
   return (
-    <main className="min-h-screen bg-background text-zinc-100 p-4 md:p-8 max-w-7xl mx-auto font-mono">
-      {/* Top Header Bar */}
-      <header className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4 border-b border-border pb-5 mb-6">
-        <div>
-          <div className="flex flex-wrap items-center gap-2">
-            <span className={`w-2.5 h-2.5 rounded-full ${accountError ? "bg-accent-rose animate-ping" : "bg-accent-amber animate-pulse"}`} />
-            <h1 className="text-lg md:text-xl font-bold tracking-tight uppercase">
-              FUNDING RATE ARBITRAGE // COCKPIT
-            </h1>
-            <span className="px-2 py-0.5 rounded text-[10px] bg-zinc-800 text-zinc-300 border border-border">
-              {accountEndpoint ? accountEndpoint.replace("https://", "") : "TESTNET v1.2"}
-            </span>
+    <div className="min-h-screen bg-[#09090b] text-zinc-100 flex flex-col font-mono selection:bg-accent-amber/20 selection:text-accent-amber">
+      <Navbar />
 
-            {/* WebSocket Stream Live Badges */}
-            <div className="flex items-center space-x-1.5 ml-1">
-              <span className={`px-2 py-0.5 rounded text-[10px] flex items-center space-x-1 border ${
-                wsData.binanceWsConnected
-                  ? "bg-amber-500/10 text-amber-400 border-amber-500/30"
-                  : "bg-zinc-800 text-zinc-500 border-border"
-              }`}>
-                <Radio className={`w-2.5 h-2.5 ${wsData.binanceWsConnected ? "text-amber-400 animate-pulse" : "text-zinc-600"}`} />
-                <span>BN WS</span>
-              </span>
+      <main className="flex-1 w-full overflow-hidden">
+        {/* Background Gradients & Grids */}
+        <div className="absolute inset-0 bg-[linear-gradient(to_right,#1f29370d_1px,transparent_1px),linear-gradient(to_bottom,#1f29370d_1px,transparent_1px)] bg-[size:48px_48px] pointer-events-none -z-10" />
+        <div className="absolute top-1/4 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[700px] h-[350px] bg-amber-500/5 blur-[120px] rounded-full pointer-events-none -z-10" />
 
-              <span className={`px-2 py-0.5 rounded text-[10px] flex items-center space-x-1 border ${
-                wsData.bitgetWsConnected
-                  ? "bg-cyan-500/10 text-cyan-400 border-cyan-500/30"
-                  : "bg-zinc-800 text-zinc-500 border-border"
-              }`}>
-                <Radio className={`w-2.5 h-2.5 ${wsData.bitgetWsConnected ? "text-cyan-400 animate-pulse" : "text-zinc-600"}`} />
-                <span>BG WS</span>
-              </span>
-            </div>
-
-            {account?.keyMask && (
-              <span className={`px-2 py-0.5 rounded text-[10px] font-mono border ${
-                account.isCustomKey
-                  ? "bg-amber-500/10 text-amber-400 border-amber-500/30"
-                  : "bg-zinc-800 text-zinc-400 border-zinc-700"
-              }`}>
-                BN: {account.keyMask} {account.isCustomKey ? "(VAULT)" : "(ENV)"}
-              </span>
-            )}
-
-            {bitgetAccount?.keyMask && (
-              <span className={`px-2 py-0.5 rounded text-[10px] font-mono border ${
-                bitgetAccount.isCustomKey
-                  ? "bg-cyan-500/10 text-cyan-400 border-cyan-500/30"
-                  : "bg-zinc-800 text-zinc-400 border-zinc-700"
-              }`}>
-                BG: {bitgetAccount.keyMask} {bitgetAccount.isCustomKey ? "(VAULT)" : "(ENV)"}
-              </span>
-            )}
+        {/* Hero Section */}
+        <section className="max-w-7xl mx-auto px-4 md:px-8 pt-12 pb-16 md:pt-20 md:pb-24 flex flex-col items-center text-center space-y-6">
+          {/* Status Badge */}
+          <div className="inline-flex items-center space-x-2 px-3 py-1 rounded-full bg-amber-500/10 border border-amber-500/30 text-accent-amber text-xs font-semibold animate-in fade-in duration-500">
+            <span className="w-2 h-2 rounded-full bg-accent-emerald animate-pulse" />
+            <span>INSTITUTIONAL DELTA-NEUTRAL ARBITRAGE TERMINAL v2.4</span>
           </div>
-          <p className="text-xs text-zinc-500 mt-1">
-            Delta-Neutral Basis Capture • Dual-Stream WebSockets • Binance USD-M & Bitget Perpetuals
+
+          {/* Main Headline */}
+          <h1 className="text-3xl sm:text-5xl md:text-6xl font-extrabold tracking-tight text-zinc-100 max-w-4xl leading-[1.15]">
+            Capture Cross-Exchange Funding Rates with <span className="text-accent-amber underline decoration-amber-500/40">Zero Directional Risk</span>.
+          </h1>
+
+          {/* Subheading */}
+          <p className="text-sm md:text-base text-zinc-400 max-w-2xl leading-relaxed">
+            Simultaneous atomic execution across <strong>Binance USD-M</strong> and <strong>Bitget Perpetuals</strong>. Harvest persistent funding rate divergences with sub-250ms inter-leg delta and 24/7 autonomous server execution.
           </p>
-        </div>
 
-        {/* Live Wallet & Account Stats */}
-        <div className="flex flex-wrap items-center gap-3">
-          {/* Binance Wallet */}
-          <div className="flex items-center space-x-2 bg-surface px-3 py-2 rounded-lg border border-border text-xs">
-            <Wallet className={`w-4 h-4 ${accountError ? "text-accent-rose" : "text-accent-amber"}`} />
-            <div>
-              <div className="text-[10px] text-zinc-500">BINANCE WALLET</div>
-              <div className="font-bold text-zinc-200">
-                {account?.totalWalletBalance !== undefined
-                  ? `$${account.totalWalletBalance.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 4 })} USDT`
-                  : accountError
-                  ? <span className="text-accent-rose">AUTH ERROR</span>
-                  : "LOADING..."}
-              </div>
-            </div>
-          </div>
+          {/* CTA Buttons */}
+          <div className="flex flex-col sm:flex-row items-center gap-3 pt-4 w-full sm:w-auto">
+            <Link
+              href="/terminal"
+              className="w-full sm:w-auto px-6 py-3 rounded-xl bg-accent-amber hover:bg-amber-400 text-zinc-950 font-bold text-xs tracking-wider uppercase transition-all flex items-center justify-center space-x-2 shadow-xl shadow-amber-500/10 hover:scale-[1.02]"
+            >
+              <span>{user ? "Enter Trading Terminal" : "Launch Trading Cockpit"}</span>
+              <ArrowRight className="w-4 h-4" />
+            </Link>
 
-          {/* Bitget Equity */}
-          <div className="flex items-center space-x-2 bg-surface px-3 py-2 rounded-lg border border-border text-xs">
-            <Wallet className={`w-4 h-4 ${bitgetError ? "text-accent-rose" : "text-cyan-400"}`} />
-            <div>
-              <div className="text-[10px] text-zinc-500">BITGET EQUITY</div>
-              <div className="font-bold text-zinc-200">
-                {bitgetAccount?.equity !== undefined
-                  ? `$${bitgetAccount.equity.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 4 })} USDT`
-                  : bitgetError
-                  ? <span className="text-accent-rose">AUTH ERROR</span>
-                  : "SYNCING..."}
-              </div>
-            </div>
-          </div>
+            <Link
+              href="/history"
+              className="w-full sm:w-auto px-6 py-3 rounded-xl bg-surface hover:bg-zinc-800 text-zinc-200 border border-border text-xs font-semibold transition-all flex items-center justify-center space-x-2 hover:border-zinc-700"
+            >
+              <span>View Trade History Log</span>
+            </Link>
 
-          {/* Session Realized PnL Tracker */}
-          <div className="flex items-center space-x-2 bg-surface px-3 py-2 rounded-lg border border-border text-xs">
-            <History className="w-4 h-4 text-accent-cyan" />
-            <div>
-              <div className="text-[10px] text-zinc-500">SESSION REALIZED PnL</div>
-              <div className={`font-bold ${sessionRealizedPnl >= 0 ? "text-accent-emerald" : "text-accent-rose"}`}>
-                {sessionRealizedPnl >= 0 ? "+" : ""}${sessionRealizedPnl.toFixed(4)} USDT
-              </div>
-            </div>
-          </div>
-
-          {/* Unrealized PnL (Combined Live Binance + Bitget with 4 decimals) */}
-          <div className="flex items-center space-x-2 bg-surface px-3 py-2 rounded-lg border border-border text-xs">
-            <ShieldCheck className="w-4 h-4 text-accent-emerald" />
-            <div>
-              <div className="text-[10px] text-zinc-500">NET UNREALIZED PnL</div>
-              <div className={`font-bold ${dynamicNetPnl >= 0 ? "text-accent-emerald" : "text-accent-rose"}`}>
-                {positions.length > 0
-                  ? `${dynamicNetPnl >= 0 ? "+" : ""}$${dynamicNetPnl.toFixed(4)} USDT`
-                  : ((account?.totalUnrealizedProfit !== undefined || bitgetAccount?.unrealizedPnL !== undefined)
-                      ? `$0.0000 USDT`
-                      : "---")}
-              </div>
-            </div>
-          </div>
-
-          {/* 24/7 Server Autonomous Bot Status Indicator */}
-          <ServerDaemonIndicator onOpenProfile={() => setIsProfileOpen(true)} />
-
-          {/* User Profile Button */}
-          <button
-            onClick={() => setIsProfileOpen(true)}
-            className="flex items-center space-x-1.5 px-3 py-2 rounded-lg bg-surface hover:bg-zinc-800 border border-border text-xs text-zinc-300 transition-colors"
-            title="Institutional Profile & Settings"
-          >
-            <User className="w-3.5 h-3.5 text-accent-cyan" />
-            <span className="hidden sm:inline">Profile</span>
-          </button>
-
-          <button
-            onClick={() => setIsSettingsOpen(true)}
-            className="flex items-center space-x-1.5 px-3 py-2 rounded-lg bg-surface hover:bg-zinc-800 border border-border text-xs text-zinc-300 transition-colors"
-          >
-            <KeyRound className="w-3.5 h-3.5 text-accent-amber" />
-            <span>Vault</span>
-          </button>
-
-          <button
-            onClick={fetchData}
-            disabled={isRefreshing}
-            className="p-2 rounded-lg bg-surface hover:bg-zinc-800 border border-border text-zinc-400 hover:text-zinc-200 transition-colors"
-          >
-            <RefreshCw className={`w-4 h-4 ${isRefreshing ? "animate-spin text-accent-amber" : ""}`} />
-          </button>
-        </div>
-      </header>
-
-      {/* Account Error / Diagnostic Alert Banner */}
-      {(accountError || bitgetError) && (
-        <div className="mb-6 p-4 rounded-xl border border-rose-500/40 bg-rose-500/10 backdrop-blur space-y-3 text-xs">
-          {accountError && (
-            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
-              <div className="space-y-1 w-full">
-                <div className="font-bold text-rose-300 flex items-center gap-1.5">
-                  <span>⚠️ Binance Authentication Issue:</span>
-                </div>
-                <div className="text-zinc-300 font-mono text-[11px] bg-zinc-950/60 p-2 rounded border border-rose-500/20 max-w-3xl overflow-x-auto">
-                  {accountError}
-                </div>
-                {accountError.toLowerCase().includes("restricted location") && (
-                  <div className="text-amber-300/90 text-[11px] bg-amber-950/40 border border-amber-500/30 p-2 rounded mt-1">
-                    🌍 <strong>Geo-Restriction Detected</strong>: Binance blocks US datacenter IPs (Render Oregon).
-                    <br />
-                    • <strong>Fix on Render</strong>: In Render Dashboard → Settings → Region → change to <strong>Frankfurt (EU Central)</strong>.
-                    <br />
-                    • <strong>Run Locally</strong>: Run <code className="text-zinc-200">npm run dev</code> inside <code className="text-zinc-200">web/</code> on your computer (India IP has zero restrictions).
-                  </div>
-                )}
-              </div>
-              <button
-                onClick={() => setIsSettingsOpen(true)}
-                className="px-3 py-2 rounded-lg bg-rose-500/20 hover:bg-rose-500/30 text-rose-200 border border-rose-500/40 font-semibold whitespace-nowrap transition-colors self-start sm:self-center"
+            {!user && (
+              <Link
+                href="/login"
+                className="w-full sm:w-auto px-6 py-3 rounded-xl bg-zinc-900 hover:bg-zinc-800 text-accent-cyan border border-cyan-500/30 text-xs font-semibold transition-all flex items-center justify-center space-x-2"
               >
-                Open Vault Settings
-              </button>
-            </div>
-          )}
-
-          {bitgetError && (
-            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 pt-2 border-t border-rose-500/20">
-              <div className="space-y-1 w-full">
-                <div className="font-bold text-rose-300 flex items-center gap-1.5">
-                  <span>⚠️ Bitget Authentication Issue:</span>
-                </div>
-                <div className="text-zinc-300 font-mono text-[11px] bg-zinc-950/60 p-2 rounded border border-rose-500/20 max-w-3xl overflow-x-auto">
-                  {bitgetError}
-                </div>
-                {bitgetError.toLowerCase().includes("passphrase") && (
-                  <div className="text-zinc-400 text-[11px]">
-                    Tip: Enter the passphrase <code className="text-cyan-300">ArbitrageBot2026</code> in the Bitget tab inside Vault Settings.
-                  </div>
-                )}
-              </div>
-              <button
-                onClick={() => setIsSettingsOpen(true)}
-                className="px-3 py-2 rounded-lg bg-rose-500/20 hover:bg-rose-500/30 text-rose-200 border border-rose-500/40 font-semibold whitespace-nowrap transition-colors self-start sm:self-center"
-              >
-                Open Vault Settings
-              </button>
-            </div>
-          )}
-        </div>
-      )}
-
-      {/* Grid: 3D Prismatic Core & Control Cockpit */}
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 mb-6">
-        {/* Left Column: 3D Visualizer & Telemetry HUD */}
-        <div className="lg:col-span-7 flex flex-col gap-4">
-          <PrismaticCore3D
-            spreadBps={wsData.spreadBps}
-            isInspecting={isStudioMode}
-            onToggleInspect={() => setIsStudioMode(!isStudioMode)}
-          />
-          <TelemetryHUD
-            spreadBps={wsData.spreadBps}
-            nextFundingTime={wsData.nextFundingTime}
-            clockOffsetMs={wsData.clockOffsetMs || 24}
-          />
-        </div>
-
-        {/* Right Column: Execution Cockpit */}
-        <div id="execution-cockpit-section" className="lg:col-span-5">
-          <ControlCockpit
-            onRefresh={fetchData}
-            onTradeExecuted={handleTradeExecuted}
-            getVaultHeaders={getVaultHeaders}
-            selectedSymbol={selectedSymbol}
-            onSymbolChange={setSelectedSymbol}
-            isAutopilotActive={isAutopilotActive}
-            onToggleAutopilot={setIsAutopilotActive}
-            autopilotState={autopilotState}
-            spreadBps={wsData.spreadBps}
-            minSpreadEntry={minSpreadEntry}
-            onMinSpreadEntryChange={setMinSpreadEntry}
-            exitSpreadTarget={exitSpreadTarget}
-            onExitSpreadTargetChange={setExitSpreadTarget}
-          />
-        </div>
-      </div>
-
-      {/* Spread Comparison Tracker with Live WebSocket Values */}
-      <div className="mb-6">
-        <SpreadTracker
-          symbol={selectedSymbol}
-          binanceFundingRate={wsData.binanceFundingRate}
-          bitgetFundingRate={wsData.bitgetFundingRate}
-          spreadBps={wsData.spreadBps}
-          markPrice={wsData.binancePrice}
-        />
-      </div>
-
-      {closeError && (
-        <div className="mb-4 px-4 py-2.5 rounded-lg bg-rose-950/80 border border-rose-800 text-rose-300 text-xs flex items-center justify-between shadow-lg shadow-rose-950/30 animate-fadeIn">
-          <div className="flex items-center space-x-2">
-            <span className="font-bold">⚠️ Close Position Notice:</span>
-            <span>{closeError}</span>
+                <Lock className="w-3.5 h-3.5" />
+                <span>Sign In / Sign Up</span>
+              </Link>
+            )}
           </div>
-          <button
-            onClick={() => setCloseError(null)}
-            className="text-rose-400 hover:text-rose-200 text-xs font-mono ml-4 px-1.5 py-0.5 rounded border border-rose-800/60"
-          >
-            ✕
-          </button>
-        </div>
-      )}
 
-      {/* Live Positions Table with Real-Time Dynamic 4-Decimal Mark-to-Market PnL */}
-      <div className="mb-6">
-        <PositionsTable
-          positions={positions}
-          currentSymbol={selectedSymbol}
-          liveBinancePrice={wsData.binancePrice}
-          liveBitgetPrice={wsData.bitgetPrice}
-          onClosePosition={handleClosePosition}
-        />
-      </div>
+          {/* Live Basis Ticker Bar */}
+          <div className="w-full max-w-4xl pt-8">
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-left">
+              {marketHighlights.map((m) => (
+                <div key={m.symbol} className="bg-surface/80 p-3.5 rounded-xl border border-border space-y-1.5 hover:border-zinc-700 transition-colors">
+                  <div className="flex items-center justify-between text-xs">
+                    <span className="font-bold text-zinc-100">{m.symbol}</span>
+                    <span className="text-[10px] px-1.5 py-0.5 rounded bg-amber-500/10 text-accent-amber border border-amber-500/20 font-semibold">
+                      {m.spread}
+                    </span>
+                  </div>
+                  <div className="text-[11px] text-zinc-400 flex justify-between">
+                    <span>Est. Annual APR:</span>
+                    <span className="text-accent-emerald font-bold">{m.apy}</span>
+                  </div>
+                  <div className="text-[10px] text-zinc-500 truncate">
+                    {m.dir}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </section>
 
-      {/* Traded Hedges History & Execution Audit Log */}
-      <div className="mb-6">
-        <HedgeHistoryTable
-          history={tradeHistory}
-          onClearHistory={handleClearHistory}
-        />
-      </div>
+        {/* Interactive 3D Prismatic Core Nexus Showcase */}
+        <section className="max-w-5xl mx-auto px-4 md:px-8 py-10">
+          <div className="bg-surface rounded-2xl border border-border p-6 space-y-4">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-4 border-b border-border">
+              <div>
+                <div className="flex items-center space-x-2">
+                  <span className="w-2 h-2 rounded-full bg-accent-emerald animate-pulse" />
+                  <h2 className="text-sm font-bold uppercase tracking-wider text-zinc-100">
+                    Dual-Exchange Prismatic Nexus // Real-Time Basis Pulse
+                  </h2>
+                </div>
+                <p className="text-xs text-zinc-400 mt-0.5">
+                  Visual representation of basis spread equilibrium between Binance (Amber) and Bitget (Emerald).
+                </p>
+              </div>
+              <div className="text-xs font-mono text-zinc-400 self-start sm:self-center">
+                Basis Spread: <span className="font-bold text-accent-amber">{spreadBps.toFixed(1)} bps</span>
+              </div>
+            </div>
 
-      {/* All Coins Funding Arbitrage Scanner Matrix */}
-      <div className="mb-6">
-        <AllCoinsScanner
-          onSelectCoin={handleSelectCoinFromScanner}
-          selectedSymbol={selectedSymbol}
-          onTradeExecuted={handleTradeExecuted}
-        />
-      </div>
+            <PrismaticCore3D spreadBps={spreadBps} />
+          </div>
+        </section>
 
-      {/* Footer & Telemetry Specs */}
-      <footer className="border-t border-border pt-4 mt-8 flex flex-col md:flex-row items-center justify-between text-[11px] text-zinc-500 gap-2">
-        <div>
-          Autonomous Funding Rate Arbitrage Engine • Sub-250ms Dual WebSockets • Render Free Service Ready
-        </div>
-        <div className="flex items-center space-x-4">
-          <span>Target Latency: &lt;250ms</span>
-          <span>•</span>
-          <span>Aggressive Fill Chase: 3x Retries / 1.5s</span>
-          <span>•</span>
-          <a
-            href="https://testnet.binancefuture.com"
-            target="_blank"
-            rel="noreferrer"
-            className="text-zinc-400 hover:text-zinc-200 flex items-center space-x-1"
-          >
-            <span>Binance Testnet</span>
-            <ExternalLink className="w-3 h-3" />
-          </a>
-        </div>
-      </footer>
+        {/* Scrolling Architecture Steps Section */}
+        <section className="max-w-7xl mx-auto px-4 md:px-8 py-16 space-y-10">
+          <div className="text-center space-y-2 max-w-2xl mx-auto">
+            <h2 className="text-2xl sm:text-3xl font-bold tracking-tight text-zinc-100">
+              How Delta-Neutral Basis Capture Works
+            </h2>
+            <p className="text-xs text-zinc-400">
+              Three-stage algorithmic protocol designed to extract continuous cash flow from perpetual funding discrepancies with zero price beta.
+            </p>
+          </div>
 
-      {/* Settings Modal (Client Session Vault) */}
-      <SettingsModal
-        isOpen={isSettingsOpen}
-        onClose={() => setIsSettingsOpen(false)}
-        onSaved={fetchData}
-      />
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+            {/* Step 1 */}
+            <div className="bg-surface p-6 rounded-2xl border border-border space-y-4 relative group hover:border-amber-500/40 transition-colors">
+              <div className="w-10 h-10 rounded-xl bg-amber-500/10 border border-amber-500/30 flex items-center justify-center text-accent-amber font-bold text-sm">
+                01
+              </div>
+              <h3 className="text-base font-bold text-zinc-100">
+                Continuous Basis Discovery
+              </h3>
+              <p className="text-xs text-zinc-400 leading-relaxed">
+                Dual WebSockets continuously stream mark prices and 8-hour funding rates across 50+ perpetual contracts on Binance USD-M and Bitget V3. When funding divergence widens beyond threshold (&gt;12 bps), an execution trigger fires.
+              </p>
+              <div className="pt-2 text-[11px] text-zinc-500 border-t border-zinc-800 flex items-center space-x-1">
+                <span>Metric:</span>
+                <span className="text-zinc-300 font-semibold">Sub-250ms Dual WebSockets</span>
+              </div>
+            </div>
 
-      {/* Institutional User Profile & 24/7 Autonomous Bot Modal */}
-      <UserProfileModal
-        isOpen={isProfileOpen}
-        onClose={() => setIsProfileOpen(false)}
-      />
-    </main>
+            {/* Step 2 */}
+            <div className="bg-surface p-6 rounded-2xl border border-border space-y-4 relative group hover:border-cyan-500/40 transition-colors">
+              <div className="w-10 h-10 rounded-xl bg-cyan-500/10 border border-cyan-500/30 flex items-center justify-center text-accent-cyan font-bold text-sm">
+                02
+              </div>
+              <h3 className="text-base font-bold text-zinc-100">
+                Atomic Lead-Lag Stagger Fill
+              </h3>
+              <p className="text-xs text-zinc-400 leading-relaxed">
+                Adaptive EWMA latency tracking measures millisecond round-trip response times for each exchange. The engine staggers the faster venue by calibrated milliseconds, ensuring both legs execute in simultaneous market harmony.
+              </p>
+              <div className="pt-2 text-[11px] text-zinc-500 border-t border-zinc-800 flex items-center space-x-1">
+                <span>Metric:</span>
+                <span className="text-zinc-300 font-semibold">Zero Unhedged Exposure Skew</span>
+              </div>
+            </div>
+
+            {/* Step 3 */}
+            <div className="bg-surface p-6 rounded-2xl border border-border space-y-4 relative group hover:border-emerald-500/40 transition-colors">
+              <div className="w-10 h-10 rounded-xl bg-emerald-500/10 border border-emerald-800/40 flex items-center justify-center text-accent-emerald font-bold text-sm">
+                03
+              </div>
+              <h3 className="text-base font-bold text-zinc-100">
+                Funding Harvest & Unwind
+              </h3>
+              <p className="text-xs text-zinc-400 leading-relaxed">
+                You collect funding settlement every 8 hours directly into your balance. When the basis spread mean-reverts or compresses (&lt;2 bps), the 24/7 server autonomous engine simultaneously flattens both legs to lock in realized profits.
+              </p>
+              <div className="pt-2 text-[11px] text-zinc-500 border-t border-zinc-800 flex items-center space-x-1">
+                <span>Metric:</span>
+                <span className="text-zinc-300 font-semibold">100% Delta-Neutral PnL</span>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        {/* Security & Multi-Tenant Credential Isolation Policy */}
+        <section className="max-w-7xl mx-auto px-4 md:px-8 py-12">
+          <div className="bg-gradient-to-r from-zinc-950 via-surface to-zinc-950 p-8 rounded-3xl border border-border space-y-6">
+            <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
+              <div className="space-y-1">
+                <div className="flex items-center space-x-2">
+                  <ShieldCheck className="w-5 h-5 text-accent-amber" />
+                  <h3 className="text-lg font-bold text-zinc-100 uppercase">
+                    Strict Credential Isolation Architecture
+                  </h3>
+                </div>
+                <p className="text-xs text-zinc-400 max-w-xl">
+                  Enterprise-grade separation between the fund master administrator and individual trader quant accounts.
+                </p>
+              </div>
+
+              <div className="flex items-center space-x-3">
+                <span className="px-3 py-1 rounded-lg bg-zinc-900 border border-zinc-800 text-xs text-zinc-300">
+                  AES-256 Vault Encryption
+                </span>
+                <span className="px-3 py-1 rounded-lg bg-zinc-900 border border-zinc-800 text-xs text-accent-emerald font-semibold">
+                  Zero Shared Keys
+                </span>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs">
+              <div className="bg-zinc-900/60 p-4 rounded-xl border border-zinc-800 space-y-2">
+                <div className="font-bold text-accent-amber">Primary Administrator Account</div>
+                <p className="text-zinc-400 text-[11px] leading-relaxed">
+                  Configured under <code className="text-zinc-200">varsha633@gmailcom</code> with complete administrative access to pre-seeded institutional testnet infrastructure and server autopilot scheduling.
+                </p>
+              </div>
+
+              <div className="bg-zinc-900/60 p-4 rounded-xl border border-zinc-800 space-y-2">
+                <div className="font-bold text-accent-cyan">Standard Quant User Accounts</div>
+                <p className="text-zinc-400 text-[11px] leading-relaxed">
+                  All other users operate under complete credential isolation. API keys start <strong>strictly blank</strong> by default. Each trader must configure their own personal Binance and Bitget API keys in their profile vault.
+                </p>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        {/* Launch CTA Strip */}
+        <section className="max-w-4xl mx-auto px-4 md:px-8 py-16 text-center space-y-6">
+          <h2 className="text-2xl sm:text-3xl font-extrabold text-zinc-100">
+            Ready to Run Institutional Funding Arbitrage?
+          </h2>
+          <p className="text-xs text-zinc-400 max-w-xl mx-auto leading-relaxed">
+            Access real-time basis tables, 50-coin arbitrage matrix, millisecond order execution, and full-depth hedge telemetry receipts.
+          </p>
+          <div className="flex flex-col sm:flex-row items-center justify-center gap-3">
+            <Link
+              href="/terminal"
+              className="px-8 py-3.5 rounded-xl bg-accent-amber hover:bg-amber-400 text-zinc-950 font-bold text-xs uppercase tracking-wider transition-all shadow-xl shadow-amber-500/10 hover:scale-[1.02]"
+            >
+              Launch Trading Cockpit
+            </Link>
+            <Link
+              href="/login"
+              className="px-8 py-3.5 rounded-xl bg-surface hover:bg-zinc-800 text-zinc-200 border border-border text-xs font-semibold transition-all hover:border-zinc-700"
+            >
+              Sign In with Admin Account
+            </Link>
+          </div>
+        </section>
+      </main>
+
+      <Footer />
+    </div>
   );
 }

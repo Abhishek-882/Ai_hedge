@@ -40,15 +40,18 @@ export default function AllCoinsScanner({ onSelectCoin, selectedSymbol, onTradeE
   const [errorFeedback, setErrorFeedback] = useState<{ symbol: string; message: string } | null>(null);
   const [errorSymbol, setErrorSymbol] = useState<string | null>(null);
 
-  // Second-by-second ticker for real-time countdowns
+  // Throttled ticker for countdowns (3s interval, pauses when hidden)
   useEffect(() => {
     const tick = setInterval(() => {
-      setCurrentTime(Date.now());
-    }, 1000);
+      if (!document.hidden) {
+        setCurrentTime(Date.now());
+      }
+    }, 3000);
     return () => clearInterval(tick);
   }, []);
 
   const fetchCoins = async () => {
+    if (document.hidden) return;
     try {
       const res = await fetch("/api/coins", { cache: "no-store" });
       const data = await res.json();
@@ -78,8 +81,10 @@ export default function AllCoinsScanner({ onSelectCoin, selectedSymbol, onTradeE
 
   useEffect(() => {
     fetchCoins();
-    // Fast 5-second polling for live updates
-    const interval = setInterval(fetchCoins, 5000);
+    // 8-second polling for live opportunity table, pauses when tab is hidden
+    const interval = setInterval(() => {
+      if (!document.hidden) fetchCoins();
+    }, 8000);
     return () => clearInterval(interval);
   }, []);
 

@@ -15,6 +15,12 @@ export default function PrismaticCore3D({
   onToggleInspect,
 }: PrismaticCoreProps) {
   const mountRef = useRef<HTMLDivElement>(null);
+  const spreadBpsRef = useRef(spreadBps);
+
+  // Sync latest spread without triggering expensive Three.js remounts
+  useEffect(() => {
+    spreadBpsRef.current = spreadBps;
+  }, [spreadBps]);
 
   useEffect(() => {
     if (!mountRef.current) return;
@@ -28,9 +34,13 @@ export default function PrismaticCore3D({
     const camera = new THREE.PerspectiveCamera(45, width / height, 0.1, 100);
     camera.position.set(0, 0, 7.5);
 
-    const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+    const renderer = new THREE.WebGLRenderer({
+      antialias: true,
+      alpha: true,
+      powerPreference: "high-performance",
+    });
     renderer.setSize(width, height);
-    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 1.5));
     mountRef.current.appendChild(renderer.domElement);
 
     // Studio lighting matrix
@@ -78,8 +88,8 @@ export default function PrismaticCore3D({
     coreGroup.add(meshB);
 
     // Orbital Basis Particle Ring
+    const particleCount = 64;
     const particlesGeo = new THREE.BufferGeometry();
-    const particleCount = 72;
     const positions = new Float32Array(particleCount * 3);
     for (let i = 0; i < particleCount; i++) {
       const angle = (i / particleCount) * Math.PI * 2;
@@ -137,11 +147,18 @@ export default function PrismaticCore3D({
     let clock = new THREE.Clock();
 
     const animate = () => {
+      // Pause if tab is hidden
+      if (document.hidden) {
+        animationFrameId = requestAnimationFrame(animate);
+        return;
+      }
+
       animationFrameId = requestAnimationFrame(animate);
       const elapsedTime = clock.getElapsedTime();
 
-      // Dynamic rotation velocity keyed to live basis spread
-      const spreadSpeed = Math.min(Math.max(spreadBps / 20, 0.4), 3.0);
+      // Read current spread dynamically from ref without rebuilding scene
+      const liveSpread = spreadBpsRef.current || 10;
+      const spreadSpeed = Math.min(Math.max(liveSpread / 20, 0.4), 3.0);
 
       if (!isDragging) {
         targetRotY += 0.005 * spreadSpeed;
@@ -168,9 +185,11 @@ export default function PrismaticCore3D({
       if (!mountRef.current) return;
       const newW = mountRef.current.clientWidth;
       const newH = mountRef.current.clientHeight;
-      camera.aspect = newW / newH;
-      camera.updateProjectionMatrix();
-      renderer.setSize(newW, newH);
+      if (newW > 0 && newH > 0) {
+        camera.aspect = newW / newH;
+        camera.updateProjectionMatrix();
+        renderer.setSize(newW, newH);
+      }
     };
 
     window.addEventListener("resize", handleResize);
@@ -181,38 +200,44 @@ export default function PrismaticCore3D({
       window.removeEventListener("mousemove", handleMouseMove);
       window.removeEventListener("mouseup", handleMouseUp);
       window.removeEventListener("resize", handleResize);
-      if (mountRef.current && renderer.domElement) {
+      if (mountRef.current && renderer.domElement && mountRef.current.contains(renderer.domElement)) {
         mountRef.current.removeChild(renderer.domElement);
       }
+      geoA.dispose();
+      matA.dispose();
+      geoB.dispose();
+      matB.dispose();
+      particlesGeo.dispose();
+      particlesMat.dispose();
       renderer.dispose();
     };
-  }, [spreadBps]);
+  }, []); // Mount ONCE - do not reconstruct scene on spread changes!
 
   return (
     <div className="relative w-full h-[280px] bg-surface rounded-xl border border-border overflow-hidden group">
       <div ref={mountRef} className="w-full h-full cursor-grab active:cursor-grabbing" />
 
       {/* Cyber-Editorial Overlay HUD */}
-      <div className="absolute top-3 left-3 flex items-center space-x-2 text-[10px] font-mono text-zinc-400">
+      <div className="absolute top-3 left-3 flex items-center space-x-2 text-[10px] font-mono text-zinc-400 pointer-events-none">
         <span className="w-2 h-2 rounded-full bg-accent-emerald animate-pulse" />
         <span className="tracking-widest uppercase">PRISMATIC CORE // DUAL NEXUS</span>
       </div>
 
-      <div className="absolute top-3 right-3 text-right font-mono">
+      <div className="absolute top-3 right-3 text-right font-mono pointer-events-none">
         <div className="text-[10px] text-zinc-500 uppercase">Live Basis Pulse</div>
         <div className="text-xs font-semibold text-accent-amber">
           {(spreadBps || 0).toFixed(1)} <span className="text-[10px] text-zinc-400">bps</span>
         </div>
       </div>
 
-      <div className="absolute bottom-3 left-3 text-[10px] font-mono text-zinc-500">
+      <div className="absolute bottom-3 left-3 text-[10px] font-mono text-zinc-500 pointer-events-none">
         Drag to rotate 3D nexus • Color-coded: Amber (Binance) / Emerald (Bitget)
       </div>
 
       {onToggleInspect && (
         <button
           onClick={onToggleInspect}
-          className="absolute bottom-3 right-3 px-2.5 py-1 text-[10px] font-mono rounded bg-surface-card hover:bg-zinc-800 text-zinc-300 border border-border transition-colors"
+          className="absolute bottom-3 right-3 px-2.5 py-1 text-[10px] font-mono rounded bg-surface-card hover:bg-zinc-800 text-zinc-300 border border-border transition-colors cursor-pointer"
         >
           {isInspecting ? "Exit Studio" : "Inspect Mode"}
         </button>

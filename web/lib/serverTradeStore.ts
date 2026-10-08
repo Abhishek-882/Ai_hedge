@@ -3,11 +3,14 @@ import path from "path";
 
 export interface ServerHedgeTrade {
   id: string;
-  timestamp: number;
+  timestamp: number; // Open timestamp
+  closeTimestamp?: number; // Close timestamp
+  durationMs?: number; // Latency / duration between hedge open and close
   symbol: string;
   type: string;
   directionLabel: string;
   quantity: number | string;
+  notionalUsdt?: number;
   leg1Venue: string;
   leg1Side: string;
   leg1Price: number;
@@ -18,6 +21,8 @@ export interface ServerHedgeTrade {
   leg2OrderId?: string | number;
   interLegDeltaMs: number;
   realizedPnl: number;
+  returnsPct?: number;
+  feesUsdt?: number;
   status: "ACTIVE" | "CONFIRMED" | "CLOSED" | "DELTA_NEUTRAL";
 }
 
@@ -28,109 +33,13 @@ const globalForTrades = global as unknown as {
   serverTrades?: ServerHedgeTrade[];
 };
 
+// History starts clean now - NO dummy/pre-seeded trades
 function getInitialSeededTrades(): ServerHedgeTrade[] {
-  const now = Date.now();
-  return [
-    {
-      id: "HDG-899884",
-      timestamp: now - 180000,
-      symbol: "ETHUSDT",
-      type: "QUICK_HEDGE_1CLICK",
-      directionLabel: "Long BN + Short BG",
-      quantity: 0.03,
-      leg1Venue: "Binance",
-      leg1Side: "BUY",
-      leg1Price: 2560.23,
-      leg1OrderId: "777435",
-      leg2Venue: "Bitget",
-      leg2Side: "SELL",
-      leg2Price: 2563.72,
-      leg2OrderId: "548032",
-      interLegDeltaMs: 147.4,
-      realizedPnl: 0,
-      status: "ACTIVE",
-    },
-    {
-      id: "HDG-821906",
-      timestamp: now - 360000,
-      symbol: "SOLUSDT",
-      type: "QUICK_HEDGE_1CLICK",
-      directionLabel: "Long BN + Short BG",
-      quantity: 0.20,
-      leg1Venue: "Binance",
-      leg1Side: "BUY",
-      leg1Price: 116.09,
-      leg1OrderId: "776682",
-      leg2Venue: "Bitget",
-      leg2Side: "SELL",
-      leg2Price: 116.52,
-      leg2OrderId: "864512",
-      interLegDeltaMs: 32.6,
-      realizedPnl: 0,
-      status: "ACTIVE",
-    },
-    {
-      id: "HDG-491801",
-      timestamp: now - 600000,
-      symbol: "BTCUSDT",
-      type: "QUICK_HEDGE_1CLICK",
-      directionLabel: "Long BN + Short BG",
-      quantity: 0.005,
-      leg1Venue: "Binance",
-      leg1Side: "BUY",
-      leg1Price: 82963.5,
-      leg1OrderId: "773507",
-      leg2Venue: "Bitget",
-      leg2Side: "SELL",
-      leg2Price: 82948.7,
-      leg2OrderId: "440704",
-      interLegDeltaMs: 6.0,
-      realizedPnl: 0,
-      status: "ACTIVE",
-    },
-    {
-      id: "HDG-312948",
-      timestamp: now - 900000,
-      symbol: "LINKUSDT",
-      type: "QUICK_HEDGE_1CLICK",
-      directionLabel: "Long BN + Short BG",
-      quantity: 1.0,
-      leg1Venue: "Binance",
-      leg1Side: "BUY",
-      leg1Price: 13.39,
-      leg1OrderId: "771203",
-      leg2Venue: "Bitget",
-      leg2Side: "SELL",
-      leg2Price: 13.35,
-      leg2OrderId: "329184",
-      interLegDeltaMs: 45.2,
-      realizedPnl: 0,
-      status: "ACTIVE",
-    },
-    {
-      id: "HDG-208492",
-      timestamp: now - 1200000,
-      symbol: "NEARUSDT",
-      type: "QUICK_HEDGE_1CLICK",
-      directionLabel: "Long BN + Short BG",
-      quantity: 3.0,
-      leg1Venue: "Binance",
-      leg1Side: "BUY",
-      leg1Price: 5.03,
-      leg1OrderId: "769912",
-      leg2Venue: "Bitget",
-      leg2Side: "SELL",
-      leg2Price: 5.09,
-      leg2OrderId: "219842",
-      interLegDeltaMs: 18.5,
-      realizedPnl: 0,
-      status: "ACTIVE",
-    },
-  ];
+  return [];
 }
 
 export function loadTrades(): ServerHedgeTrade[] {
-  if (globalForTrades.serverTrades && globalForTrades.serverTrades.length > 0) {
+  if (globalForTrades.serverTrades !== undefined) {
     return globalForTrades.serverTrades;
   }
 
@@ -138,7 +47,7 @@ export function loadTrades(): ServerHedgeTrade[] {
     if (fs.existsSync(TRADES_FILE_PATH)) {
       const raw = fs.readFileSync(TRADES_FILE_PATH, "utf-8");
       const parsed = JSON.parse(raw);
-      if (Array.isArray(parsed) && parsed.length > 0) {
+      if (Array.isArray(parsed)) {
         globalForTrades.serverTrades = parsed;
         return parsed;
       }
@@ -158,15 +67,37 @@ export function saveTrades(trades: ServerHedgeTrade[]) {
   } catch {}
 }
 
+export function clearTrades(): void {
+  saveTrades([]);
+}
+
 export function recordServerTrade(trade: Partial<ServerHedgeTrade>): ServerHedgeTrade {
   const trades = loadTrades();
+  const now = Date.now();
+  const openTime = trade.timestamp || now;
+  const closeTime = trade.closeTimestamp || (trade.status === "CLOSED" || trade.status === "DELTA_NEUTRAL" ? now : undefined);
+  const durationMs = trade.durationMs !== undefined
+    ? trade.durationMs
+    : (closeTime ? Math.max(120, closeTime - openTime) : undefined);
+
+  const price = trade.leg1Price || trade.leg2Price || 0;
+  const qty = typeof trade.quantity === "number" ? trade.quantity : parseFloat(String(trade.quantity || "0"));
+  const notional = trade.notionalUsdt || (price > 0 && qty > 0 ? parseFloat((price * qty).toFixed(2)) : 0);
+  const realizedPnl = trade.realizedPnl !== undefined ? trade.realizedPnl : 0;
+  const returnsPct = trade.returnsPct !== undefined
+    ? trade.returnsPct
+    : (notional > 0 ? parseFloat(((realizedPnl / notional) * 100).toFixed(4)) : 0);
+
   const fullTrade: ServerHedgeTrade = {
     id: trade.id || `HDG-${Date.now().toString().slice(-6)}`,
-    timestamp: trade.timestamp || Date.now(),
+    timestamp: openTime,
+    closeTimestamp: closeTime,
+    durationMs,
     symbol: (trade.symbol || "BTCUSDT").toUpperCase(),
     type: trade.type || "QUICK_HEDGE_1CLICK",
     directionLabel: trade.directionLabel || (trade.leg1Side === "SELL" ? "Short BN + Long BG" : "Long BN + Short BG"),
     quantity: trade.quantity || "0.005",
+    notionalUsdt: notional,
     leg1Venue: trade.leg1Venue || "Binance",
     leg1Side: trade.leg1Side || "SELL",
     leg1Price: trade.leg1Price || 0,
@@ -176,10 +107,13 @@ export function recordServerTrade(trade: Partial<ServerHedgeTrade>): ServerHedge
     leg2Price: trade.leg2Price || 0,
     leg2OrderId: trade.leg2OrderId,
     interLegDeltaMs: trade.interLegDeltaMs || 0,
-    realizedPnl: trade.realizedPnl || 0,
+    realizedPnl,
+    returnsPct,
+    feesUsdt: trade.feesUsdt ?? 0.0012,
     status: trade.status || "ACTIVE",
   };
-  const updated = [fullTrade, ...trades].slice(0, 100);
+
+  const updated = [fullTrade, ...trades].slice(0, 200);
   saveTrades(updated);
   return fullTrade;
 }

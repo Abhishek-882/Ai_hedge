@@ -1,20 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
 import { signAndFetchBinance } from "@/lib/binanceSigner";
 import { logServerEvent } from "@/lib/logger";
+import { resolveCallerCredentials } from "@/lib/authHelper";
 
 export const dynamic = "force-dynamic";
 
 export async function GET(req: NextRequest) {
-  const clientKey = req.headers.get("x-binance-key");
-  const clientSecret = req.headers.get("x-binance-secret");
-  const preferredUrl = req.headers.get("x-binance-endpoint") || undefined;
-
-  const DEFAULT_BINANCE_KEY = "RkqI5SmWN3z6DxKcAirPx48BmHpkA21FHPaeWFPsiJ4NbIvMAt4yTM3TsoLbHVAU";
-  const DEFAULT_BINANCE_SECRET = "dpMSrQ1GDCPhNPnRRsIC0rCjzlDK9VfbC9fKXwptUGtqn2WdTKLZWekZqXykY00h";
-
-  const isCustomKey = Boolean(clientKey && clientKey.trim());
-  const apiKey = isCustomKey ? clientKey!.trim() : (process.env.BINANCE_TESTNET_API_KEY || DEFAULT_BINANCE_KEY);
-  const apiSecret = isCustomKey ? (clientSecret ? clientSecret.trim() : "") : (process.env.BINANCE_TESTNET_API_SECRET || DEFAULT_BINANCE_SECRET);
+  const creds = resolveCallerCredentials(req);
 
   const noCacheHeaders = {
     "Cache-Control": "no-store, no-cache, must-revalidate, proxy-revalidate, max-age=0",
@@ -22,14 +14,26 @@ export async function GET(req: NextRequest) {
     "Expires": "0",
   };
 
-  if (!apiKey || !apiSecret) {
-    logServerEvent("WARN", "BINANCE", "Missing credentials in request");
+  if (!creds.binanceKey || !creds.binanceSecret) {
+    const errorMsg = creds.user && !creds.isAdmin
+      ? "Personal Binance API key required. Non-admin accounts must configure their own API keys in Profile or Vault settings."
+      : "Missing Binance API credentials. Please sign in or configure API keys.";
+
+    logServerEvent("WARN", "BINANCE", errorMsg);
     return NextResponse.json(
-      { success: false, error: "Missing API credentials" },
+      {
+        success: false,
+        error: errorMsg,
+        requiresKeys: true,
+        isAdmin: creds.isAdmin,
+      },
       { status: 401, headers: noCacheHeaders }
     );
   }
 
+  const apiKey = creds.binanceKey;
+  const apiSecret = creds.binanceSecret;
+  const preferredUrl = creds.binanceEndpoint;
   const keyMask = apiKey.length >= 8 ? `${apiKey.slice(0, 4)}...${apiKey.slice(-4)}` : "INVALID";
 
   try {
@@ -97,14 +101,15 @@ export async function GET(req: NextRequest) {
         positionsCount: positions.length,
         positions,
         keyMask,
-        isCustomKey,
+        isCustomKey: !creds.isAdmin,
+        isAdmin: creds.isAdmin,
       },
       { headers: noCacheHeaders }
     );
   } catch (err: any) {
     logServerEvent("ERROR", "BINANCE", `Authentication failed for [${keyMask}] (${preferredUrl || "auto"}): ${err.message}`);
     return NextResponse.json(
-      { success: false, error: err.message, keyMask, isCustomKey },
+      { success: false, error: err.message, keyMask, isCustomKey: !creds.isAdmin, isAdmin: creds.isAdmin },
       { status: 500, headers: noCacheHeaders }
     );
   }

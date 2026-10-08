@@ -1,18 +1,25 @@
 import { NextRequest, NextResponse } from "next/server";
 import { signAndFetchBinance } from "@/lib/binanceSigner";
+import { resolveCallerCredentials } from "@/lib/authHelper";
 
 export const dynamic = "force-dynamic";
 
 export async function POST(req: NextRequest) {
-  const DEFAULT_BINANCE_KEY = "RkqI5SmWN3z6DxKcAirPx48BmHpkA21FHPaeWFPsiJ4NbIvMAt4yTM3TsoLbHVAU";
-  const DEFAULT_BINANCE_SECRET = "dpMSrQ1GDCPhNPnRRsIC0rCjzlDK9VfbC9fKXwptUGtqn2WdTKLZWekZqXykY00h";
-
-  const apiKey = req.headers.get("x-binance-key") || process.env.BINANCE_TESTNET_API_KEY || DEFAULT_BINANCE_KEY;
-  const apiSecret = req.headers.get("x-binance-secret") || process.env.BINANCE_TESTNET_API_SECRET || DEFAULT_BINANCE_SECRET;
-  const preferredUrl = req.headers.get("x-binance-endpoint") || undefined;
+  const creds = resolveCallerCredentials(req);
+  const apiKey = creds.binanceKey;
+  const apiSecret = creds.binanceSecret;
+  const preferredUrl = creds.binanceEndpoint;
 
   if (!apiKey || !apiSecret) {
-    return NextResponse.json({ success: false, error: "Missing API credentials" }, { status: 401 });
+    return NextResponse.json(
+      {
+        success: false,
+        error: creds.user && !creds.isAdmin
+          ? "Personal Binance API key required. Non-admin accounts must configure their own API keys in Profile or Vault settings."
+          : "Missing Binance API credentials",
+      },
+      { status: 401 }
+    );
   }
 
   try {

@@ -1,0 +1,38 @@
+[
+  {
+    "id": "usr_admin_varsha",
+    "email": "varsha633@gmailcom",
+    "username": "Varsha (Admin)",
+    "password": "99129838aA@",
+    "role": "admin",
+    "createdAt": "2026-10-08T11:58:55.455Z",
+    "lastLogin": "2026-10-08T11:59:18.025Z",
+    "apiKeys": {
+      "binanceKey": "RkqI5SmWN3z6DxKcAirPx48BmHpkA21FHPaeWFPsiJ4NbIvMAt4yTM3TsoLbHVAU",
+      "binanceSecret": "dpMSrQ1GDCPhNPnRRsIC0rCjzlDK9VfbC9fKXwptUGtqn2WdTKLZWekZqXykY00h",
+      "binanceEndpoint": "https://demo-fapi.binance.com",
+      "bitgetKey": "bg_2c493eb64032f2b0aea68c1c18d56e05",
+      "bitgetSecret": "c77d2baac5b1fb84e9d900e15dfcac783b962d1da1837b50ff05daf68ac2f5f6",
+      "bitgetPassphrase": "ArbitrageBot2027",
+      "bitgetEnv": "demo"
+    }
+  },
+  {
+    "id": "usr_muzhgv2v_xk5y",
+    "email": "quant_user_1791460736@mmt.com",
+    "username": "QuantTraderAlpha",
+    "password": "SecurePassword123!",
+    "role": "user",
+    "createdAt": "2026-10-08T11:58:56.599Z",
+    "lastLogin": "2026-10-08T11:58:56.599Z",
+    "apiKeys": {
+      "binanceKey": "",
+      "binanceSecret": "",
+      "binanceEndpoint": "https://demo-fapi.binance.com",
+      "bitgetKey": "",
+      "bitgetSecret": "",
+      "bitgetPassphrase": "",
+      "bitgetEnv": "demo"
+    }
+  }
+]

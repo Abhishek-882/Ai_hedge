@@ -1,0 +1,26 @@
+[
+  {
+    "id": "HDG-736624",
+    "timestamp": 1791460736624,
+    "closeTimestamp": 1791460736624,
+    "durationMs": 1350,
+    "symbol": "BTCUSDT",
+    "type": "QUICK_HEDGE_1CLICK",
+    "directionLabel": "Short BN + Long BG",
+    "quantity": "0.005",
+    "notionalUsdt": 432.15,
+    "leg1Venue": "Binance Testnet",
+    "leg1Side": "SELL",
+    "leg1Price": 86430.5,
+    "leg1OrderId": "773507",
+    "leg2Venue": "Bitget V3 Demo",
+    "leg2Side": "BUY",
+    "leg2Price": 86416.2,
+    "leg2OrderId": "440704",
+    "interLegDeltaMs": 14.2,
+    "realizedPnl": 0.482,
+    "returnsPct": 0.1115,
+    "feesUsdt": 0.0012,
+    "status": "DELTA_NEUTRAL"
+  }
+]

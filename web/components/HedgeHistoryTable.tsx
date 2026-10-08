@@ -1,27 +1,11 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
-import { History, Download, Trash2, CheckCircle2, ShieldCheck, ArrowRight, Zap } from "lucide-react";
+import React, { useState } from "react";
+import { History, Download, Trash2, CheckCircle2, ShieldCheck, ArrowRight, Zap, Info } from "lucide-react";
+import HedgeDetailModal from "./HedgeDetailModal";
+import { ServerHedgeTrade } from "@/lib/serverTradeStore";
 
-export interface HedgeTradeRecord {
-  id: string;
-  timestamp: number;
-  symbol: string;
-  type: "BENCHMARK" | "HEDGE_ENTRY" | "MANUAL_CLOSE" | "AUTOPILOT";
-  directionLabel: string;
-  quantity: number | string;
-  leg1Venue: string;
-  leg1Side: string;
-  leg1Price: number;
-  leg1OrderId?: string | number;
-  leg2Venue: string;
-  leg2Side: string;
-  leg2Price: number;
-  leg2OrderId?: string | number;
-  interLegDeltaMs: number;
-  realizedPnl: number;
-  status: "CONFIRMED" | "CLOSED" | "DELTA_NEUTRAL" | "ACTIVE";
-}
+export type HedgeTradeRecord = ServerHedgeTrade;
 
 interface HedgeHistoryTableProps {
   history: HedgeTradeRecord[];
@@ -29,6 +13,8 @@ interface HedgeHistoryTableProps {
 }
 
 export default function HedgeHistoryTable({ history, onClearHistory }: HedgeHistoryTableProps) {
+  const [selectedTrade, setSelectedTrade] = useState<HedgeTradeRecord | null>(null);
+
   const totalTrades = history.length;
   const cumulativePnl = history.reduce((acc, t) => acc + (t.realizedPnl || 0), 0);
   const avgDelta = totalTrades > 0
@@ -43,6 +29,7 @@ export default function HedgeHistoryTable({ history, onClearHistory }: HedgeHist
       "Symbol",
       "Type",
       "Quantity",
+      "Notional USDT",
       "Leg 1 Venue",
       "Leg 1 Side",
       "Leg 1 Price",
@@ -52,7 +39,9 @@ export default function HedgeHistoryTable({ history, onClearHistory }: HedgeHist
       "Leg 2 Price",
       "Leg 2 OrderId",
       "Inter-Leg Delta (ms)",
+      "Duration (ms)",
       "Realized PnL (USDT)",
+      "Return %",
       "Status",
     ];
 
@@ -62,6 +51,7 @@ export default function HedgeHistoryTable({ history, onClearHistory }: HedgeHist
       t.symbol,
       t.type,
       t.quantity,
+      t.notionalUsdt || "",
       t.leg1Venue,
       t.leg1Side,
       t.leg1Price,
@@ -71,7 +61,9 @@ export default function HedgeHistoryTable({ history, onClearHistory }: HedgeHist
       t.leg2Price,
       t.leg2OrderId || "",
       t.interLegDeltaMs,
+      t.durationMs || "",
       t.realizedPnl,
+      t.returnsPct || "",
       t.status,
     ]);
 
@@ -155,10 +147,10 @@ export default function HedgeHistoryTable({ history, onClearHistory }: HedgeHist
       {/* History Table */}
       {totalTrades === 0 ? (
         <div className="py-8 text-center text-xs text-zinc-500">
-          No completed hedge trades in history yet. Execute a hedge entry or benchmark to record trades.
+          No completed hedge trades in history yet. History starts now — execute a hedge entry or benchmark to record live trades.
         </div>
       ) : (
-        <div className="overflow-x-auto mt-3 max-h-72 overflow-y-auto">
+        <div className="overflow-x-auto mt-3 max-h-80 overflow-y-auto">
           <table className="w-full text-left text-xs">
             <thead className="sticky top-0 bg-surface border-b border-border text-[10px] text-zinc-400 uppercase">
               <tr>
@@ -170,6 +162,7 @@ export default function HedgeHistoryTable({ history, onClearHistory }: HedgeHist
                 <th className="pb-2 text-center">Inter-Leg Delta</th>
                 <th className="pb-2 text-right">Realized Net PnL</th>
                 <th className="pb-2 text-right">Status</th>
+                <th className="pb-2 text-right pr-2">Action</th>
               </tr>
             </thead>
             <tbody className="divide-y border-border">
@@ -221,6 +214,15 @@ export default function HedgeHistoryTable({ history, onClearHistory }: HedgeHist
                         <span>{t.status}</span>
                       </span>
                     </td>
+                    <td className="py-2.5 text-right pr-2">
+                      <button
+                        onClick={() => setSelectedTrade(t)}
+                        className="px-2.5 py-1 rounded bg-amber-500/10 hover:bg-amber-500/20 text-accent-amber border border-amber-500/30 hover:border-amber-400 text-[11px] font-bold transition-all shadow-sm"
+                        title="View Full Depth Details for this Hedge"
+                      >
+                        [ More Detail ]
+                      </button>
+                    </td>
                   </tr>
                 );
               })}
@@ -228,6 +230,12 @@ export default function HedgeHistoryTable({ history, onClearHistory }: HedgeHist
           </table>
         </div>
       )}
+
+      {/* Full Depth Detail Modal */}
+      <HedgeDetailModal
+        trade={selectedTrade}
+        onClose={() => setSelectedTrade(null)}
+      />
     </div>
   );
 }
