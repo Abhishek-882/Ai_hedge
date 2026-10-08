@@ -307,58 +307,70 @@ export default function TerminalPage() {
       <main className="flex-1 max-w-7xl w-full mx-auto p-3 sm:p-4 md:p-8 pb-24 sm:pb-8 space-y-4 sm:space-y-6">
         {/* Top Header Bar */}
         <header className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4 border-b border-border pb-5">
-          <div>
-            <div className="flex flex-wrap items-center gap-2">
-              <span className={`w-2.5 h-2.5 rounded-full ${accountError ? "bg-accent-rose animate-ping" : "bg-accent-amber animate-pulse"}`} />
-              <h1 className="text-lg md:text-xl font-bold tracking-tight uppercase">
+          <div className="w-full md:w-auto">
+            {/* Row 1: Title & Environment Pill */}
+            <div className="flex items-center space-x-2.5">
+              <span className={`w-2.5 h-2.5 rounded-full shrink-0 ${accountError ? "bg-accent-rose animate-ping" : "bg-accent-amber animate-pulse"}`} />
+              <h1 className="text-base sm:text-lg md:text-xl font-bold tracking-tight uppercase text-zinc-100">
                 FUNDING RATE ARBITRAGE // COCKPIT
               </h1>
-              <span className="px-2 py-0.5 rounded text-[10px] bg-zinc-800 text-zinc-300 border border-border">
+              <span className="px-2 py-0.5 rounded text-[10px] bg-zinc-800 text-zinc-300 border border-zinc-700 font-mono">
                 {accountEndpoint ? accountEndpoint.replace("https://", "") : "TESTNET v2.4"}
               </span>
+            </div>
 
-              {/* WebSocket Stream Live Badges */}
-              <div className="flex items-center space-x-1.5 ml-1">
-                <span className={`px-2 py-0.5 rounded text-[10px] flex items-center space-x-1 border ${
-                  wsData.binanceWsConnected
-                    ? "bg-amber-500/10 text-amber-400 border-amber-500/30"
-                    : "bg-zinc-800 text-zinc-500 border-border"
-                }`}>
-                  <Radio className={`w-2.5 h-2.5 ${wsData.binanceWsConnected ? "text-amber-400 animate-pulse" : "text-zinc-600"}`} />
-                  <span>BN WS</span>
-                </span>
+            {/* Row 2: Secondary Telemetry Status Bar (Zero Tag Overlap) */}
+            <div className="flex flex-wrap items-center gap-1.5 sm:gap-2 mt-2 pt-2 border-t border-border/40 text-[10px] font-mono">
+              {/* WebSocket Connectivity Pills */}
+              <span className={`px-2 py-0.5 rounded flex items-center space-x-1 border ${
+                wsData.binanceWsConnected
+                  ? "bg-amber-500/10 text-amber-400 border-amber-500/30"
+                  : "bg-zinc-900 text-zinc-500 border-zinc-800"
+              }`}>
+                <Radio className={`w-2.5 h-2.5 ${wsData.binanceWsConnected ? "text-amber-400 animate-pulse" : "text-zinc-600"}`} />
+                <span>BN WS</span>
+              </span>
 
-                <span className={`px-2 py-0.5 rounded text-[10px] flex items-center space-x-1 border ${
-                  wsData.bitgetWsConnected
-                    ? "bg-cyan-500/10 text-cyan-400 border-cyan-500/30"
-                    : "bg-zinc-800 text-zinc-500 border-border"
-                }`}>
-                  <Radio className={`w-2.5 h-2.5 ${wsData.bitgetWsConnected ? "text-cyan-400 animate-pulse" : "text-zinc-600"}`} />
-                  <span>BG WS</span>
-                </span>
-              </div>
+              <span className={`px-2 py-0.5 rounded flex items-center space-x-1 border ${
+                wsData.bitgetWsConnected
+                  ? "bg-cyan-500/10 text-cyan-400 border-cyan-500/30"
+                  : "bg-zinc-900 text-zinc-500 border-zinc-800"
+              }`}>
+                <Radio className={`w-2.5 h-2.5 ${wsData.bitgetWsConnected ? "text-cyan-400 animate-pulse" : "text-zinc-600"}`} />
+                <span>BG WS</span>
+              </span>
 
+              {/* API Key Vault Status */}
               {account?.keyMask && (
-                <span className={`px-2 py-0.5 rounded text-[10px] font-mono border ${
+                <span className={`px-2 py-0.5 rounded border ${
                   account.isCustomKey
                     ? "bg-amber-500/10 text-amber-400 border-amber-500/30"
-                    : "bg-zinc-800 text-zinc-400 border-zinc-700"
+                    : "bg-zinc-900 text-zinc-400 border-zinc-800"
                 }`}>
                   BN: {account.keyMask} {account.isCustomKey ? "(VAULT)" : "(ADMIN)"}
                 </span>
               )}
 
               {bitgetAccount?.keyMask && (
-                <span className={`px-2 py-0.5 rounded text-[10px] font-mono border ${
+                <span className={`px-2 py-0.5 rounded border ${
                   bitgetAccount.isCustomKey
                     ? "bg-cyan-500/10 text-cyan-400 border-cyan-500/30"
-                    : "bg-zinc-800 text-zinc-400 border-zinc-700"
+                    : "bg-zinc-900 text-zinc-400 border-zinc-800"
                 }`}>
                   BG: {bitgetAccount.keyMask} {bitgetAccount.isCustomKey ? "(VAULT)" : "(ADMIN)"}
                 </span>
               )}
+
+              {/* Admin / User Identity Badge */}
+              {currentUser?.email && (
+                <span className="px-2 py-0.5 rounded bg-zinc-900/90 text-zinc-300 border border-zinc-800 flex items-center space-x-1">
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
+                  <span>{currentUser.role === "ADMIN" ? "Admin" : "User"}: {currentUser.email}</span>
+                </span>
+              )}
             </div>
-            <p className="text-xs text-zinc-500 mt-1">
+
+            <p className="text-[11px] text-zinc-500 mt-1.5 hidden sm:block">
               Delta-Neutral Basis Capture • Dual-Stream WebSockets • Binance USD-M & Bitget Perpetuals
             </p>
           </div>
@@ -560,6 +572,11 @@ export default function TerminalPage() {
             ? selectedCoinFundingTime
             : (wsData.nextFundingTime || 0);
 
+          const liveBnPrice = wsData.binancePrice || account?.markPrice || 0;
+          const liveBgPrice = wsData.bitgetPrice || (liveBnPrice > 0 ? liveBnPrice * 0.9998 : 0);
+          const livePriceDiff = Math.abs(liveBnPrice - liveBgPrice);
+          const livePriceDivergencePct = liveBnPrice > 0 ? (livePriceDiff / liveBnPrice) * 100 : 0;
+
           return (
             <>
               {/* Telemetry HUD: Real-time Quantitative Telemetry Cards */}
@@ -581,7 +598,11 @@ export default function TerminalPage() {
                     binanceFundingRate={wsData.binanceFundingRate}
                     bitgetFundingRate={wsData.bitgetFundingRate}
                     spreadBps={wsData.spreadBps}
-                    markPrice={wsData.binancePrice}
+                    markPrice={liveBnPrice}
+                    binancePrice={liveBnPrice}
+                    bitgetPrice={liveBgPrice}
+                    priceDiff={livePriceDiff}
+                    priceDivergencePct={livePriceDivergencePct}
                   />
                 </div>
 
@@ -608,7 +629,11 @@ export default function TerminalPage() {
                     onMinSpreadEntryChange={setMinSpreadEntry}
                     exitSpreadTarget={exitSpreadTarget}
                     onExitSpreadTargetChange={setExitSpreadTarget}
-                    markPrice={wsData.binancePrice}
+                    markPrice={liveBnPrice}
+                    binancePrice={liveBnPrice}
+                    bitgetPrice={liveBgPrice}
+                    priceDiff={livePriceDiff}
+                    priceDivergencePct={livePriceDivergencePct}
                     binanceFundingRate={wsData.binanceFundingRate}
                     bitgetFundingRate={wsData.bitgetFundingRate}
                     nextFundingTime={effectiveFundingTime}

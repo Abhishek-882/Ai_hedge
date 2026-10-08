@@ -390,3 +390,40 @@ export async function placeBitgetOrder(
     };
   }
 }
+
+/**
+ * Configure leverage on Bitget UTA Futures for a specific trading pair.
+ */
+export async function setBitgetLeverage(
+  creds: BitgetCredentials,
+  symbol: string,
+  leverage: number
+): Promise<{ success: boolean; leverage: number; error?: string }> {
+  try {
+    const baseUrl = "https://api.bitget.com";
+    const clamped = Math.max(1, Math.min(100, Math.round(leverage)));
+    const path = "/api/v2/mix/account/set-leverage";
+    const bodyStr = JSON.stringify({
+      symbol: symbol.toUpperCase(),
+      productType: "USDT-FUTURES",
+      marginCoin: "USDT",
+      leverage: clamped.toString(),
+    });
+
+    const headers = await getBitgetHeaders(creds, "POST", path, bodyStr);
+    const res = await fetch(`${baseUrl}${path}`, {
+      method: "POST",
+      headers,
+      body: bodyStr,
+      cache: "no-store",
+    });
+    const data = await res.json();
+    if (data.code === "00000") {
+      return { success: true, leverage: clamped };
+    }
+    return { success: false, leverage: clamped, error: data.msg || `Code ${data.code}` };
+  } catch (err: any) {
+    return { success: false, leverage: Math.round(leverage), error: err.message };
+  }
+}
+

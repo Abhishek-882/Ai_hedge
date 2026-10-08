@@ -83,6 +83,10 @@ export async function GET(req: NextRequest) {
     const spreadBps = parseFloat(((bitgetFundingRate - binanceFundingRate) * 10000).toFixed(2));
     const annualizedYieldPct = parseFloat(((Math.abs(spreadBps) * 3 * 365) / 100).toFixed(2));
 
+    // Calculate cross-exchange mark price divergence
+    const priceDiff = parseFloat(Math.abs(binancePrice - bitgetPrice).toFixed(4));
+    const priceDivergencePct = binancePrice > 0 ? parseFloat(((priceDiff / binancePrice) * 100).toFixed(4)) : 0;
+
     return NextResponse.json(
       {
         success: true,
@@ -94,6 +98,8 @@ export async function GET(req: NextRequest) {
         bitgetFundingRate,
         spreadBps,
         annualizedYieldPct,
+        priceDiff,
+        priceDivergencePct,
         high24h,
         low24h,
         nextFundingTime,

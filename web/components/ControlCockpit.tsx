@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import {
   ArrowDownRight,
   ArrowUpRight,
@@ -8,13 +8,15 @@ import {
   RefreshCw,
   ShieldAlert,
   XCircle,
-  Zap,
   Sliders,
   CheckCircle2,
-  ShieldCheck,
-  Cpu,
   Sparkles,
   Clock,
+  Crosshair,
+  Gauge,
+  AlertTriangle,
+  Lock,
+  Unlock,
 } from "lucide-react";
 import { formatCountdown } from "@/lib/settlementTime";
 
@@ -26,6 +28,18 @@ const DEFAULT_ASSET_CONFIGS: Record<string, { label: string; base: string; prese
   SOLUSDT: { label: "SOL", base: "SOL", presets: ["0.2", "0.5", "1.0", "2.0"], step: "0.1", defaultQty: "0.5" },
   DOGEUSDT: { label: "DOGE", base: "DOGE", presets: ["200", "500", "1000", "2000"], step: "10", defaultQty: "500" },
   XRPUSDT: { label: "XRP", base: "XRP", presets: ["50", "100", "200", "500"], step: "1", defaultQty: "100" },
+};
+
+const COIN_MAX_LEVERAGE: Record<string, { binance: number; bitget: number }> = {
+  BTCUSDT: { binance: 50, bitget: 25 },
+  ETHUSDT: { binance: 50, bitget: 25 },
+  SOLUSDT: { binance: 20, bitget: 20 },
+  LTCUSDT: { binance: 50, bitget: 25 },
+  DOGEUSDT: { binance: 20, bitget: 20 },
+  XRPUSDT: { binance: 50, bitget: 25 },
+  NEARUSDT: { binance: 20, bitget: 20 },
+  AVAXUSDT: { binance: 20, bitget: 20 },
+  ADAUSDT: { binance: 20, bitget: 20 },
 };
 
 function getAssetMeta(sym: string) {
@@ -56,6 +70,10 @@ interface ControlCockpitProps {
   exitSpreadTarget?: number;
   onExitSpreadTargetChange?: (val: number) => void;
   markPrice?: number;
+  binancePrice?: number;
+  bitgetPrice?: number;
+  priceDiff?: number;
+  priceDivergencePct?: number;
   binanceFundingRate?: number;
   bitgetFundingRate?: number;
   nextFundingTime?: number;
@@ -77,6 +95,10 @@ export default function ControlCockpit({
   exitSpreadTarget = 2,
   onExitSpreadTargetChange,
   markPrice = 0,
+  binancePrice = 0,
+  bitgetPrice = 0,
+  priceDiff,
+  priceDivergencePct,
   binanceFundingRate,
   bitgetFundingRate,
   nextFundingTime = 0,
@@ -89,6 +111,56 @@ export default function ControlCockpit({
   const [internalMinSpread, setInternalMinSpread] = useState<number>(12);
   const [internalExitTarget, setInternalExitTarget] = useState<number>(2);
   const [cockpitError, setCockpitError] = useState<string | null>(null);
+
+  // Cross-Exchange Mark Price Divergence Calculations
+  const bnPrice = binancePrice > 0 ? binancePrice : markPrice > 0 ? markPrice : 1;
+  const bgPrice = bitgetPrice > 0 ? bitgetPrice : markPrice > 0 ? markPrice : 1;
+  const effectivePriceDiff = priceDiff !== undefined ? priceDiff : Math.abs(bnPrice - bgPrice);
+  const effectiveDivergencePct =
+    priceDivergencePct !== undefined
+      ? priceDivergencePct
+      : bnPrice > 0
+      ? (effectivePriceDiff / bnPrice) * 100
+      : 0;
+
+  // Auto-Wait Limit Sniper State
+  const [maxPriceDivergencePct, setMaxPriceDivergencePct] = useState<number>(0.25);
+  const [sniperWaitingDirection, setSniperWaitingDirection] = useState<"SHORT_BINANCE_LONG_BITGET" | "LONG_BINANCE_SHORT_BITGET" | null>(null);
+
+  // Max Leverage Engine State
+  const [leverageMode, setLeverageMode] = useState<"MAX" | "20" | "10" | "5" | "2" | "1">("MAX");
+  const coinLimits = COIN_MAX_LEVERAGE[currentAsset] || { binance: 20, bitget: 20 };
+  const effectiveBinanceLeverage = leverageMode === "MAX" ? coinLimits.binance : parseInt(leverageMode, 10);
+  const effectiveBitgetLeverage = leverageMode === "MAX" ? coinLimits.bitget : parseInt(leverageMode, 10);
+
+  // Emergency Kill Switch Safety State
+  const [isKillSwitchArmed, setIsKillSwitchArmed] = useState<boolean>(false);
+
+  // Stagger Strategy State
+  const [staggerPolicy, setStaggerPolicy] = useState<"auto_ewma" | "simultaneous" | "manual">("auto_ewma");
+  const [manualDelayMs, setManualDelayMs] = useState<number>(120);
+  const [manualVenue, setManualVenue] = useState<"Binance" | "Bitget">("Bitget");
+
+  const [showConfig, setShowConfig] = useState<boolean>(false);
+  const [loadingAction, setLoadingAction] = useState<string | null>(null);
+  const [lastReceipt, setLastReceipt] = useState<any>(null);
+
+  // Auto-sync quantity when selectedSymbol updates
+  useEffect(() => {
+    if (selectedSymbol) {
+      const meta = getAssetMeta(selectedSymbol);
+      setQuantity(meta.defaultQty);
+    }
+  }, [selectedSymbol]);
+
+  // Auto-Wait Limit Sniper Loop: trigger execution as soon as basis gap compresses
+  useEffect(() => {
+    if (sniperWaitingDirection && effectiveDivergencePct <= maxPriceDivergencePct && !loadingAction) {
+      const dir = sniperWaitingDirection;
+      setSniperWaitingDirection(null);
+      executeHedge(dir, true);
+    }
+  }, [sniperWaitingDirection, effectiveDivergencePct, maxPriceDivergencePct, loadingAction]);
 
   const handleNotionalSelect = (dollars: number) => {
     setSelectedNotional(dollars);
@@ -108,51 +180,25 @@ export default function ControlCockpit({
     }
   };
 
-  // Auto-sync quantity when selectedSymbol updates
-  React.useEffect(() => {
-    if (selectedSymbol) {
-      const meta = getAssetMeta(selectedSymbol);
-      setQuantity(meta.defaultQty);
-    }
-  }, [selectedSymbol]);
-
-  // Stagger Strategy State
-  const [staggerPolicy, setStaggerPolicy] = useState<"auto_ewma" | "simultaneous" | "manual">("auto_ewma");
-  const [manualDelayMs, setManualDelayMs] = useState<number>(120);
-  const [manualVenue, setManualVenue] = useState<"Binance" | "Bitget">("Bitget");
-
-  const currentMinSpread = minSpreadEntry ?? internalMinSpread;
-  const currentExitTarget = exitSpreadTarget ?? internalExitTarget;
-
-  const handleMinSpreadChange = (val: number) => {
-    if (onMinSpreadEntryChange) {
-      onMinSpreadEntryChange(val);
-    } else {
-      setInternalMinSpread(val);
-    }
-  };
-
-  const handleExitTargetChange = (val: number) => {
-    if (onExitSpreadTargetChange) {
-      onExitSpreadTargetChange(val);
-    } else {
-      setInternalExitTarget(val);
-    }
-  };
-
   const handleAssetSelect = (sym: SupportedAsset) => {
     if (onSymbolChange) {
       onSymbolChange(sym);
     }
     const meta = getAssetMeta(sym);
     setQuantity(meta.defaultQty);
+    setSniperWaitingDirection(null);
   };
 
-  const [showConfig, setShowConfig] = useState<boolean>(false);
-  const [loadingAction, setLoadingAction] = useState<string | null>(null);
-  const [lastReceipt, setLastReceipt] = useState<any>(null);
+  const executeHedge = async (
+    direction: "SHORT_BINANCE_LONG_BITGET" | "LONG_BINANCE_SHORT_BITGET",
+    bypassSniper = false
+  ) => {
+    // Check if live divergence exceeds threshold and sniper is not bypassed
+    if (!bypassSniper && effectiveDivergencePct > maxPriceDivergencePct) {
+      setSniperWaitingDirection(direction);
+      return;
+    }
 
-  const executeHedge = async (direction: "SHORT_BINANCE_LONG_BITGET" | "LONG_BINANCE_SHORT_BITGET") => {
     setLoadingAction(direction);
     try {
       const leg1Side = direction === "SHORT_BINANCE_LONG_BITGET" ? "SELL" : "BUY";
@@ -170,10 +216,20 @@ export default function ControlCockpit({
           staggerPolicy,
           manualDelayMs,
           manualVenue,
+          maxPriceDivergencePct,
+          bypassSniper,
+          leverage: effectiveBinanceLeverage,
         }),
       });
       const data = await res.json();
-      if (!data.success) throw new Error(data.error);
+      if (!data.success) {
+        if (data.sniperPending) {
+          setSniperWaitingDirection(direction);
+          return;
+        }
+        throw new Error(data.error);
+      }
+      setSniperWaitingDirection(null);
       setLastReceipt({
         type: "HEDGE_ENTRY",
         direction,
@@ -228,6 +284,7 @@ export default function ControlCockpit({
         message: data.message,
         data,
       });
+      setIsKillSwitchArmed(false);
       if (onTradeExecuted) {
         onTradeExecuted({
           id: `CLS-${Date.now().toString().slice(-6)}`,
@@ -275,6 +332,7 @@ export default function ControlCockpit({
           staggerPolicy,
           manualDelayMs,
           manualVenue,
+          bypassSniper: true,
         }),
       });
       const data = await res.json();
@@ -313,6 +371,12 @@ export default function ControlCockpit({
     }
   };
 
+  const numQty = parseFloat(quantity || "0") || 0;
+  const effectivePrice = bnPrice > 0 ? bnPrice : 1;
+  const notionalDollars = numQty * effectivePrice;
+  const estMarginBinance = notionalDollars / effectiveBinanceLeverage;
+  const estMarginBitget = notionalDollars / effectiveBitgetLeverage;
+
   return (
     <div className="bg-surface rounded-xl border border-border p-3.5 sm:p-5 flex flex-col justify-between font-mono">
       <div>
@@ -324,7 +388,7 @@ export default function ControlCockpit({
             </h2>
           </div>
           <div className="flex items-center space-x-2">
-            <span className="px-1.5 py-0.5 rounded text-[9px] bg-zinc-800 text-cyan-400 border border-cyan-800/40">
+            <span className="px-1.5 py-0.5 rounded text-[9px] bg-zinc-800 text-cyan-400 border border-cyan-800/40 font-mono">
               BINANCE + BITGET
             </span>
           </div>
@@ -349,204 +413,174 @@ export default function ControlCockpit({
         {/* Multi-Asset Selector Bar */}
         <div className="mt-4">
           <div className="flex items-center justify-between mb-1.5">
-            <label className="text-[10px] text-zinc-400 block uppercase font-semibold">
+            <label className="text-[10px] text-zinc-400 uppercase font-semibold">
               SELECT TRADING ASSET
             </label>
-            {!DEFAULT_ASSET_CONFIGS[currentAsset] && (
-              <span className="text-[10px] px-2 py-0.5 rounded bg-amber-500/20 text-accent-amber border border-amber-500/30 font-bold animate-pulse">
-                LOADED: {currentAsset}
-              </span>
-            )}
+            <span className="text-[10px] text-accent-amber font-mono">
+              LOADED: {currentAsset}
+            </span>
           </div>
-          <div className={`grid ${!DEFAULT_ASSET_CONFIGS[currentAsset] ? "grid-cols-3 sm:grid-cols-6" : "grid-cols-3 sm:grid-cols-5"} gap-1.5`}>
-            {(Object.keys(DEFAULT_ASSET_CONFIGS) as string[]).map((sym) => {
-              const meta = DEFAULT_ASSET_CONFIGS[sym];
-              const isSelected = sym === currentAsset;
-              return (
-                <button
-                  key={sym}
-                  onClick={() => handleAssetSelect(sym)}
-                  className={`py-1.5 text-xs rounded border transition-all font-bold ${
-                    isSelected
-                      ? "bg-accent-amber/20 border-accent-amber text-accent-amber shadow-sm"
-                      : "bg-surface-card border-border text-zinc-400 hover:border-zinc-700 hover:text-zinc-200"
-                  }`}
-                >
-                  {meta.label}
-                </button>
-              );
-            })}
-            {!DEFAULT_ASSET_CONFIGS[currentAsset] && (
+          <div className="grid grid-cols-6 gap-1.5">
+            {Object.keys(DEFAULT_ASSET_CONFIGS).map((sym) => (
               <button
-                onClick={() => handleAssetSelect(currentAsset)}
-                className="py-1.5 text-xs rounded border transition-all font-bold bg-accent-amber text-zinc-950 border-amber-400 shadow-sm flex items-center justify-center space-x-1"
+                key={sym}
+                onClick={() => handleAssetSelect(sym)}
+                className={`py-1.5 px-2 rounded text-xs font-bold transition-all ${
+                  currentAsset === sym
+                    ? "bg-accent-amber text-zinc-950 shadow-md font-black ring-1 ring-amber-400"
+                    : "bg-surface-card hover:bg-zinc-800 border border-border text-zinc-400 hover:text-zinc-200"
+                }`}
               >
-                <span>{assetMeta.label}</span>
+                {DEFAULT_ASSET_CONFIGS[sym].label}
               </button>
-            )}
+            ))}
+            <button
+              disabled
+              className="py-1.5 px-2 rounded text-xs font-bold bg-accent-amber text-zinc-950 ring-1 ring-amber-400"
+            >
+              {assetMeta.label}
+            </button>
           </div>
         </div>
 
-        {/* 24/7 Autonomous Autopilot Panel */}
-        <div className="mt-4 p-3.5 rounded-xl border border-border bg-surface-card/60 backdrop-blur">
-          <div className="flex items-center justify-between mb-2">
-            <div className="flex items-center space-x-2">
-              <Zap className={`w-4 h-4 ${isAutopilotActive ? "text-accent-amber animate-bounce" : "text-zinc-500"}`} />
-              <span className="text-xs font-bold uppercase tracking-wider text-zinc-200">
-                24/7 AUTONOMOUS HEDGER
-              </span>
+        {/* MAX LEVERAGE CONTROL ENGINE & COLLATERAL BALANCER */}
+        <div className="mt-4 p-3 rounded-lg bg-zinc-950 border border-zinc-800 space-y-2">
+          <div className="flex items-center justify-between text-xs">
+            <span className="text-zinc-300 font-bold flex items-center space-x-1.5 text-[11px]">
+              <Gauge className="w-3.5 h-3.5 text-accent-amber" />
+              <span>DYNAMIC LEVERAGE ENGINE</span>
+            </span>
+            <span className="text-[10px] font-mono text-zinc-400">
+              BN: <strong className="text-accent-amber">{effectiveBinanceLeverage}x</strong> • BG:{" "}
+              <strong className="text-cyan-400">{effectiveBitgetLeverage}x</strong>
+            </span>
+          </div>
+
+          <div className="grid grid-cols-6 gap-1.5">
+            {(["MAX", "20", "10", "5", "2", "1"] as const).map((m) => (
+              <button
+                key={m}
+                onClick={() => setLeverageMode(m)}
+                className={`py-1 rounded text-[10px] font-bold transition-all border ${
+                  leverageMode === m
+                    ? "bg-amber-500/20 text-accent-amber border-amber-500/50 shadow-sm"
+                    : "bg-surface-card border-border text-zinc-400 hover:text-zinc-200 hover:border-zinc-700"
+                }`}
+              >
+                {m === "MAX" ? "MAX LEV" : `${m}x`}
+              </button>
+            ))}
+          </div>
+
+          {/* Collateral Margin Allocation Breakdown */}
+          <div className="grid grid-cols-2 gap-2 text-[10px] pt-1 border-t border-zinc-800/80">
+            <div className="p-1.5 rounded bg-zinc-900 border border-zinc-800 flex justify-between items-center">
+              <span className="text-zinc-500">Binance Margin ({effectiveBinanceLeverage}x):</span>
+              <strong className="text-accent-amber font-mono">${estMarginBinance.toFixed(2)}</strong>
             </div>
-            <button
-              onClick={() => onToggleAutopilot && onToggleAutopilot(!isAutopilotActive)}
-              className={`px-3 py-1 rounded-full text-xs font-bold transition-all ${
-                isAutopilotActive
-                  ? "bg-accent-amber text-black shadow-lg shadow-amber-500/20"
-                  : "bg-zinc-800 text-zinc-400 hover:text-zinc-200"
+            <div className="p-1.5 rounded bg-zinc-900 border border-zinc-800 flex justify-between items-center">
+              <span className="text-zinc-500">Bitget Margin ({effectiveBitgetLeverage}x):</span>
+              <strong className="text-cyan-400 font-mono">${estMarginBitget.toFixed(2)}</strong>
+            </div>
+          </div>
+        </div>
+
+        {/* AUTO-WAIT LIMIT SNIPER & PRICE DIVERGENCE GUARD */}
+        <div className="mt-4 p-3 rounded-lg bg-surface-card border border-border space-y-2">
+          <div className="flex items-center justify-between text-xs">
+            <span className="text-zinc-300 font-bold flex items-center space-x-1.5 text-[11px]">
+              <Crosshair className="w-3.5 h-3.5 text-accent-cyan" />
+              <span>AUTO-WAIT BASIS SNIPER</span>
+            </span>
+            <span
+              className={`text-[10px] font-mono px-2 py-0.5 rounded border ${
+                effectiveDivergencePct > maxPriceDivergencePct
+                  ? "bg-rose-500/10 text-rose-400 border-rose-500/30 font-bold animate-pulse"
+                  : "bg-emerald-500/10 text-emerald-400 border-emerald-500/30"
               }`}
             >
-              {isAutopilotActive ? "ACTIVE" : "STANDBY"}
-            </button>
-          </div>
-
-          <div className="flex items-center justify-between text-[11px] text-zinc-400 mb-2">
-            <span className="flex items-center space-x-1">
-              <span>Status:</span>
-              <strong className={isAutopilotActive ? "text-emerald-400" : "text-zinc-400"}>
-                {isAutopilotActive ? autopilotState : "OFFLINE"}
-              </strong>
+              Gap: {effectiveDivergencePct.toFixed(2)}% {effectiveDivergencePct > maxPriceDivergencePct ? "⚠️ (EXCEEDS LIMIT)" : "✓ (OPTIMAL)"}
             </span>
-            <button
-              onClick={() => setShowConfig(!showConfig)}
-              className="text-zinc-400 hover:text-zinc-200 flex items-center space-x-1"
-            >
-              <Sliders className="w-3 h-3" />
-              <span>{showConfig ? "Hide Config" : "Tuning & Policy"}</span>
-            </button>
           </div>
 
-          {showConfig && (
-            <div className="mt-2 pt-2 border-t border-border space-y-2 text-[10px]">
-              <div className="grid grid-cols-2 gap-2">
-                <div>
-                  <label className="text-zinc-500 block mb-1">ENTRY THRESHOLD (BPS)</label>
-                  <input
-                    type="number"
-                    value={currentMinSpread}
-                    onChange={(e) => handleMinSpreadChange(parseFloat(e.target.value) || 12)}
-                    className="w-full px-2 py-1 bg-zinc-900 border border-border rounded text-zinc-200 font-mono"
-                  />
-                </div>
-                <div>
-                  <label className="text-zinc-500 block mb-1">EXIT TARGET (BPS)</label>
-                  <input
-                    type="number"
-                    value={currentExitTarget}
-                    onChange={(e) => handleExitTargetChange(parseFloat(e.target.value) || 2)}
-                    className="w-full px-2 py-1 bg-zinc-900 border border-border rounded text-zinc-200 font-mono"
-                  />
-                </div>
-              </div>
-
-              {/* Stagger Policy Selector */}
-              <div>
-                <label className="text-zinc-500 block mb-1">LATENCY STAGGER POLICY</label>
-                <div className="grid grid-cols-3 gap-1">
-                  {[
-                    { id: "auto_ewma", label: "Auto EWMA" },
-                    { id: "simultaneous", label: "Parallel (0ms)" },
-                    { id: "manual", label: "Manual Delay" },
-                  ].map((p) => (
-                    <button
-                      key={p.id}
-                      onClick={() => setStaggerPolicy(p.id as any)}
-                      className={`py-1 text-[9px] rounded border ${
-                        staggerPolicy === p.id
-                          ? "bg-zinc-800 border-accent-cyan text-accent-cyan font-bold"
-                          : "bg-zinc-900 border-border text-zinc-400 hover:text-zinc-200"
-                      }`}
-                    >
-                      {p.label}
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              {staggerPolicy === "manual" && (
-                <div className="grid grid-cols-2 gap-2 pt-1">
-                  <div>
-                    <label className="text-zinc-500 block mb-0.5">DELAY VENUE</label>
-                    <select
-                      value={manualVenue}
-                      onChange={(e) => setManualVenue(e.target.value as any)}
-                      className="w-full px-2 py-1 bg-zinc-900 border border-border rounded text-zinc-200 font-mono text-[9px]"
-                    >
-                      <option value="Bitget">Bitget</option>
-                      <option value="Binance">Binance</option>
-                    </select>
-                  </div>
-                  <div>
-                    <label className="text-zinc-500 block mb-0.5">OFFSET (MS)</label>
-                    <input
-                      type="number"
-                      value={manualDelayMs}
-                      onChange={(e) => setManualDelayMs(parseInt(e.target.value, 10) || 0)}
-                      className="w-full px-2 py-1 bg-zinc-900 border border-border rounded text-zinc-200 font-mono text-[9px]"
-                    />
-                  </div>
-                </div>
-              )}
-            </div>
-          )}
-
-          <div className="mt-2 flex items-center justify-between text-[10px] text-zinc-500">
-            <span>Aggressive Chase: 3x Retries / 1.5s</span>
-            <span className="text-accent-amber">Live Spread: {spreadBps.toFixed(1)} bps</span>
+          <div className="flex items-center space-x-3 text-[10px]">
+            <span className="text-zinc-400 whitespace-nowrap">Tolerance:</span>
+            <input
+              type="range"
+              min="0.05"
+              max="1.50"
+              step="0.05"
+              value={maxPriceDivergencePct}
+              onChange={(e) => setMaxPriceDivergencePct(parseFloat(e.target.value))}
+              className="flex-1 accent-amber-500 cursor-pointer h-1.5 bg-zinc-800 rounded-lg"
+            />
+            <span className="font-mono text-accent-amber font-bold w-12 text-right">
+              {maxPriceDivergencePct.toFixed(2)}%
+            </span>
           </div>
-        </div>
 
-        {/* Size Selection & Custom Continuous Input */}
-        <div className="mt-4 space-y-3">
-          {/* Quick Notional Dollar Chips */}
-          <div>
-            <div className="flex items-center justify-between mb-1.5">
-              <label className="text-[10px] text-zinc-400 uppercase font-semibold flex items-center space-x-1">
-                <span>QUICK NOTIONAL SIZING</span>
-              </label>
-              {markPrice && markPrice > 0 ? (
-                <span className="text-[10px] text-accent-cyan font-mono">
-                  Est. ${(parseFloat(quantity || "0") * markPrice).toFixed(2)} USDT
-                </span>
-              ) : null}
-            </div>
-            <div className="grid grid-cols-5 gap-1.5">
-              {[25, 50, 100, 250, 500].map((dollars) => (
+          <div className="flex items-center justify-between gap-1.5 pt-1 text-[9px]">
+            <span className="text-zinc-500">Presets:</span>
+            <div className="flex gap-1.5">
+              {[
+                { label: "Tight 0.10%", val: 0.1 },
+                { label: "Normal 0.25%", val: 0.25 },
+                { label: "Relaxed 0.50%", val: 0.5 },
+              ].map((p) => (
                 <button
-                  key={dollars}
-                  onClick={() => handleNotionalSelect(dollars)}
-                  className={`py-1 text-[11px] rounded border transition-all active:scale-95 ${
-                    selectedNotional === dollars
-                      ? "bg-amber-500/20 border-accent-amber text-accent-amber font-bold shadow-sm"
-                      : "bg-zinc-900 border-zinc-800 text-zinc-400 hover:text-zinc-200 hover:border-zinc-700"
+                  key={p.label}
+                  onClick={() => setMaxPriceDivergencePct(p.val)}
+                  className={`px-2 py-0.5 rounded border transition-colors ${
+                    maxPriceDivergencePct === p.val
+                      ? "bg-accent-amber/20 text-accent-amber border-amber-500/40"
+                      : "bg-zinc-900 border-zinc-800 text-zinc-400 hover:text-zinc-200"
                   }`}
                 >
-                  ${dollars}
+                  {p.label}
                 </button>
               ))}
             </div>
           </div>
+        </div>
 
-          {/* Unit Quantity Presets */}
-          <div>
-            <div className="flex items-center justify-between mb-1.5">
-              <label className="text-xs text-zinc-400 uppercase">
+        {/* Quantity Sizing Controls */}
+        <div className="mt-4">
+          <div className="flex items-center justify-between mb-1.5">
+            <label className="text-[10px] text-zinc-400 uppercase font-semibold">
+              QUICK NOTIONAL SIZING
+            </label>
+            <span className="text-[10px] text-zinc-400 font-mono">
+              Est. ${notionalDollars.toFixed(2)} USDT
+            </span>
+          </div>
+
+          <div className="grid grid-cols-5 gap-1.5 mb-2.5">
+            {[25, 50, 100, 250, 500].map((dollars) => (
+              <button
+                key={dollars}
+                onClick={() => handleNotionalSelect(dollars)}
+                className={`py-1.5 px-2 rounded text-xs font-bold transition-all ${
+                  selectedNotional === dollars
+                    ? "bg-accent-amber text-zinc-950 shadow-md font-black ring-1 ring-amber-400"
+                    : "bg-surface-card hover:bg-zinc-800 border border-border text-zinc-400 hover:text-zinc-200"
+                }`}
+              >
+                ${dollars}
+              </button>
+            ))}
+          </div>
+
+          <div className="space-y-1.5">
+            <div className="flex items-center justify-between">
+              <label className="text-[10px] text-zinc-400 uppercase font-semibold">
                 COIN UNITS ({assetMeta.base})
               </label>
-              <span className="text-[10px] text-zinc-500">
+              <span className="text-[10px] text-zinc-400 font-mono">
                 Selected: <strong className="text-zinc-200">{quantity} {assetMeta.base}</strong>
               </span>
             </div>
 
-            <div className="grid grid-cols-4 gap-2 mb-2">
+            <div className="grid grid-cols-4 gap-1.5 mb-2">
               {assetMeta.presets.map((qty) => (
                 <button
                   key={qty}
@@ -554,9 +588,9 @@ export default function ControlCockpit({
                     setSelectedNotional(null);
                     setQuantity(qty);
                   }}
-                  className={`py-1.5 text-xs rounded border transition-colors ${
+                  className={`py-1 px-2 rounded text-xs font-mono font-bold transition-all border ${
                     quantity === qty && selectedNotional === null
-                      ? "bg-zinc-800 border-accent-amber text-zinc-100 font-bold"
+                      ? "bg-zinc-800 border-accent-amber text-accent-amber ring-1 ring-amber-400/50"
                       : "bg-surface-card border-border text-zinc-400 hover:border-zinc-700"
                   }`}
                 >
@@ -565,7 +599,6 @@ export default function ControlCockpit({
               ))}
             </div>
 
-            {/* Custom Numerical Quantity Input */}
             <div className="flex items-center space-x-2">
               <span className="text-[10px] text-zinc-500">Custom Size:</span>
               <input
@@ -585,16 +618,14 @@ export default function ControlCockpit({
 
         {/* Real-Time Funding Harvest & Yield Projection Engine */}
         {(() => {
-          const numQty = parseFloat(quantity || "0") || 0;
-          const effectivePrice = markPrice > 0 ? markPrice : 1;
-          const notionalDollars = numQty * effectivePrice;
           const absSpread = Math.abs(spreadBps || 0);
           const est8hPayout = (notionalDollars * absSpread) / 10000;
           const estDailyPayout = est8hPayout * 3;
           const estAnnualApy = (absSpread * 3 * 365) / 100;
-          const isShortBnOptimal = (binanceFundingRate !== undefined && bitgetFundingRate !== undefined)
-            ? (binanceFundingRate >= bitgetFundingRate)
-            : (spreadBps >= 0);
+          const isShortBnOptimal =
+            binanceFundingRate !== undefined && bitgetFundingRate !== undefined
+              ? binanceFundingRate >= bitgetFundingRate
+              : spreadBps >= 0;
 
           return (
             <div className="mt-4 p-3.5 rounded-xl border border-amber-500/30 bg-gradient-to-br from-amber-500/5 via-zinc-950 to-zinc-900 shadow-lg font-mono">
@@ -637,7 +668,6 @@ export default function ControlCockpit({
                 </div>
               </div>
 
-              {/* Directional Cash Flow Recommendation */}
               <div className="mt-2 pt-2 border-t border-border/40 flex items-center justify-between text-[10px]">
                 <span className="text-zinc-400">Optimal Cash Flow:</span>
                 <span className={`font-semibold ${isShortBnOptimal ? "text-accent-amber" : "text-accent-cyan"}`}>
@@ -648,11 +678,44 @@ export default function ControlCockpit({
           );
         })()}
 
-        {/* Dual-Leg Real-Time Hedging Controls */}
+        {/* ACTIVE SNIPER WAITING BANNER (IF ARMED) */}
+        {sniperWaitingDirection && (
+          <div className="mt-4 p-3 rounded-xl bg-amber-500/15 border border-amber-500/40 text-amber-200 text-xs space-y-2 animate-pulse">
+            <div className="flex items-center justify-between">
+              <span className="font-bold flex items-center space-x-1.5">
+                <Crosshair className="w-4 h-4 text-accent-amber animate-spin" />
+                <span>SNIPER ARMED: WAITING FOR BASIS COMPRESSION</span>
+              </span>
+              <span className="font-mono text-[10px] bg-zinc-950/80 px-2 py-0.5 rounded border border-amber-500/30">
+                Gap: {effectiveDivergencePct.toFixed(2)}% &gt; {maxPriceDivergencePct.toFixed(2)}%
+              </span>
+            </div>
+            <p className="text-[10px] text-zinc-300">
+              Holding entry until Binance (${bnPrice.toFixed(2)}) and Bitget (${bgPrice.toFixed(2)}) prices converge within {maxPriceDivergencePct.toFixed(2)}% tolerance.
+            </p>
+            <div className="flex items-center gap-2 pt-1">
+              <button
+                onClick={() => executeHedge(sniperWaitingDirection, true)}
+                className="flex-1 py-1.5 px-3 rounded bg-amber-500 text-zinc-950 font-bold text-[10px] hover:bg-amber-400 transition-colors"
+              >
+                ⚡ FORCE EXECUTE NOW (Bypass Sniper)
+              </button>
+              <button
+                onClick={() => setSniperWaitingDirection(null)}
+                className="py-1.5 px-3 rounded bg-zinc-900 border border-zinc-700 text-zinc-300 text-[10px] hover:text-white"
+              >
+                ✕ Cancel
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* Dual-Leg Real-Time Hedging Execution Controls */}
         {(() => {
-          const isShortBnOptimal = (binanceFundingRate !== undefined && bitgetFundingRate !== undefined)
-            ? (binanceFundingRate >= bitgetFundingRate)
-            : (spreadBps >= 0);
+          const isShortBnOptimal =
+            binanceFundingRate !== undefined && bitgetFundingRate !== undefined
+              ? binanceFundingRate >= bitgetFundingRate
+              : spreadBps >= 0;
 
           return (
             <div className="mt-4">
@@ -685,7 +748,9 @@ export default function ControlCockpit({
                     <ArrowDownRight className="w-4 h-4 mb-1" />
                   )}
                   <span>SHORT BINANCE</span>
-                  <span className="text-[10px] text-accent-cyan font-medium">+ LONG BITGET ({quantity} {assetMeta.base})</span>
+                  <span className="text-[10px] text-accent-cyan font-medium">
+                    + LONG BITGET ({quantity} {assetMeta.base})
+                  </span>
                   <span className="text-[9px] text-zinc-400 mt-0.5">Keep Open In Table</span>
                 </button>
 
@@ -709,7 +774,9 @@ export default function ControlCockpit({
                     <ArrowUpRight className="w-4 h-4 mb-1" />
                   )}
                   <span>LONG BINANCE</span>
-                  <span className="text-[10px] text-accent-amber font-medium">+ SHORT BITGET ({quantity} {assetMeta.base})</span>
+                  <span className="text-[10px] text-accent-amber font-medium">
+                    + SHORT BITGET ({quantity} {assetMeta.base})
+                  </span>
                   <span className="text-[9px] text-zinc-400 mt-0.5">Keep Open In Table</span>
                 </button>
               </div>
@@ -717,7 +784,7 @@ export default function ControlCockpit({
           );
         })()}
 
-        {/* Dual Hedge Latency Test Suite */}
+        {/* Dual Hedge Latency Test Suite (Routine Benchmark) */}
         <div className="mt-4 p-3 rounded-lg bg-surface-card border border-border">
           <div className="flex items-center justify-between mb-2">
             <span className="text-[11px] text-zinc-300 font-bold flex items-center space-x-1.5">
@@ -729,7 +796,7 @@ export default function ControlCockpit({
             </span>
           </div>
           <p className="text-[10px] text-zinc-400 mb-2.5">
-            ⚡ Executes sub-250ms simultaneous entry & exit to calibrate lead stagger without ongoing risk. (To keep positions open, use the buttons above).
+            ⚡ Executes sub-250ms simultaneous entry & exit to calibrate lead stagger without ongoing risk.
           </p>
           <button
             onClick={executeHedgeBenchmark}
@@ -747,25 +814,55 @@ export default function ControlCockpit({
           </button>
         </div>
 
-        {/* Emergency Kill Switch / Close Position */}
-        <div className="mt-4 grid grid-cols-2 gap-3">
-          <button
-            onClick={executeCloseAll}
-            disabled={!!loadingAction}
-            className="py-2 px-3 rounded bg-zinc-800/80 hover:bg-zinc-800 border border-zinc-700 text-zinc-300 text-xs flex items-center justify-center space-x-1.5 transition-colors"
-          >
-            <XCircle className="w-3.5 h-3.5" />
-            <span>FLATTEN ALL</span>
-          </button>
+        {/* DEDICATED EMERGENCY RISK CONTROLS PANEL (SEPARATED FROM SPEED TESTS) */}
+        <div className="mt-5 p-3.5 rounded-xl bg-gradient-to-br from-rose-950/20 via-zinc-950 to-zinc-950 border border-rose-900/40 space-y-3">
+          <div className="flex items-center justify-between">
+            <span className="text-[11px] font-bold text-rose-400 flex items-center space-x-1.5">
+              <ShieldAlert className="w-3.5 h-3.5 text-accent-rose" />
+              <span>EMERGENCY RISK CONTROLS</span>
+            </span>
+            <span className="text-[9px] text-zinc-500 font-mono">
+              Global Position Unwind
+            </span>
+          </div>
 
-          <button
-            onClick={executeCloseAll}
-            disabled={!!loadingAction}
-            className="py-2 px-3 rounded bg-rose-950/40 hover:bg-rose-950/70 border border-rose-800/60 text-rose-300 text-xs flex items-center justify-center space-x-1.5 transition-colors font-bold"
-          >
-            <ShieldAlert className="w-3.5 h-3.5 text-accent-rose" />
-            <span>KILL SWITCH</span>
-          </button>
+          {/* Safety Arming Tick Checkbox */}
+          <label className="flex items-center space-x-2 text-[10px] cursor-pointer select-none py-1 px-2 rounded bg-zinc-900/80 border border-zinc-800">
+            <input
+              type="checkbox"
+              checked={isKillSwitchArmed}
+              onChange={(e) => setIsKillSwitchArmed(e.target.checked)}
+              className="rounded border-zinc-700 text-rose-600 focus:ring-rose-500 bg-zinc-950 cursor-pointer"
+            />
+            <span className={isKillSwitchArmed ? "text-rose-300 font-bold flex items-center gap-1" : "text-zinc-400 flex items-center gap-1"}>
+              {isKillSwitchArmed ? <Unlock className="w-3 h-3 text-rose-400" /> : <Lock className="w-3 h-3 text-zinc-500" />}
+              <span>Arm Emergency Kill Switch (Check to unlock instant total liquidation)</span>
+            </span>
+          </label>
+
+          <div className="grid grid-cols-2 gap-2.5">
+            <button
+              onClick={executeCloseAll}
+              disabled={!!loadingAction}
+              className="py-2 px-3 rounded bg-zinc-900 hover:bg-zinc-800 border border-zinc-700 text-zinc-300 text-xs flex items-center justify-center space-x-1.5 transition-colors disabled:opacity-50"
+            >
+              <XCircle className="w-3.5 h-3.5" />
+              <span>FLATTEN ALL</span>
+            </button>
+
+            <button
+              onClick={executeCloseAll}
+              disabled={!isKillSwitchArmed || !!loadingAction}
+              className={`py-2 px-3 rounded text-xs flex items-center justify-center space-x-1.5 transition-all font-bold ${
+                isKillSwitchArmed
+                  ? "bg-rose-600 hover:bg-rose-500 text-white shadow-lg shadow-rose-950/60 ring-2 ring-rose-400 cursor-pointer active:scale-95 animate-pulse"
+                  : "bg-zinc-900/50 border border-zinc-800 text-zinc-600 cursor-not-allowed opacity-40"
+              }`}
+            >
+              <ShieldAlert className="w-3.5 h-3.5" />
+              <span>{isKillSwitchArmed ? "🚨 EXECUTE KILL SWITCH" : "KILL SWITCH (LOCKED)"}</span>
+            </button>
+          </div>
         </div>
       </div>
 

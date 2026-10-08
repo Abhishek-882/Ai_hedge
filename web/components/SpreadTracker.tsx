@@ -1,7 +1,7 @@
 "use client";
 
 import React from "react";
-import { ArrowRight, TrendingUp, Sparkles, Activity, AlertCircle, CheckCircle2 } from "lucide-react";
+import { ArrowRight, TrendingUp, Sparkles, Activity, AlertTriangle, CheckCircle2, ShieldAlert } from "lucide-react";
 
 interface SpreadTrackerProps {
   symbol?: string;
@@ -9,6 +9,10 @@ interface SpreadTrackerProps {
   bitgetFundingRate?: number;
   spreadBps?: number;
   markPrice?: number;
+  binancePrice?: number;
+  bitgetPrice?: number;
+  priceDiff?: number;
+  priceDivergencePct?: number;
 }
 
 export default function SpreadTracker({
@@ -17,11 +21,29 @@ export default function SpreadTracker({
   bitgetFundingRate = 0.0002,
   spreadBps = 10.0,
   markPrice = 0,
+  binancePrice = 0,
+  bitgetPrice = 0,
+  priceDiff,
+  priceDivergencePct,
 }: SpreadTrackerProps) {
   const binancePct = (binanceFundingRate || 0) * 100;
   const bitgetPct = (bitgetFundingRate || 0) * 100;
   const absSpread = Math.abs(spreadBps || 0);
   const apy = ((absSpread * 3 * 365) / 100).toFixed(1);
+
+  // Cross-Exchange Mark Price Divergence Calculations
+  const bnPrice = binancePrice > 0 ? binancePrice : markPrice > 0 ? markPrice : 0;
+  const bgPrice = bitgetPrice > 0 ? bitgetPrice : markPrice > 0 ? markPrice : 0;
+  const effectivePriceDiff = priceDiff !== undefined ? priceDiff : Math.abs(bnPrice - bgPrice);
+  const effectiveDivergencePct =
+    priceDivergencePct !== undefined
+      ? priceDivergencePct
+      : bnPrice > 0
+      ? (effectivePriceDiff / bnPrice) * 100
+      : 0;
+
+  const isHighDivergence = effectiveDivergencePct > 0.35;
+  const isModerateDivergence = effectiveDivergencePct > 0.15 && !isHighDivergence;
 
   // Corridor Status Calculation
   let corridorStatus = "COMPRESSED (< 3 bps)";
@@ -41,7 +63,7 @@ export default function SpreadTracker({
 
   return (
     <div className="bg-surface rounded-xl border border-border p-3.5 sm:p-5 font-mono space-y-4 shadow-xl">
-      {/* Header */}
+      {/* Header with Live Mark Price & Cross-Exchange Price Divergence */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between border-b border-border pb-3 gap-2">
         <div className="flex items-center space-x-2">
           <TrendingUp className="w-4 h-4 text-accent-amber" />
@@ -49,19 +71,60 @@ export default function SpreadTracker({
             CROSS-EXCHANGE FUNDING SPREAD // {symbol}
           </h2>
         </div>
+
+        {/* Live Cross-Exchange Price Divergence Badge */}
         <div className="flex flex-wrap items-center gap-2 text-xs">
-          <span className="text-[10px] text-zinc-400">
-            Mark Price: <strong className="text-zinc-200">{markPrice > 0 ? `$${markPrice.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 4 })}` : "SYNCING..."}</strong>
+          <div className="flex items-center space-x-1.5 px-2 py-0.5 rounded bg-zinc-900 border border-zinc-800 text-[10px]">
+            <span className="text-zinc-500">PRICE GAP:</span>
+            <strong className="text-zinc-200">
+              ${effectivePriceDiff.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 4 })}
+            </strong>
+            <span
+              className={`font-bold ml-1 ${
+                isHighDivergence
+                  ? "text-rose-400"
+                  : isModerateDivergence
+                  ? "text-amber-400"
+                  : "text-emerald-400"
+              }`}
+            >
+              ({effectiveDivergencePct.toFixed(2)}%)
+            </span>
+          </div>
+
+          <span
+            className={`text-[10px] px-2 py-0.5 rounded border font-bold flex items-center space-x-1 ${
+              isHighDivergence
+                ? "bg-rose-500/15 text-rose-400 border-rose-500/40 animate-pulse"
+                : isModerateDivergence
+                ? "bg-amber-500/10 text-amber-400 border-amber-500/30"
+                : "bg-emerald-500/10 text-accent-emerald border-emerald-500/30"
+            }`}
+          >
+            {isHighDivergence ? (
+              <>
+                <AlertTriangle className="w-2.5 h-2.5" />
+                <span>PRICE GAP RISK</span>
+              </>
+            ) : isModerateDivergence ? (
+              <span>MODERATE GAP</span>
+            ) : (
+              <>
+                <CheckCircle2 className="w-2.5 h-2.5" />
+                <span>OPTIMAL BASIS</span>
+              </>
+            )}
           </span>
+
           <span className={`text-[10px] px-2 py-0.5 rounded border font-bold ${corridorBadge}`}>
             {corridorStatus}
           </span>
         </div>
       </div>
 
-      {/* 3-Column Rates & Basis */}
+      {/* 3-Column Rates, Mark Prices & Spread Basis */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4 items-center">
-        {/* Exchange A */}
+        {/* Exchange A: Binance */}
         <div className="p-3.5 rounded-lg bg-surface-card border border-border hover:border-zinc-700 transition-colors">
           <div className="text-[10px] text-zinc-400 uppercase mb-1 flex items-center justify-between">
             <span>Venue A (Binance Testnet)</span>
@@ -70,8 +133,11 @@ export default function SpreadTracker({
           <div className="text-xl font-bold text-accent-amber">
             {binancePct >= 0 ? "+" : ""}{binancePct.toFixed(4)}%
           </div>
-          <div className="text-[10px] text-zinc-500 mt-1">
-            Settlement: {(binancePct * 3 * 365).toFixed(1)}% APY
+          <div className="flex items-center justify-between text-[10px] text-zinc-500 mt-1">
+            <span>Settlement: {(binancePct * 3 * 365).toFixed(1)}% APY</span>
+            <span className="text-zinc-400 font-bold">
+              Mark: ${bnPrice > 0 ? bnPrice.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 4 }) : "..."}
+            </span>
           </div>
         </div>
 
@@ -90,7 +156,7 @@ export default function SpreadTracker({
           </div>
         </div>
 
-        {/* Exchange B */}
+        {/* Exchange B: Bitget */}
         <div className="p-3.5 rounded-lg bg-surface-card border border-border hover:border-zinc-700 transition-colors">
           <div className="text-[10px] text-zinc-400 uppercase mb-1 flex items-center justify-between">
             <span>Venue B (Bitget Demo)</span>
@@ -99,11 +165,25 @@ export default function SpreadTracker({
           <div className="text-xl font-bold text-accent-emerald">
             {bitgetPct >= 0 ? "+" : ""}{bitgetPct.toFixed(4)}%
           </div>
-          <div className="text-[10px] text-zinc-500 mt-1">
-            Settlement: {(bitgetPct * 3 * 365).toFixed(1)}% APY
+          <div className="flex items-center justify-between text-[10px] text-zinc-500 mt-1">
+            <span>Settlement: {(bitgetPct * 3 * 365).toFixed(1)}% APY</span>
+            <span className="text-zinc-400 font-bold">
+              Mark: ${bgPrice > 0 ? bgPrice.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 4 }) : "..."}
+            </span>
           </div>
         </div>
       </div>
+
+      {/* High Price Divergence Warning Alert Banner (If Applicable) */}
+      {isHighDivergence && (
+        <div className="p-2.5 rounded-lg bg-rose-500/10 border border-rose-500/30 text-rose-300 text-xs flex items-center space-x-2">
+          <ShieldAlert className="w-4 h-4 text-rose-400 flex-shrink-0 animate-bounce" />
+          <div>
+            <strong className="text-rose-200">Price Divergence Alert ({effectiveDivergencePct.toFixed(2)}%):</strong>{" "}
+            Binance (${bnPrice.toFixed(2)}) and Bitget (${bgPrice.toFixed(2)}) have a ${effectivePriceDiff.toFixed(2)} disparity. Entering now risks basis convergence drag. Auto-Wait Sniper will hold order until the price gap narrows.
+          </div>
+        </div>
+      )}
 
       {/* Visual Arbitrage Opportunity Corridor Meter */}
       <div className="pt-2 border-t border-border/80 space-y-1.5">
