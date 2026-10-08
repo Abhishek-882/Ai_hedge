@@ -18,54 +18,90 @@ export interface DualStreamData {
   lastUpdated: number;
 }
 
-const DEFAULT_PRICES: Record<string, number> = {
-  BTCUSDT: 86400,
-  ETHUSDT: 2568,
-  SOLUSDT: 185,
-  DOGEUSDT: 0.165,
-  XRPUSDT: 1.45,
-};
+// Module-level persistent cache across component re-renders and symbol switches
+const SESSION_PRICE_CACHE = new Map<string, DualStreamData>();
 
-export function useDualExchangeWebSockets(symbol: string = "BTCUSDT"): DualStreamData {
+function normalizeFundingRate(rate: number): number {
+  if (isNaN(rate) || rate === 0) return 0;
+  // If rate was passed as pre-multiplied percentage (e.g. 0.01 for 0.01%), convert to decimal fraction (0.0001)
+  if (Math.abs(rate) > 0.05) {
+    return rate / 100;
+  }
+  return rate;
+}
+
+export function useDualExchangeWebSockets(
+  symbol: string = "BTCUSDT",
+  seedData?: Partial<DualStreamData>
+): DualStreamData {
   const symUpper = symbol.toUpperCase();
   const symLower = symbol.toLowerCase();
-  const defaultPrice = DEFAULT_PRICES[symUpper] || 0;
 
-  const [data, setData] = useState<DualStreamData>(() => ({
-    symbol: symUpper,
-    binancePrice: defaultPrice,
-    binanceFundingRate: 0.0001,
-    bitgetPrice: defaultPrice > 0 ? defaultPrice * 0.9998 : 0,
-    bitgetFundingRate: 0.0002,
-    spreadBps: 1.0,
-    annualizedYieldPct: 10.95,
-    nextFundingTime: getDeterministicNextFundingTime(),
-    clockOffsetMs: 24, // Calibrated clock offset in ms
-    binanceWsConnected: false,
-    bitgetWsConnected: false,
-    lastUpdated: Date.now(),
-  }));
+  // Retrieve cached data or seed data for instant, non-zero rendering
+  const getInitialSnapshot = (): DualStreamData => {
+    const cached = SESSION_PRICE_CACHE.get(symUpper);
+    const bPrice = seedData?.binancePrice || cached?.binancePrice || 0;
+    const gPrice = seedData?.bitgetPrice || cached?.bitgetPrice || bPrice;
+    const bRate = normalizeFundingRate(seedData?.binanceFundingRate ?? cached?.binanceFundingRate ?? 0.0001);
+    const gRate = normalizeFundingRate(seedData?.bitgetFundingRate ?? cached?.bitgetFundingRate ?? 0.0002);
+    const spread = seedData?.spreadBps ?? cached?.spreadBps ?? parseFloat(((gRate - bRate) * 10000).toFixed(2));
+    const apy = seedData?.annualizedYieldPct ?? cached?.annualizedYieldPct ?? parseFloat(((Math.abs(spread) * 3 * 365) / 100).toFixed(2));
+    const nextFunding = seedData?.nextFundingTime || cached?.nextFundingTime || getDeterministicNextFundingTime();
+
+    return {
+      symbol: symUpper,
+      binancePrice: bPrice,
+      binanceFundingRate: bRate,
+      bitgetPrice: gPrice,
+      bitgetFundingRate: gRate,
+      spreadBps: spread,
+      annualizedYieldPct: apy,
+      nextFundingTime: nextFunding,
+      clockOffsetMs: cached?.clockOffsetMs ?? 24,
+      binanceWsConnected: cached?.binanceWsConnected ?? false,
+      bitgetWsConnected: cached?.bitgetWsConnected ?? false,
+      lastUpdated: Date.now(),
+    };
+  };
+
+  const [data, setData] = useState<DualStreamData>(getInitialSnapshot);
 
   const binanceWsRef = useRef<WebSocket | null>(null);
   const bitgetWsRef = useRef<WebSocket | null>(null);
 
-  // Throttling buffer to prevent rapid UI thrashing / flickering
+  // Throttling buffer to synchronize dual feeds and prevent high-frequency UI jitter
   const pendingUpdatesRef = useRef<Partial<DualStreamData>>({});
   const throttleTimerRef = useRef<any>(null);
 
+  // Seed data sync on change
   useEffect(() => {
-    // Reset symbol and initial prices immediately when symbol changes
-    setData((prev) => ({
-      ...prev,
-      symbol: symUpper,
-      binancePrice: defaultPrice > 0 ? defaultPrice : prev.binancePrice,
-      bitgetPrice: defaultPrice > 0 ? defaultPrice * 0.9998 : prev.bitgetPrice,
-      binanceWsConnected: false,
-      bitgetWsConnected: false,
-    }));
+    if (seedData && seedData.symbol === symUpper && seedData.binancePrice) {
+      setData((prev) => {
+        const next: DualStreamData = {
+          ...prev,
+          symbol: symUpper,
+          binancePrice: seedData.binancePrice || prev.binancePrice,
+          bitgetPrice: seedData.bitgetPrice || prev.bitgetPrice || seedData.binancePrice || 0,
+          binanceFundingRate: normalizeFundingRate(seedData.binanceFundingRate ?? prev.binanceFundingRate),
+          bitgetFundingRate: normalizeFundingRate(seedData.bitgetFundingRate ?? prev.bitgetFundingRate),
+          spreadBps: seedData.spreadBps ?? prev.spreadBps,
+          annualizedYieldPct: seedData.annualizedYieldPct ?? prev.annualizedYieldPct,
+          nextFundingTime: seedData.nextFundingTime || prev.nextFundingTime,
+          lastUpdated: Date.now(),
+        };
+        SESSION_PRICE_CACHE.set(symUpper, next);
+        return next;
+      });
+    }
+  }, [symUpper, seedData]);
+
+  useEffect(() => {
+    // On symbol switch, immediately hydrate from cache if available
+    const snapshot = getInitialSnapshot();
+    setData(snapshot);
     pendingUpdatesRef.current = {};
 
-    // Helper to queue throttled state updates (max 4 updates/sec = 250ms interval)
+    // Helper to queue throttled state updates (max 5 updates/sec = 200ms interval)
     const queueThrottledUpdate = (partial: Partial<DualStreamData>) => {
       pendingUpdatesRef.current = { ...pendingUpdatesRef.current, ...partial };
       if (!throttleTimerRef.current) {
@@ -74,21 +110,28 @@ export function useDualExchangeWebSockets(symbol: string = "BTCUSDT"): DualStrea
           if (Object.keys(pendingUpdatesRef.current).length > 0) {
             setData((prev) => {
               const merged = { ...prev, ...pendingUpdatesRef.current, lastUpdated: Date.now() };
-              // Calculate synchronized spread and APY
-              const bRate = merged.binanceFundingRate ?? prev.binanceFundingRate;
-              const gRate = merged.bitgetFundingRate ?? prev.bitgetFundingRate;
+              
+              // Normalize rates and compute synchronized basis spread and APY
+              const bRate = normalizeFundingRate(merged.binanceFundingRate ?? prev.binanceFundingRate);
+              const gRate = normalizeFundingRate(merged.bitgetFundingRate ?? prev.bitgetFundingRate);
+              merged.binanceFundingRate = bRate;
+              merged.bitgetFundingRate = gRate;
+
               const spread = parseFloat(((gRate - bRate) * 10000).toFixed(2));
               merged.spreadBps = spread;
               merged.annualizedYieldPct = parseFloat(((Math.abs(spread) * 3 * 365) / 100).toFixed(2));
+
+              // Store in module cache
+              SESSION_PRICE_CACHE.set(symUpper, merged);
               pendingUpdatesRef.current = {};
               return merged;
             });
           }
-        }, 250);
+        }, 200);
       }
     };
 
-    // 1. Initial Ticker Fetch (REST) for instant calibration without waiting for WS ticks
+    // 1. Initial REST Ticker Fetch for immediate calibration
     const fetchInitialTicker = () => {
       fetch(`/api/ticker?symbol=${symUpper}`, { cache: "no-store" })
         .then((res) => res.json())
@@ -97,9 +140,9 @@ export function useDualExchangeWebSockets(symbol: string = "BTCUSDT"): DualStrea
             queueThrottledUpdate({
               symbol: symUpper,
               binancePrice: t.binancePrice,
-              binanceFundingRate: t.binanceFundingRate,
+              binanceFundingRate: normalizeFundingRate(t.binanceFundingRate),
               bitgetPrice: t.bitgetPrice || t.binancePrice,
-              bitgetFundingRate: t.bitgetFundingRate,
+              bitgetFundingRate: normalizeFundingRate(t.bitgetFundingRate),
               nextFundingTime: t.nextFundingTime || getDeterministicNextFundingTime(),
             });
           }
@@ -108,7 +151,7 @@ export function useDualExchangeWebSockets(symbol: string = "BTCUSDT"): DualStrea
     };
 
     fetchInitialTicker();
-    const fallbackTickerInterval = setInterval(fetchInitialTicker, 4000); // 4s periodic REST calibration
+    const fallbackTickerInterval = setInterval(fetchInitialTicker, 3000); // 3s periodic REST calibration
 
     // 2. BINANCE FUTURES WEBSOCKET
     let binanceReconnectTimer: any;
@@ -136,7 +179,7 @@ export function useDualExchangeWebSockets(symbol: string = "BTCUSDT"): DualStrea
                 };
                 if (msg.r !== undefined && msg.r !== "") {
                   const rawR = parseFloat(msg.r);
-                  if (!isNaN(rawR)) updatePayload.binanceFundingRate = rawR;
+                  if (!isNaN(rawR)) updatePayload.binanceFundingRate = normalizeFundingRate(rawR);
                 }
                 queueThrottledUpdate(updatePayload);
               }
@@ -201,7 +244,7 @@ export function useDualExchangeWebSockets(symbol: string = "BTCUSDT"): DualStrea
                   };
                   if (ticker.fundingRate !== undefined && ticker.fundingRate !== "") {
                     const rawBgRate = parseFloat(ticker.fundingRate);
-                    if (!isNaN(rawBgRate)) updatePayload.bitgetFundingRate = rawBgRate;
+                    if (!isNaN(rawBgRate)) updatePayload.bitgetFundingRate = normalizeFundingRate(rawBgRate);
                   }
                   queueThrottledUpdate(updatePayload);
                 }
@@ -238,7 +281,7 @@ export function useDualExchangeWebSockets(symbol: string = "BTCUSDT"): DualStrea
       if (binanceWsRef.current) binanceWsRef.current.close();
       if (bitgetWsRef.current) bitgetWsRef.current.close();
     };
-  }, [symUpper, symLower, defaultPrice]);
+  }, [symUpper, symLower]);
 
   return data;
 }

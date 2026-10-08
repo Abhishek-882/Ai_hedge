@@ -74,9 +74,9 @@ export async function GET(req: NextRequest) {
       } catch {}
     }
 
-    // If Bitget price was not fetched, approximate close to Binance
+    // If Bitget price was not fetched, fallback to Binance price without artificial divergence
     if (bitgetPrice <= 0) {
-      bitgetPrice = binancePrice > 0 ? binancePrice * 0.9998 : 0;
+      bitgetPrice = binancePrice;
     }
 
     // Calculate delta spread basis in bps

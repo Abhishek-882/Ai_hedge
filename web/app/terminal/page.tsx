@@ -20,10 +20,11 @@ export default function TerminalPage() {
   const router = useRouter();
   const [selectedSymbol, setSelectedSymbol] = useState<SupportedAsset>("BTCUSDT");
   const [selectedCoinFundingTime, setSelectedCoinFundingTime] = useState<number | null>(null);
+  const [selectedCoinSeed, setSelectedCoinSeed] = useState<any>(null);
   const [loadedPulse, setLoadedPulse] = useState(false);
 
-  // Live Dual-Exchange WebSockets Stream
-  const wsData = useDualExchangeWebSockets(selectedSymbol);
+  // Live Dual-Exchange WebSockets Stream with instantaneous seed hydration
+  const wsData = useDualExchangeWebSockets(selectedSymbol, selectedCoinSeed);
 
   const [account, setAccount] = useState<any>(null);
   const [bitgetAccount, setBitgetAccount] = useState<any>(null);
@@ -69,8 +70,20 @@ export default function TerminalPage() {
 
   const handleSelectCoinFromScanner = useCallback((symbol: string, direction?: string, coin?: any) => {
     setSelectedSymbol(symbol as any);
-    if (coin?.nextFundingTime && coin.nextFundingTime > 0) {
-      setSelectedCoinFundingTime(coin.nextFundingTime);
+    if (coin) {
+      if (coin.nextFundingTime && coin.nextFundingTime > 0) {
+        setSelectedCoinFundingTime(coin.nextFundingTime);
+      }
+      setSelectedCoinSeed({
+        symbol,
+        binancePrice: coin.binanceMarkPrice || 0,
+        bitgetPrice: coin.bitgetMarkPrice || coin.binanceMarkPrice || 0,
+        binanceFundingRate: coin.binanceRate ? coin.binanceRate / 100 : 0.0001,
+        bitgetFundingRate: coin.bitgetRate ? coin.bitgetRate / 100 : 0.0002,
+        spreadBps: coin.spreadBps || 0,
+        annualizedYieldPct: coin.annualizedApr || 0,
+        nextFundingTime: coin.nextFundingTime || 0,
+      });
     } else {
       setSelectedCoinFundingTime(null);
     }
@@ -572,8 +585,8 @@ export default function TerminalPage() {
             ? selectedCoinFundingTime
             : (wsData.nextFundingTime || 0);
 
-          const liveBnPrice = wsData.binancePrice || account?.markPrice || 0;
-          const liveBgPrice = wsData.bitgetPrice || (liveBnPrice > 0 ? liveBnPrice * 0.9998 : 0);
+          const liveBnPrice = wsData.binancePrice || selectedCoinSeed?.binancePrice || account?.markPrice || 0;
+          const liveBgPrice = wsData.bitgetPrice || selectedCoinSeed?.bitgetPrice || (liveBnPrice > 0 ? liveBnPrice : 0);
           const livePriceDiff = Math.abs(liveBnPrice - liveBgPrice);
           const livePriceDivergencePct = liveBnPrice > 0 ? (livePriceDiff / liveBnPrice) * 100 : 0;
 

@@ -26,8 +26,15 @@ export default function SpreadTracker({
   priceDiff,
   priceDivergencePct,
 }: SpreadTrackerProps) {
-  const binancePct = (binanceFundingRate || 0) * 100;
-  const bitgetPct = (bitgetFundingRate || 0) * 100;
+  const formatRatePct = (rate: number): number => {
+    if (!rate || isNaN(rate)) return 0;
+    // If absolute rate is >= 0.05, it is already in percentage format (e.g. 0.01%)
+    if (Math.abs(rate) >= 0.05) return rate;
+    // Otherwise it is in decimal fraction format (e.g. 0.0001), convert to percentage
+    return rate * 100;
+  };
+  const binancePct = formatRatePct(binanceFundingRate || 0);
+  const bitgetPct = formatRatePct(bitgetFundingRate || 0);
   const absSpread = Math.abs(spreadBps || 0);
   const apy = ((absSpread * 3 * 365) / 100).toFixed(1);
 

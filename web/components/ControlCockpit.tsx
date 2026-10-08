@@ -145,20 +145,28 @@ export default function ControlCockpit({
   const [loadingAction, setLoadingAction] = useState<string | null>(null);
   const [lastReceipt, setLastReceipt] = useState<any>(null);
 
-  // Auto-sync quantity when selectedSymbol updates
+  // Auto-sync quantity and reset error banners when selectedSymbol updates
   useEffect(() => {
     if (selectedSymbol) {
       const meta = getAssetMeta(selectedSymbol);
       setQuantity(meta.defaultQty);
+      setCockpitError(null);
     }
   }, [selectedSymbol]);
 
-  // Auto-Wait Limit Sniper Loop: trigger execution as soon as basis gap compresses
+  // Auto-Wait Limit Sniper Loop with 1.2s Hysteresis Dwell Confirmation
   useEffect(() => {
-    if (sniperWaitingDirection && effectiveDivergencePct <= maxPriceDivergencePct && !loadingAction) {
-      const dir = sniperWaitingDirection;
-      setSniperWaitingDirection(null);
-      executeHedge(dir, true);
+    if (!sniperWaitingDirection || loadingAction) return;
+
+    if (effectiveDivergencePct <= maxPriceDivergencePct) {
+      // Basis gap is within tolerance - require it to hold steady for 1.2s before firing
+      const dwellTimer = setTimeout(() => {
+        const dir = sniperWaitingDirection;
+        setSniperWaitingDirection(null);
+        executeHedge(dir, true);
+      }, 1200);
+
+      return () => clearTimeout(dwellTimer);
     }
   }, [sniperWaitingDirection, effectiveDivergencePct, maxPriceDivergencePct, loadingAction]);
 
@@ -225,11 +233,13 @@ export default function ControlCockpit({
       if (!data.success) {
         if (data.sniperPending) {
           setSniperWaitingDirection(direction);
+          setCockpitError(null);
           return;
         }
         throw new Error(data.error);
       }
       setSniperWaitingDirection(null);
+      setCockpitError(null);
       setLastReceipt({
         type: "HEDGE_ENTRY",
         direction,
@@ -259,8 +269,10 @@ export default function ControlCockpit({
       if (onOrderSuccess) onOrderSuccess(data);
       if (onRefresh) onRefresh();
     } catch (err: any) {
-      setCockpitError(`Hedge Entry Failed: ${err.message}`);
-      setTimeout(() => setCockpitError(null), 8000);
+      if (!err.message?.includes("Sniper Hold")) {
+        setCockpitError(`Hedge Entry Failed: ${err.message}`);
+        setTimeout(() => setCockpitError(null), 8000);
+      }
     } finally {
       setLoadingAction(null);
     }
@@ -434,12 +446,14 @@ export default function ControlCockpit({
                 {DEFAULT_ASSET_CONFIGS[sym].label}
               </button>
             ))}
-            <button
-              disabled
-              className="py-1.5 px-2 rounded text-xs font-bold bg-accent-amber text-zinc-950 ring-1 ring-amber-400"
-            >
-              {assetMeta.label}
-            </button>
+            {!DEFAULT_ASSET_CONFIGS[currentAsset] && (
+              <button
+                disabled
+                className="py-1.5 px-2 rounded text-xs font-bold bg-accent-amber text-zinc-950 ring-1 ring-amber-400"
+              >
+                {assetMeta.label}
+              </button>
+            )}
           </div>
         </div>
 
