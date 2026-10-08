@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useEffect, useCallback, useRef } from "react";
-import { KeyRound, RefreshCw, Wallet, ShieldCheck, ExternalLink, Activity, Radio, History, User, AlertCircle, ArrowRight } from "lucide-react";
+import { KeyRound, RefreshCw, Wallet, ShieldCheck, ExternalLink, Activity, Radio, History, User, AlertCircle, ArrowRight, Flame } from "lucide-react";
 import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
 import PrismaticCore3D from "@/components/PrismaticCore3D";
@@ -20,6 +20,7 @@ import { useRouter } from "next/navigation";
 export default function TerminalPage() {
   const router = useRouter();
   const [selectedSymbol, setSelectedSymbol] = useState<SupportedAsset>("BTCUSDT");
+  const [loadedPulse, setLoadedPulse] = useState(false);
 
   // Live Dual-Exchange WebSockets Stream
   const wsData = useDualExchangeWebSockets(selectedSymbol);
@@ -69,6 +70,8 @@ export default function TerminalPage() {
 
   const handleSelectCoinFromScanner = useCallback((symbol: string) => {
     setSelectedSymbol(symbol as any);
+    setLoadedPulse(true);
+    setTimeout(() => setLoadedPulse(false), 2000);
     const el = document.getElementById("execution-cockpit-section");
     if (el) {
       el.scrollIntoView({ behavior: "smooth" });
@@ -506,6 +509,45 @@ export default function TerminalPage() {
           </div>
         )}
 
+        {/* Trending Asset Quick-Explorer Strip */}
+        <div className="flex items-center space-x-2 overflow-x-auto pb-1 scrollbar-none text-xs">
+          <span className="text-[10px] text-zinc-500 uppercase font-semibold shrink-0 flex items-center space-x-1">
+            <Flame className="w-3.5 h-3.5 text-accent-amber animate-pulse" />
+            <span>QUICK EXPLORE:</span>
+          </span>
+          {[
+            { sym: "BTCUSDT", label: "BTC" },
+            { sym: "ETHUSDT", label: "ETH" },
+            { sym: "SOLUSDT", label: "SOL" },
+            { sym: "DOGEUSDT", label: "DOGE" },
+            { sym: "LTCUSDT", label: "LTC" },
+            { sym: "XRPUSDT", label: "XRP" },
+            { sym: "PEPEUSDT", label: "PEPE" },
+            { sym: "SUIUSDT", label: "SUI" },
+          ].map((item) => {
+            const isSelected = selectedSymbol === item.sym;
+            return (
+              <button
+                key={item.sym}
+                onClick={() => {
+                  setSelectedSymbol(item.sym as any);
+                  setLoadedPulse(true);
+                  setTimeout(() => setLoadedPulse(false), 2000);
+                }}
+                className={`px-3 py-1.5 rounded-lg border font-mono font-bold text-xs transition-all shrink-0 active:scale-95 flex items-center space-x-1.5 ${
+                  isSelected
+                    ? "bg-amber-500/20 text-accent-amber border-accent-amber shadow-sm shadow-amber-500/20 ring-1 ring-amber-500/40"
+                    : "bg-surface hover:bg-zinc-800 text-zinc-400 hover:text-zinc-200 border-border"
+                }`}
+                title={`Explore ${item.sym}`}
+              >
+                <span>{item.label}</span>
+                {isSelected && <span className="w-1.5 h-1.5 rounded-full bg-accent-amber animate-pulse" />}
+              </button>
+            );
+          })}
+        </div>
+
         {/* Grid: 3D Prismatic Core & Control Cockpit */}
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
           {/* Left Column: 3D Visualizer & Telemetry HUD */}
@@ -523,7 +565,12 @@ export default function TerminalPage() {
           </div>
 
           {/* Right Column: Execution Cockpit */}
-          <div id="execution-cockpit-section" className="lg:col-span-5">
+          <div
+            id="execution-cockpit-section"
+            className={`lg:col-span-5 rounded-xl transition-all duration-300 ${
+              loadedPulse ? "ring-2 ring-accent-amber shadow-xl shadow-amber-500/20" : ""
+            }`}
+          >
             <ControlCockpit
               onRefresh={fetchData}
               getVaultHeaders={getVaultHeaders}
@@ -538,6 +585,8 @@ export default function TerminalPage() {
               exitSpreadTarget={exitSpreadTarget}
               onExitSpreadTargetChange={setExitSpreadTarget}
               markPrice={wsData.binancePrice}
+              binanceFundingRate={wsData.binanceFundingRate}
+              bitgetFundingRate={wsData.bitgetFundingRate}
             />
           </div>
         </div>

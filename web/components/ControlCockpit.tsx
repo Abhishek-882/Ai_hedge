@@ -13,6 +13,7 @@ import {
   CheckCircle2,
   ShieldCheck,
   Cpu,
+  Sparkles,
 } from "lucide-react";
 
 export type SupportedAsset = string;
@@ -53,6 +54,8 @@ interface ControlCockpitProps {
   exitSpreadTarget?: number;
   onExitSpreadTargetChange?: (val: number) => void;
   markPrice?: number;
+  binanceFundingRate?: number;
+  bitgetFundingRate?: number;
 }
 
 export default function ControlCockpit({
@@ -71,6 +74,8 @@ export default function ControlCockpit({
   exitSpreadTarget = 2,
   onExitSpreadTargetChange,
   markPrice = 0,
+  binanceFundingRate,
+  bitgetFundingRate,
 }: ControlCockpitProps) {
   const currentAsset = selectedSymbol || "BTCUSDT";
   const assetMeta = getAssetMeta(currentAsset);
@@ -509,8 +514,8 @@ export default function ControlCockpit({
                 </span>
               ) : null}
             </div>
-            <div className="grid grid-cols-4 gap-1.5">
-              {[25, 50, 100, 250].map((dollars) => (
+            <div className="grid grid-cols-5 gap-1.5">
+              {[25, 50, 100, 250, 500].map((dollars) => (
                 <button
                   key={dollars}
                   onClick={() => handleNotionalSelect(dollars)}
@@ -574,48 +579,131 @@ export default function ControlCockpit({
           </div>
         </div>
 
-        {/* Dual-Leg Real-Time Hedging Controls */}
-        <div className="mt-4">
-          <div className="flex items-center justify-between mb-1.5">
-            <label className="text-[10px] text-zinc-400 uppercase font-semibold">
-              LIVE PERSISTENT HEDGE ENTRY (STAYS OPEN)
-            </label>
-            <span className="text-[9px] text-emerald-400 font-mono">
-              Positions reflect in Live Table
-            </span>
-          </div>
-          <div className="grid grid-cols-2 gap-3">
-            <button
-              onClick={() => executeHedge("SHORT_BINANCE_LONG_BITGET")}
-              disabled={!!loadingAction}
-              className="flex flex-col items-center justify-center p-2.5 rounded-lg bg-amber-500/10 border border-amber-500/30 text-accent-amber hover:bg-amber-500/20 active:scale-[0.98] transition-all disabled:opacity-50 text-xs font-bold"
-            >
-              {loadingAction === "SHORT_BINANCE_LONG_BITGET" ? (
-                <RefreshCw className="w-3.5 h-3.5 animate-spin mb-1" />
-              ) : (
-                <ArrowDownRight className="w-4 h-4 mb-1" />
-              )}
-              <span>SHORT BINANCE</span>
-              <span className="text-[10px] text-accent-cyan font-medium">+ LONG BITGET ({quantity} {assetMeta.base})</span>
-              <span className="text-[9px] text-zinc-400 mt-0.5">Keep Open In Table</span>
-            </button>
+        {/* Real-Time Funding Harvest & Yield Projection Engine */}
+        {(() => {
+          const numQty = parseFloat(quantity || "0") || 0;
+          const effectivePrice = markPrice > 0 ? markPrice : 1;
+          const notionalDollars = numQty * effectivePrice;
+          const absSpread = Math.abs(spreadBps || 0);
+          const est8hPayout = (notionalDollars * absSpread) / 10000;
+          const estDailyPayout = est8hPayout * 3;
+          const estAnnualApy = (absSpread * 3 * 365) / 100;
+          const isShortBnOptimal = (binanceFundingRate !== undefined && bitgetFundingRate !== undefined)
+            ? (binanceFundingRate >= bitgetFundingRate)
+            : (spreadBps >= 0);
 
-            <button
-              onClick={() => executeHedge("LONG_BINANCE_SHORT_BITGET")}
-              disabled={!!loadingAction}
-              className="flex flex-col items-center justify-center p-2.5 rounded-lg bg-cyan-500/10 border border-cyan-500/30 text-accent-cyan hover:bg-cyan-500/20 active:scale-[0.98] transition-all disabled:opacity-50 text-xs font-bold"
-            >
-              {loadingAction === "LONG_BINANCE_SHORT_BITGET" ? (
-                <RefreshCw className="w-3.5 h-3.5 animate-spin mb-1" />
-              ) : (
-                <ArrowUpRight className="w-4 h-4 mb-1" />
-              )}
-              <span>LONG BINANCE</span>
-              <span className="text-[10px] text-accent-amber font-medium">+ SHORT BITGET ({quantity} {assetMeta.base})</span>
-              <span className="text-[9px] text-zinc-400 mt-0.5">Keep Open In Table</span>
-            </button>
-          </div>
-        </div>
+          return (
+            <div className="mt-4 p-3.5 rounded-xl border border-amber-500/30 bg-gradient-to-br from-amber-500/5 via-zinc-950 to-zinc-900 shadow-lg font-mono">
+              <div className="flex items-center justify-between mb-2 pb-2 border-b border-border/60">
+                <div className="flex items-center space-x-1.5 text-xs font-bold text-zinc-200">
+                  <Sparkles className="w-3.5 h-3.5 text-accent-amber animate-pulse" />
+                  <span>ESTIMATED 8H FUNDING HARVEST</span>
+                </div>
+                <span className="text-[10px] px-2 py-0.5 rounded bg-emerald-500/10 text-accent-emerald border border-emerald-500/30 font-bold">
+                  +{estAnnualApy.toFixed(1)}% APR
+                </span>
+              </div>
+
+              <div className="grid grid-cols-3 gap-2 text-center py-1">
+                <div className="p-2 rounded-lg bg-surface/80 border border-border">
+                  <div className="text-[9px] text-zinc-500 uppercase">Hedged Notional</div>
+                  <div className="text-xs font-bold text-zinc-200 font-mono mt-0.5">
+                    ${notionalDollars.toFixed(2)}
+                  </div>
+                </div>
+                <div className="p-2 rounded-lg bg-surface/80 border border-border">
+                  <div className="text-[9px] text-zinc-500 uppercase">Est. 8h Payout</div>
+                  <div className="text-xs font-bold text-accent-emerald font-mono mt-0.5">
+                    +${est8hPayout.toFixed(4)}
+                  </div>
+                </div>
+                <div className="p-2 rounded-lg bg-surface/80 border border-border">
+                  <div className="text-[9px] text-zinc-500 uppercase">24h Run-Rate</div>
+                  <div className="text-xs font-bold text-accent-amber font-mono mt-0.5">
+                    +${estDailyPayout.toFixed(4)}
+                  </div>
+                </div>
+              </div>
+
+              {/* Directional Cash Flow Recommendation */}
+              <div className="mt-2 pt-2 border-t border-border/40 flex items-center justify-between text-[10px]">
+                <span className="text-zinc-400">Optimal Cash Flow:</span>
+                <span className={`font-semibold ${isShortBnOptimal ? "text-accent-amber" : "text-accent-cyan"}`}>
+                  {isShortBnOptimal ? "Short Binance (pays funding) + Long Bitget" : "Long Binance + Short Bitget (pays funding)"}
+                </span>
+              </div>
+            </div>
+          );
+        })()}
+
+        {/* Dual-Leg Real-Time Hedging Controls */}
+        {(() => {
+          const isShortBnOptimal = (binanceFundingRate !== undefined && bitgetFundingRate !== undefined)
+            ? (binanceFundingRate >= bitgetFundingRate)
+            : (spreadBps >= 0);
+
+          return (
+            <div className="mt-4">
+              <div className="flex items-center justify-between mb-1.5">
+                <label className="text-[10px] text-zinc-400 uppercase font-semibold">
+                  LIVE PERSISTENT HEDGE ENTRY (STAYS OPEN)
+                </label>
+                <span className="text-[9px] text-emerald-400 font-mono">
+                  Positions reflect in Live Table
+                </span>
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <button
+                  onClick={() => executeHedge("SHORT_BINANCE_LONG_BITGET")}
+                  disabled={!!loadingAction}
+                  className={`flex flex-col items-center justify-center p-2.5 rounded-lg border transition-all disabled:opacity-50 text-xs font-bold relative active:scale-[0.98] ${
+                    isShortBnOptimal
+                      ? "bg-amber-500/20 border-amber-500/50 text-accent-amber ring-1 ring-amber-500/40 shadow-lg shadow-amber-500/10"
+                      : "bg-surface-card border-border text-zinc-400 hover:text-zinc-200 hover:border-zinc-700"
+                  }`}
+                >
+                  {isShortBnOptimal && (
+                    <span className="text-[8px] px-1.5 py-0.2 rounded bg-accent-amber text-zinc-950 font-black mb-1">
+                      ★ RECOMMENDED HARVEST
+                    </span>
+                  )}
+                  {loadingAction === "SHORT_BINANCE_LONG_BITGET" ? (
+                    <RefreshCw className="w-3.5 h-3.5 animate-spin mb-1" />
+                  ) : (
+                    <ArrowDownRight className="w-4 h-4 mb-1" />
+                  )}
+                  <span>SHORT BINANCE</span>
+                  <span className="text-[10px] text-accent-cyan font-medium">+ LONG BITGET ({quantity} {assetMeta.base})</span>
+                  <span className="text-[9px] text-zinc-400 mt-0.5">Keep Open In Table</span>
+                </button>
+
+                <button
+                  onClick={() => executeHedge("LONG_BINANCE_SHORT_BITGET")}
+                  disabled={!!loadingAction}
+                  className={`flex flex-col items-center justify-center p-2.5 rounded-lg border transition-all disabled:opacity-50 text-xs font-bold relative active:scale-[0.98] ${
+                    !isShortBnOptimal
+                      ? "bg-cyan-500/20 border-cyan-500/50 text-accent-cyan ring-1 ring-cyan-500/40 shadow-lg shadow-cyan-500/10"
+                      : "bg-surface-card border-border text-zinc-400 hover:text-zinc-200 hover:border-zinc-700"
+                  }`}
+                >
+                  {!isShortBnOptimal && (
+                    <span className="text-[8px] px-1.5 py-0.2 rounded bg-accent-cyan text-zinc-950 font-black mb-1">
+                      ★ RECOMMENDED HARVEST
+                    </span>
+                  )}
+                  {loadingAction === "LONG_BINANCE_SHORT_BITGET" ? (
+                    <RefreshCw className="w-3.5 h-3.5 animate-spin mb-1" />
+                  ) : (
+                    <ArrowUpRight className="w-4 h-4 mb-1" />
+                  )}
+                  <span>LONG BINANCE</span>
+                  <span className="text-[10px] text-accent-amber font-medium">+ SHORT BITGET ({quantity} {assetMeta.base})</span>
+                  <span className="text-[9px] text-zinc-400 mt-0.5">Keep Open In Table</span>
+                </button>
+              </div>
+            </div>
+          );
+        })()}
 
         {/* Dual Hedge Latency Test Suite */}
         <div className="mt-4 p-3 rounded-lg bg-surface-card border border-border">

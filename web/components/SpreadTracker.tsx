@@ -117,11 +117,17 @@ export default function SpreadTracker({
           </span>
         </div>
 
-        {/* Corridor Meter Bar */}
-        <div className="w-full bg-zinc-950 rounded-full h-2.5 overflow-hidden border border-zinc-800 p-[1px]">
+        {/* Corridor Meter Bar with Glowing Needle */}
+        <div className="relative w-full bg-zinc-950 rounded-full h-3 border border-zinc-800 p-[1px] my-2">
           <div
             className={`h-full rounded-full bg-gradient-to-r ${barGradient} transition-all duration-500 ease-out`}
             style={{ width: `${corridorPercent}%` }}
+          />
+          {/* Glowing Needle Indicator */}
+          <div
+            className="absolute top-1/2 -translate-y-1/2 w-3 h-3 rounded-full bg-white border-2 border-accent-amber shadow-md shadow-amber-500/60 transition-all duration-500 ease-out -ml-1.5"
+            style={{ left: `${Math.min(99, Math.max(1, corridorPercent))}%` }}
+            title={`Current Corridor Position: ${absSpread.toFixed(1)} bps`}
           />
         </div>
 
@@ -129,6 +135,24 @@ export default function SpreadTracker({
           <span>0 bps (Neutral)</span>
           <span className="text-zinc-400">Target Threshold: &gt; 12.0 bps</span>
           <span>25+ bps (Max Corridor)</span>
+        </div>
+
+        {/* Directional Mechanics Breakdown */}
+        <div className="mt-2.5 p-2.5 rounded-lg bg-zinc-950/60 border border-zinc-800/80 text-[10px] text-zinc-400 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2">
+          <div className="flex items-center space-x-1.5">
+            <span className="w-1.5 h-1.5 rounded-full bg-accent-amber animate-pulse" />
+            <span>
+              Cash Flow Engine:{" "}
+              <strong className="text-zinc-200">
+                {binanceFundingRate >= bitgetFundingRate
+                  ? `Binance shorts receive +${binancePct.toFixed(4)}% vs Bitget longs +${bitgetPct.toFixed(4)}%`
+                  : `Bitget shorts receive +${bitgetPct.toFixed(4)}% vs Binance longs +${binancePct.toFixed(4)}%`}
+              </strong>
+            </span>
+          </div>
+          <span className="text-accent-emerald font-bold font-mono">
+            Net Basis: +{absSpread.toFixed(1)} bps / 8h (+{apy}% APY)
+          </span>
         </div>
       </div>
     </div>
