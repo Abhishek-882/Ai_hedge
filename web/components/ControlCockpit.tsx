@@ -310,7 +310,7 @@ export default function ControlCockpit({
   };
 
   return (
-    <div className="bg-surface rounded-xl border border-border p-5 flex flex-col justify-between font-mono">
+    <div className="bg-surface rounded-xl border border-border p-3.5 sm:p-5 flex flex-col justify-between font-mono">
       <div>
         <div className="flex items-center justify-between border-b border-border pb-3">
           <div className="flex items-center space-x-2">
@@ -354,7 +354,7 @@ export default function ControlCockpit({
               </span>
             )}
           </div>
-          <div className={`grid ${!DEFAULT_ASSET_CONFIGS[currentAsset] ? "grid-cols-6" : "grid-cols-5"} gap-1.5`}>
+          <div className={`grid ${!DEFAULT_ASSET_CONFIGS[currentAsset] ? "grid-cols-3 sm:grid-cols-6" : "grid-cols-3 sm:grid-cols-5"} gap-1.5`}>
             {(Object.keys(DEFAULT_ASSET_CONFIGS) as string[]).map((sym) => {
               const meta = DEFAULT_ASSET_CONFIGS[sym];
               const isSelected = sym === currentAsset;
@@ -652,7 +652,7 @@ export default function ControlCockpit({
                   Positions reflect in Live Table
                 </span>
               </div>
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
                 <button
                   onClick={() => executeHedge("SHORT_BINANCE_LONG_BITGET")}
                   disabled={!!loadingAction}

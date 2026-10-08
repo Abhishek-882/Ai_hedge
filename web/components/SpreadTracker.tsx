@@ -40,16 +40,16 @@ export default function SpreadTracker({
   }
 
   return (
-    <div className="bg-surface rounded-xl border border-border p-5 font-mono space-y-4 shadow-xl">
+    <div className="bg-surface rounded-xl border border-border p-3.5 sm:p-5 font-mono space-y-4 shadow-xl">
       {/* Header */}
-      <div className="flex items-center justify-between border-b border-border pb-3">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between border-b border-border pb-3 gap-2">
         <div className="flex items-center space-x-2">
           <TrendingUp className="w-4 h-4 text-accent-amber" />
           <h2 className="text-sm font-semibold text-zinc-100 tracking-wide uppercase">
             CROSS-EXCHANGE FUNDING SPREAD // {symbol}
           </h2>
         </div>
-        <div className="flex items-center space-x-3 text-xs">
+        <div className="flex flex-wrap items-center gap-2 text-xs">
           <span className="text-[10px] text-zinc-400">
             Mark Price: <strong className="text-zinc-200">{markPrice > 0 ? `$${markPrice.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 4 })}` : "SYNCING..."}</strong>
           </span>

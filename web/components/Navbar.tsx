@@ -141,8 +141,8 @@ export default function Navbar() {
         </div>
       </div>
 
-      {/* Mobile Sub-Navigation Bar */}
-      <div className="sm:hidden flex items-center justify-around border-t border-border/60 py-1 bg-surface px-2">
+      {/* Native Mobile Bottom Navigation Dock (Thumb-Friendly for Phones) */}
+      <div className="sm:hidden fixed bottom-0 left-0 right-0 z-50 bg-[#0d0d10]/95 backdrop-blur-xl border-t border-border/80 px-2 py-1.5 flex items-center justify-around shadow-2xl pb-[max(0.5rem,env(safe-area-inset-bottom))]">
         {navLinks.map((link) => {
           const Icon = link.icon;
           const isActive = pathname === link.href;
@@ -150,12 +150,14 @@ export default function Navbar() {
             <Link
               key={link.href}
               href={link.href}
-              className={`flex items-center space-x-1 py-1 px-2 text-[11px] rounded ${
-                isActive ? "text-accent-amber font-bold" : "text-zinc-400"
+              className={`flex flex-col items-center justify-center py-1 px-3 rounded-xl transition-all min-w-[56px] min-h-[44px] active:scale-95 ${
+                isActive
+                  ? "text-accent-amber font-bold bg-amber-500/15 border border-amber-500/30 shadow-sm shadow-amber-500/10"
+                  : "text-zinc-400 hover:text-zinc-200"
               }`}
             >
-              <Icon className="w-3 h-3" />
-              <span>{link.label}</span>
+              <Icon className={`w-4 h-4 mb-0.5 ${isActive ? "text-accent-amber" : "text-zinc-500"}`} />
+              <span className="text-[10px] tracking-tight">{link.label}</span>
             </Link>
           );
         })}

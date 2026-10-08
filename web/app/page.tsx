@@ -69,7 +69,7 @@ export default function IntroPage() {
     <div className="min-h-screen bg-[#09090b] text-zinc-100 flex flex-col font-mono selection:bg-accent-amber/20 selection:text-accent-amber">
       <Navbar />
 
-      <main className="flex-1 w-full overflow-hidden">
+      <main className="flex-1 w-full overflow-hidden pb-24 sm:pb-0">
         {/* Background Gradients & Cyber Grids */}
         <div className="absolute inset-0 bg-[linear-gradient(to_right,#1f29370d_1px,transparent_1px),linear-gradient(to_bottom,#1f29370d_1px,transparent_1px)] bg-[size:48px_48px] pointer-events-none -z-10" />
         <div className="absolute top-1/4 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[700px] h-[350px] bg-amber-500/5 blur-[120px] rounded-full pointer-events-none -z-10" />
@@ -125,7 +125,7 @@ export default function IntroPage() {
           {/* Live System Telemetry Ribbon */}
           <div className="w-full max-w-5xl pt-4">
             <div className="bg-zinc-950/80 backdrop-blur-md rounded-2xl border border-zinc-800/90 p-4 shadow-xl">
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-left">
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-2.5 sm:gap-4 text-left">
                 <div className="space-y-1 border-r border-zinc-800/80 pr-2">
                   <div className="text-[10px] text-zinc-500 uppercase flex items-center space-x-1">
                     <Radio className="w-3 h-3 text-accent-emerald animate-pulse" />
@@ -465,9 +465,9 @@ export default function IntroPage() {
                 Strict separation between master administrator and individual trader quant accounts. Standard users start with 100% blank API keys and configure their own isolated credentials. Keys are encrypted at rest with non-destructive masking.
               </p>
 
-              <div className="pt-4 border-t border-zinc-800/80 flex items-center space-x-4 text-xs">
+              <div className="pt-4 border-t border-zinc-800/80 flex flex-col sm:flex-row sm:items-center gap-1 sm:gap-4 text-xs">
                 <span className="text-accent-amber font-semibold">Admin: varsha633@gmailcom</span>
-                <span className="text-zinc-500">•</span>
+                <span className="text-zinc-500 hidden sm:inline">•</span>
                 <span className="text-accent-cyan font-semibold">User Vaults: Zero Shared Access</span>
               </div>
             </div>

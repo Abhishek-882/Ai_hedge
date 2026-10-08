@@ -230,7 +230,7 @@ export default function SettingsModal({ isOpen, onClose, onSaved }: SettingsModa
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 font-mono">
-      <div className="w-full max-w-xl rounded-2xl bg-surface border border-border p-6 shadow-2xl relative">
+      <div className="w-full max-w-xl max-h-[92vh] overflow-y-auto rounded-2xl bg-surface border border-border p-4 sm:p-6 shadow-2xl relative">
         <button
           onClick={onClose}
           className="absolute top-4 right-4 text-zinc-400 hover:text-zinc-200"

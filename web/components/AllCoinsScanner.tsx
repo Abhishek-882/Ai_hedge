@@ -253,7 +253,7 @@ export default function AllCoinsScanner({ onSelectCoin, selectedSymbol, onTradeE
   };
 
   return (
-    <div className="bg-surface rounded-xl border border-border p-5 font-mono">
+    <div className="bg-surface rounded-xl border border-border p-3.5 sm:p-5 font-mono">
       {/* Header Bar */}
       <div className="flex flex-col md:flex-row md:items-center justify-between pb-4 border-b border-border gap-3">
         <div className="flex items-center space-x-2">
@@ -271,19 +271,19 @@ export default function AllCoinsScanner({ onSelectCoin, selectedSymbol, onTradeE
 
         {/* Search & Category Filter Pills */}
         <div className="flex flex-wrap items-center gap-2">
-          <div className="relative flex items-center">
+          <div className="relative flex items-center w-full sm:w-auto">
             <Search className="w-3.5 h-3.5 text-zinc-500 absolute left-2.5 top-1/2 -translate-y-1/2" />
             <input
               type="text"
               placeholder="Search coin (e.g. PEPE, SOL)..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="pl-8 pr-7 py-1 text-xs bg-zinc-900 border border-zinc-700 rounded-lg text-zinc-200 placeholder-zinc-500 focus:outline-none focus:border-accent-amber w-40 md:w-52 font-mono"
+              className="pl-8 pr-7 py-1.5 sm:py-1 text-xs bg-zinc-900 border border-zinc-700 rounded-lg text-zinc-200 placeholder-zinc-500 focus:outline-none focus:border-accent-amber w-full sm:w-48 md:w-52 font-mono"
             />
             {searchQuery && (
               <button
                 onClick={() => setSearchQuery("")}
-                className="absolute right-2 text-zinc-500 hover:text-zinc-200 text-xs transition-colors"
+                className="absolute right-2 text-zinc-500 hover:text-zinc-200 text-xs transition-colors p-1"
                 title="Clear Search"
               >
                 ✕
@@ -292,14 +292,14 @@ export default function AllCoinsScanner({ onSelectCoin, selectedSymbol, onTradeE
           </div>
 
           {/* Quick Coin Filter Chips */}
-          <div className="hidden lg:flex items-center space-x-1 text-[10px]">
+          <div className="flex items-center space-x-1 text-[10px] overflow-x-auto py-0.5 max-w-full scrollbar-none">
             {["BTC", "ETH", "SOL", "DOGE", "LTC", "PEPE", "XRP"].map((coinName) => {
               const isMatch = searchQuery.toUpperCase() === coinName;
               return (
                 <button
                   key={coinName}
                   onClick={() => setSearchQuery(isMatch ? "" : coinName)}
-                  className={`px-1.5 py-0.5 rounded transition-all font-mono ${
+                  className={`px-1.5 py-0.5 rounded transition-all font-mono shrink-0 ${
                     isMatch
                       ? "bg-accent-amber text-zinc-950 font-bold"
                       : "bg-zinc-800/80 hover:bg-zinc-700 text-zinc-400 hover:text-zinc-200 border border-zinc-700/60"
@@ -427,8 +427,8 @@ export default function AllCoinsScanner({ onSelectCoin, selectedSymbol, onTradeE
           {isLoading ? "Scanning 800+ coins across Binance & Bitget..." : "No matching coins found."}
         </div>
       ) : (
-        <div className="overflow-x-auto mt-3 max-h-96 overflow-y-auto">
-          <table className="w-full text-left text-xs">
+        <div className="overflow-x-auto mt-3 max-h-96 overflow-y-auto -mx-1 sm:mx-0 px-1 sm:px-0">
+          <table className="w-full min-w-[720px] text-left text-xs">
             <thead className="sticky top-0 bg-surface border-b border-border text-[10px] text-zinc-400 uppercase z-10">
               <tr>
                 <th className="pb-2 cursor-pointer" onClick={() => setSortBy("symbol")}>

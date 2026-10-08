@@ -38,7 +38,7 @@ export default function PositionsTable({
   const notionalImbalance = Math.abs(longNotional - shortNotional);
 
   return (
-    <div className="bg-surface rounded-xl border border-border p-5 font-mono">
+    <div className="bg-surface rounded-xl border border-border p-3.5 sm:p-5 font-mono">
       <div className="flex items-center justify-between border-b border-border pb-3 mb-4">
         <div className="flex items-center space-x-2">
           <span className="w-2.5 h-2.5 rounded-full bg-accent-emerald animate-pulse" />
@@ -88,8 +88,8 @@ export default function PositionsTable({
           No open positions detected on Binance Futures or Bitget UTA.
         </div>
       ) : (
-        <div className="overflow-x-auto">
-          <table className="w-full text-left text-xs">
+        <div className="overflow-x-auto -mx-1 sm:mx-0 px-1 sm:px-0">
+          <table className="w-full min-w-[700px] text-left text-xs">
             <thead>
               <tr className="border-b border-border text-[10px] text-zinc-400 uppercase">
                 <th className="pb-2">Symbol / Venue</th>

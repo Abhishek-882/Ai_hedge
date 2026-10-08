@@ -93,7 +93,7 @@ export default function HedgeHistoryTable({ history, onClearHistory }: HedgeHist
   };
 
   return (
-    <div className="bg-surface rounded-xl border border-border p-5 font-mono space-y-4 shadow-xl">
+    <div className="bg-surface rounded-xl border border-border p-3.5 sm:p-5 font-mono space-y-4 shadow-xl">
       {/* Top Header & Actions */}
       <div className="flex flex-col md:flex-row md:items-center justify-between pb-3 border-b border-border gap-3">
         <div className="flex items-center space-x-2">
@@ -203,8 +203,8 @@ export default function HedgeHistoryTable({ history, onClearHistory }: HedgeHist
           No hedge records match the selected filter ({filterMode}).
         </div>
       ) : (
-        <div className="overflow-x-auto max-h-80 overflow-y-auto">
-          <table className="w-full text-left text-xs">
+        <div className="overflow-x-auto max-h-80 overflow-y-auto -mx-1 sm:mx-0 px-1 sm:px-0">
+          <table className="w-full min-w-[760px] text-left text-xs">
             <thead className="sticky top-0 bg-surface border-b border-border text-[10px] text-zinc-400 uppercase">
               <tr>
                 <th className="pb-2">Time / ID</th>

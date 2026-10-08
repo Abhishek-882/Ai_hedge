@@ -6,7 +6,7 @@ import { ExternalLink, ShieldCheck, Zap } from "lucide-react";
 
 export default function Footer() {
   return (
-    <footer className="w-full bg-[#09090b] border-t border-border mt-12 py-8 px-4 md:px-8 font-mono text-xs text-zinc-400">
+    <footer className="w-full bg-[#09090b] border-t border-border mt-12 pt-8 pb-24 sm:pb-8 px-4 md:px-8 font-mono text-xs text-zinc-400">
       <div className="max-w-7xl mx-auto space-y-6">
         {/* Top Info & Attribution Row */}
         <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4 pb-6 border-b border-border/80">
@@ -57,7 +57,7 @@ export default function Footer() {
           <div>
             © {new Date().getFullYear()} MMT (Developed by Abhishek). All rights reserved.
           </div>
-          <div className="flex items-center space-x-4 text-[11px]">
+          <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-[11px]">
             <Link href="/" className="hover:text-zinc-300 transition-colors">
               Platform Intro
             </Link>

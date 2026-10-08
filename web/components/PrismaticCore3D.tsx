@@ -108,7 +108,7 @@ export default function PrismaticCore3D({
     const particleRing = new THREE.Points(particlesGeo, particlesMat);
     coreGroup.add(particleRing);
 
-    // Mouse Spring Physics
+    // Mouse & Touch Spring Physics
     let targetRotX = 0;
     let targetRotY = 0;
     let currentRotX = 0;
@@ -137,10 +137,36 @@ export default function PrismaticCore3D({
       isDragging = false;
     };
 
+    // Mobile touch interaction
+    const handleTouchStart = (e: TouchEvent) => {
+      if (e.touches.length === 1) {
+        isDragging = true;
+        prevMouseX = e.touches[0].clientX;
+        prevMouseY = e.touches[0].clientY;
+      }
+    };
+
+    const handleTouchMove = (e: TouchEvent) => {
+      if (!isDragging || e.touches.length !== 1) return;
+      const deltaX = e.touches[0].clientX - prevMouseX;
+      const deltaY = e.touches[0].clientY - prevMouseY;
+      targetRotY += deltaX * 0.008;
+      targetRotX += deltaY * 0.008;
+      prevMouseX = e.touches[0].clientX;
+      prevMouseY = e.touches[0].clientY;
+    };
+
+    const handleTouchEnd = () => {
+      isDragging = false;
+    };
+
     const dom = renderer.domElement;
     dom.addEventListener("mousedown", handleMouseDown);
     window.addEventListener("mousemove", handleMouseMove);
     window.addEventListener("mouseup", handleMouseUp);
+    dom.addEventListener("touchstart", handleTouchStart, { passive: true });
+    window.addEventListener("touchmove", handleTouchMove, { passive: true });
+    window.addEventListener("touchend", handleTouchEnd);
 
     // Animation Loop
     let animationFrameId: number;
@@ -199,6 +225,9 @@ export default function PrismaticCore3D({
       dom.removeEventListener("mousedown", handleMouseDown);
       window.removeEventListener("mousemove", handleMouseMove);
       window.removeEventListener("mouseup", handleMouseUp);
+      dom.removeEventListener("touchstart", handleTouchStart);
+      window.removeEventListener("touchmove", handleTouchMove);
+      window.removeEventListener("touchend", handleTouchEnd);
       window.removeEventListener("resize", handleResize);
       if (mountRef.current && renderer.domElement && mountRef.current.contains(renderer.domElement)) {
         mountRef.current.removeChild(renderer.domElement);
@@ -214,30 +243,30 @@ export default function PrismaticCore3D({
   }, []); // Mount ONCE - do not reconstruct scene on spread changes!
 
   return (
-    <div className="relative w-full h-[280px] bg-surface rounded-xl border border-border overflow-hidden group">
+    <div className="relative w-full h-[220px] sm:h-[280px] bg-surface rounded-xl border border-border overflow-hidden group touch-none">
       <div ref={mountRef} className="w-full h-full cursor-grab active:cursor-grabbing" />
 
       {/* Cyber-Editorial Overlay HUD */}
-      <div className="absolute top-3 left-3 flex items-center space-x-2 text-[10px] font-mono text-zinc-400 pointer-events-none">
+      <div className="absolute top-2.5 left-3 flex items-center space-x-1.5 text-[9px] sm:text-[10px] font-mono text-zinc-400 pointer-events-none">
         <span className="w-2 h-2 rounded-full bg-accent-emerald animate-pulse" />
         <span className="tracking-widest uppercase">PRISMATIC CORE // DUAL NEXUS</span>
       </div>
 
-      <div className="absolute top-3 right-3 text-right font-mono pointer-events-none">
-        <div className="text-[10px] text-zinc-500 uppercase">Live Basis Pulse</div>
+      <div className="absolute top-2.5 right-3 text-right font-mono pointer-events-none">
+        <div className="text-[9px] sm:text-[10px] text-zinc-500 uppercase">Live Basis</div>
         <div className="text-xs font-semibold text-accent-amber">
-          {(spreadBps || 0).toFixed(1)} <span className="text-[10px] text-zinc-400">bps</span>
+          {(spreadBps || 0).toFixed(1)} <span className="text-[9px] text-zinc-400">bps</span>
         </div>
       </div>
 
-      <div className="absolute bottom-3 left-3 text-[10px] font-mono text-zinc-500 pointer-events-none">
-        Drag to rotate 3D nexus • Color-coded: Amber (Binance) / Emerald (Bitget)
+      <div className="absolute bottom-2.5 left-3 text-[9px] sm:text-[10px] font-mono text-zinc-500 pointer-events-none truncate max-w-[220px] sm:max-w-none">
+        Touch or drag to rotate 3D nexus • Amber (Binance) / Emerald (Bitget)
       </div>
 
       {onToggleInspect && (
         <button
           onClick={onToggleInspect}
-          className="absolute bottom-3 right-3 px-2.5 py-1 text-[10px] font-mono rounded bg-surface-card hover:bg-zinc-800 text-zinc-300 border border-border transition-colors cursor-pointer"
+          className="absolute bottom-2.5 right-3 px-2 py-0.5 sm:px-2.5 sm:py-1 text-[9px] sm:text-[10px] font-mono rounded bg-surface-card hover:bg-zinc-800 text-zinc-300 border border-border transition-colors cursor-pointer"
         >
           {isInspecting ? "Exit Studio" : "Inspect Mode"}
         </button>
