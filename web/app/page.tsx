@@ -66,14 +66,16 @@ export default function IntroPage() {
   ];
 
   return (
-    <div className="min-h-screen bg-[#09090b] text-zinc-100 flex flex-col font-mono selection:bg-accent-amber/20 selection:text-accent-amber">
+    <div className="min-h-screen bg-[#09090b] text-zinc-100 flex flex-col font-mono selection:bg-accent-amber/20 selection:text-accent-amber overflow-x-hidden relative">
       <Navbar />
 
-      <main className="flex-1 w-full overflow-hidden pb-24 sm:pb-0">
-        {/* Background Gradients & Cyber Grids */}
-        <div className="absolute inset-0 bg-[linear-gradient(to_right,#1f29370d_1px,transparent_1px),linear-gradient(to_bottom,#1f29370d_1px,transparent_1px)] bg-[size:48px_48px] pointer-events-none -z-10" />
-        <div className="absolute top-1/4 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[700px] h-[350px] bg-amber-500/5 blur-[120px] rounded-full pointer-events-none -z-10" />
-        <div className="absolute top-2/3 right-10 w-[500px] h-[250px] bg-emerald-500/5 blur-[130px] rounded-full pointer-events-none -z-10" />
+      <main className="flex-1 w-full overflow-hidden pb-24 sm:pb-0 relative">
+        {/* Background Gradients & Cyber Grids (Clipped within overflow-hidden to prevent mobile scroll) */}
+        <div className="absolute inset-0 overflow-hidden pointer-events-none -z-10">
+          <div className="absolute inset-0 bg-[linear-gradient(to_right,#1f29370d_1px,transparent_1px),linear-gradient(to_bottom,#1f29370d_1px,transparent_1px)] bg-[size:48px_48px]" />
+          <div className="absolute top-1/4 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[700px] h-[350px] bg-amber-500/5 blur-[120px] rounded-full" />
+          <div className="absolute top-2/3 right-10 w-[500px] h-[250px] bg-emerald-500/5 blur-[130px] rounded-full" />
+        </div>
 
         {/* Hero Section */}
         <section className="max-w-7xl mx-auto px-4 md:px-8 pt-12 pb-14 md:pt-20 md:pb-20 flex flex-col items-center text-center space-y-6">
