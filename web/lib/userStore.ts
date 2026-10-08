@@ -198,9 +198,37 @@ export function updateUserApiKeys(userId: string, apiKeys: Partial<UserApiKeys>)
     return { success: false, error: "User not found" };
   }
 
+  const existing = user.apiKeys || {
+    binanceKey: "",
+    binanceSecret: "",
+    binanceEndpoint: "https://demo-fapi.binance.com",
+    bitgetKey: "",
+    bitgetSecret: "",
+    bitgetPassphrase: "",
+    bitgetEnv: "demo",
+  };
+
+  const isMaskedOrEmpty = (val: string | undefined): boolean => {
+    if (!val) return true;
+    const trimmed = val.trim();
+    return trimmed === "" || trimmed.startsWith("•••") || trimmed.includes("••••");
+  };
+
   user.apiKeys = {
-    ...user.apiKeys,
-    ...apiKeys,
+    ...existing,
+    ...(apiKeys.binanceKey !== undefined ? { binanceKey: apiKeys.binanceKey.trim() } : {}),
+    ...(apiKeys.binanceSecret !== undefined && !isMaskedOrEmpty(apiKeys.binanceSecret)
+      ? { binanceSecret: apiKeys.binanceSecret.trim() }
+      : {}),
+    ...(apiKeys.binanceEndpoint ? { binanceEndpoint: apiKeys.binanceEndpoint.trim() } : {}),
+    ...(apiKeys.bitgetKey !== undefined ? { bitgetKey: apiKeys.bitgetKey.trim() } : {}),
+    ...(apiKeys.bitgetSecret !== undefined && !isMaskedOrEmpty(apiKeys.bitgetSecret)
+      ? { bitgetSecret: apiKeys.bitgetSecret.trim() }
+      : {}),
+    ...(apiKeys.bitgetPassphrase !== undefined && !isMaskedOrEmpty(apiKeys.bitgetPassphrase)
+      ? { bitgetPassphrase: apiKeys.bitgetPassphrase.trim() }
+      : {}),
+    ...(apiKeys.bitgetEnv ? { bitgetEnv: apiKeys.bitgetEnv.trim() } : {}),
   };
 
   saveUsers(users);

@@ -22,9 +22,10 @@ interface AllCoinsScannerProps {
   onSelectCoin: (symbol: string, direction?: "SHORT_BINANCE_LONG_BITGET" | "LONG_BINANCE_SHORT_BITGET") => void;
   selectedSymbol?: string;
   onTradeExecuted?: (trade: any) => void;
+  getVaultHeaders?: () => Record<string, string>;
 }
 
-export default function AllCoinsScanner({ onSelectCoin, selectedSymbol, onTradeExecuted }: AllCoinsScannerProps) {
+export default function AllCoinsScanner({ onSelectCoin, selectedSymbol, onTradeExecuted, getVaultHeaders }: AllCoinsScannerProps) {
   const [coins, setCoins] = useState<CoinOpportunity[]>([]);
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
@@ -164,9 +165,30 @@ export default function AllCoinsScanner({ onSelectCoin, selectedSymbol, onTradeE
 
       const leg1Side = coin.direction === "SHORT_BINANCE_LONG_BITGET" ? "SELL" : "BUY";
 
+      const vaultHeaders: Record<string, string> = getVaultHeaders ? getVaultHeaders() : {};
+      if (typeof window !== "undefined" && Object.keys(vaultHeaders).length === 0) {
+        const bnKey = localStorage.getItem("BINANCE_KEY") || "";
+        const bnSecret = localStorage.getItem("BINANCE_SECRET") || "";
+        const bnEndpoint = localStorage.getItem("BINANCE_ENDPOINT") || "";
+        const bgKey = localStorage.getItem("BITGET_KEY") || "";
+        const bgSecret = localStorage.getItem("BITGET_SECRET") || "";
+        const bgPass = localStorage.getItem("BITGET_PASSPHRASE") || "";
+        const bgEnv = localStorage.getItem("BITGET_ENV") || "demo";
+        if (bnKey) vaultHeaders["x-binance-key"] = bnKey;
+        if (bnSecret) vaultHeaders["x-binance-secret"] = bnSecret;
+        if (bnEndpoint) vaultHeaders["x-binance-endpoint"] = bnEndpoint;
+        if (bgKey) vaultHeaders["x-bitget-key"] = bgKey;
+        if (bgSecret) vaultHeaders["x-bitget-secret"] = bgSecret;
+        if (bgPass) vaultHeaders["x-bitget-passphrase"] = bgPass;
+        if (bgEnv) vaultHeaders["x-bitget-env"] = bgEnv;
+      }
+
       const res = await fetch("/api/hedge", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          ...vaultHeaders,
+        },
         body: JSON.stringify({
           action: "entry",
           symbol: coin.symbol,

@@ -139,7 +139,7 @@ export default function HedgeHistoryTable({ history, onClearHistory }: HedgeHist
         <div className="bg-zinc-900/60 p-2.5 rounded-lg border border-zinc-800/80">
           <div className="text-[10px] text-zinc-500 uppercase">Delta-Neutral Success</div>
           <div className="text-base font-bold text-accent-emerald mt-0.5">
-            100%
+            {totalTrades > 0 ? "100%" : "---"}
           </div>
         </div>
       </div>

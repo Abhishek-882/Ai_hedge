@@ -233,9 +233,17 @@ export default function ProfilePage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ action: "logout" }),
       });
-      router.push("/login");
+      if (typeof window !== "undefined") {
+        window.location.href = "/login";
+      } else {
+        router.push("/login");
+      }
     } catch {
-      router.push("/login");
+      if (typeof window !== "undefined") {
+        window.location.href = "/login";
+      } else {
+        router.push("/login");
+      }
     }
   };
 
@@ -415,7 +423,13 @@ export default function ProfilePage() {
                     type={showBinanceSecret ? "text" : "password"}
                     value={binanceSecret}
                     onChange={(e) => setBinanceSecret(e.target.value)}
-                    placeholder={isAdmin ? "System default secret loaded" : "Enter personal Binance Secret"}
+                    placeholder={
+                      isAdmin
+                        ? "System default secret loaded"
+                        : user?.apiKeys?.hasBinanceSecret
+                        ? "Secret safely stored in vault (leave blank to keep)"
+                        : "Enter personal Binance Secret"
+                    }
                     className="w-full px-3.5 py-2 text-xs bg-zinc-950 border border-zinc-800 rounded-lg text-zinc-200 placeholder-zinc-600 focus:outline-none focus:border-accent-amber font-mono"
                   />
                   <button
@@ -473,7 +487,13 @@ export default function ProfilePage() {
                     type={showBitgetSecret ? "text" : "password"}
                     value={bitgetSecret}
                     onChange={(e) => setBitgetSecret(e.target.value)}
-                    placeholder={isAdmin ? "System default secret loaded" : "Enter personal Bitget Secret"}
+                    placeholder={
+                      isAdmin
+                        ? "System default secret loaded"
+                        : user?.apiKeys?.hasBitgetSecret
+                        ? "Secret safely stored in vault (leave blank to keep)"
+                        : "Enter personal Bitget Secret"
+                    }
                     className="w-full px-3.5 py-2 text-xs bg-zinc-950 border border-zinc-800 rounded-lg text-zinc-200 placeholder-zinc-600 focus:outline-none focus:border-accent-cyan font-mono"
                   />
                   <button
@@ -495,7 +515,13 @@ export default function ProfilePage() {
                     type={showBitgetPass ? "text" : "password"}
                     value={bitgetPassphrase}
                     onChange={(e) => setBitgetPassphrase(e.target.value)}
-                    placeholder={isAdmin ? "ArbitrageBot2027" : "Enter personal Passphrase"}
+                    placeholder={
+                      isAdmin
+                        ? "ArbitrageBot2027"
+                        : user?.apiKeys?.hasBitgetPassphrase
+                        ? "Passphrase safely stored in vault (leave blank to keep)"
+                        : "Enter personal Passphrase"
+                    }
                     className="w-full px-3.5 py-2 text-xs bg-zinc-950 border border-zinc-800 rounded-lg text-zinc-200 placeholder-zinc-600 focus:outline-none focus:border-accent-cyan font-mono"
                   />
                   <button

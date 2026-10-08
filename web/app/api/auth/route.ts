@@ -58,14 +58,22 @@ export async function GET(req: NextRequest) {
     createdAt: user.createdAt,
     lastLogin: user.lastLogin,
     apiKeys: user.role === "admin"
-      ? user.apiKeys
+      ? {
+          ...user.apiKeys,
+          hasBinanceSecret: Boolean(user.apiKeys?.binanceSecret),
+          hasBitgetSecret: Boolean(user.apiKeys?.bitgetSecret),
+          hasBitgetPassphrase: Boolean(user.apiKeys?.bitgetPassphrase),
+        }
       : {
           binanceKey: user.apiKeys?.binanceKey || "",
           binanceSecret: user.apiKeys?.binanceSecret ? "••••••••••••" : "",
+          hasBinanceSecret: Boolean(user.apiKeys?.binanceSecret),
           binanceEndpoint: user.apiKeys?.binanceEndpoint || "https://demo-fapi.binance.com",
           bitgetKey: user.apiKeys?.bitgetKey || "",
           bitgetSecret: user.apiKeys?.bitgetSecret ? "••••••••••••" : "",
+          hasBitgetSecret: Boolean(user.apiKeys?.bitgetSecret),
           bitgetPassphrase: user.apiKeys?.bitgetPassphrase ? "••••••••••••" : "",
+          hasBitgetPassphrase: Boolean(user.apiKeys?.bitgetPassphrase),
           bitgetEnv: user.apiKeys?.bitgetEnv || "demo",
         },
   };

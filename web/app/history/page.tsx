@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState, useEffect, useCallback } from "react";
+import { useRouter } from "next/navigation";
 import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
 import HedgeHistoryTable, { HedgeTradeRecord } from "@/components/HedgeHistoryTable";
@@ -8,7 +9,10 @@ import { History, ShieldCheck, RefreshCw, Trash2, ArrowRight } from "lucide-reac
 import Link from "next/link";
 
 export default function HistoryPage() {
+  const router = useRouter();
   const [history, setHistory] = useState<HedgeTradeRecord[]>([]);
+  const [currentUser, setCurrentUser] = useState<any>(null);
+  const [isAuthLoading, setIsAuthLoading] = useState<boolean>(true);
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [isRefreshing, setIsRefreshing] = useState<boolean>(false);
 
@@ -28,9 +32,25 @@ export default function HistoryPage() {
     }
   }, []);
 
+  const verifyAuthAndFetch = useCallback(async () => {
+    try {
+      const res = await fetch("/api/auth", { cache: "no-store" });
+      const data = await res.json();
+      if (data.success && data.isLoggedIn && data.user) {
+        setCurrentUser(data.user);
+        setIsAuthLoading(false);
+        fetchHistory();
+      } else {
+        router.push("/login");
+      }
+    } catch {
+      router.push("/login");
+    }
+  }, [router, fetchHistory]);
+
   useEffect(() => {
-    fetchHistory();
-  }, [fetchHistory]);
+    verifyAuthAndFetch();
+  }, [verifyAuthAndFetch]);
 
   const handleClearHistory = async () => {
     setHistory([]);
@@ -47,6 +67,21 @@ export default function HistoryPage() {
       }
     } catch {}
   };
+
+  if (isAuthLoading) {
+    return (
+      <div className="min-h-screen bg-background text-zinc-100 flex flex-col font-mono">
+        <Navbar />
+        <main className="flex-1 flex items-center justify-center p-8">
+          <div className="flex items-center space-x-3 text-zinc-400 text-xs">
+            <RefreshCw className="w-4 h-4 animate-spin text-accent-cyan" />
+            <span>Verifying trade audit log access...</span>
+          </div>
+        </main>
+        <Footer />
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-background text-zinc-100 flex flex-col font-mono selection:bg-accent-amber/20 selection:text-accent-amber">

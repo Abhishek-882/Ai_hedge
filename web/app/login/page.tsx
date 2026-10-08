@@ -63,8 +63,12 @@ export default function LoginPage() {
             : `Welcome ${data.user.username || "Quant"}! Personal vault initialized (blank API keys). Redirecting...`
         );
         setTimeout(() => {
-          router.push("/terminal");
-        }, 800);
+          if (typeof window !== "undefined") {
+            window.location.href = "/terminal";
+          } else {
+            router.push("/terminal");
+          }
+        }, 500);
       } else {
         setErrorMsg(data.error || "Authentication failed. Please verify credentials.");
       }

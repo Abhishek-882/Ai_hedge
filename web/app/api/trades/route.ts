@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { loadTrades, saveTrades, recordServerTrade } from "@/lib/serverTradeStore";
+import { resolveCallerCredentials } from "@/lib/authHelper";
 
 export const dynamic = "force-dynamic";
 
@@ -24,6 +25,13 @@ export async function POST(req: NextRequest) {
     const body = await req.json();
 
     if (body.action === "clear") {
+      const creds = resolveCallerCredentials(req);
+      if (!creds.authorized && !creds.user) {
+        return NextResponse.json(
+          { success: false, error: "Authentication required to clear trade audit log" },
+          { status: 401 }
+        );
+      }
       saveTrades([]);
       return NextResponse.json({ success: true, count: 0, trades: [] });
     }

@@ -44,6 +44,7 @@ export default function TerminalPage() {
   const [exitSpreadTarget, setExitSpreadTarget] = useState<number>(2);
   const lastAutopilotActionRef = useRef<number>(0);
 
+  const [isAuthLoading, setIsAuthLoading] = useState(true);
   const [closeError, setCloseError] = useState<string | null>(null);
 
   // Check auth on load
@@ -53,6 +54,7 @@ export default function TerminalPage() {
       const data = await res.json();
       if (data.success && data.isLoggedIn && data.user) {
         setCurrentUser(data.user);
+        setIsAuthLoading(false);
       } else {
         router.push("/login");
       }
@@ -158,13 +160,14 @@ export default function TerminalPage() {
   }, [getVaultHeaders]);
 
   useEffect(() => {
+    if (!currentUser) return;
     fetchData();
     // 5-second polling for live balances, pauses when tab is hidden
     const interval = setInterval(() => {
       if (!document.hidden) fetchData();
     }, 5000);
     return () => clearInterval(interval);
-  }, [fetchData]);
+  }, [currentUser, fetchData]);
 
   // 24/7 Autonomous Scanner & Auto-Hedger Loop
   useEffect(() => {
@@ -274,6 +277,21 @@ export default function TerminalPage() {
   }, 0);
 
   const isNonAdminBlankKeys = currentUser && currentUser.role !== "admin" && (!account?.totalWalletBalance && !bitgetAccount?.equity);
+
+  if (isAuthLoading) {
+    return (
+      <div className="min-h-screen bg-background text-zinc-100 flex flex-col font-mono">
+        <Navbar />
+        <main className="flex-1 flex items-center justify-center p-8">
+          <div className="flex items-center space-x-3 text-zinc-400 text-xs">
+            <RefreshCw className="w-4 h-4 animate-spin text-accent-amber" />
+            <span>Verifying institutional quant session...</span>
+          </div>
+        </main>
+        <Footer />
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-background text-zinc-100 flex flex-col font-mono selection:bg-accent-amber/20 selection:text-accent-amber">
@@ -565,6 +583,7 @@ export default function TerminalPage() {
           <AllCoinsScanner
             onSelectCoin={handleSelectCoinFromScanner}
             selectedSymbol={selectedSymbol}
+            getVaultHeaders={getVaultHeaders}
           />
         </div>
       </main>

@@ -39,9 +39,17 @@ export default function Navbar() {
         body: JSON.stringify({ action: "logout" }),
       });
       setUser(null);
-      router.push("/login");
+      if (typeof window !== "undefined") {
+        window.location.href = "/login";
+      } else {
+        router.push("/login");
+      }
     } catch {
-      router.push("/login");
+      if (typeof window !== "undefined") {
+        window.location.href = "/login";
+      } else {
+        router.push("/login");
+      }
     }
   };
 

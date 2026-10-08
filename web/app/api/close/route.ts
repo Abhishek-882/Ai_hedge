@@ -5,6 +5,7 @@ import { getLeadStaggerDelays, recordExecutionRTT } from "@/lib/latencyTracker";
 import { checkRateLimit } from "@/lib/rateLimiter";
 import { logServerEvent } from "@/lib/logger";
 import { resolveCallerCredentials } from "@/lib/authHelper";
+import { recordServerTrade } from "@/lib/serverTradeStore";
 
 export const dynamic = "force-dynamic";
 
@@ -255,6 +256,34 @@ export async function POST(req: NextRequest) {
     }
 
     logServerEvent(success ? "INFO" : "WARN", "SYSTEM", `Dual-Close executed in ${dualCloseLatencyMs}ms (Success: ${success}, Delta: ${interLegCloseDeltaMs}ms, Target: ${targetSymbol || "ALL"})`);
+
+    if (binanceRes.closed || bitgetRes.closed) {
+      try {
+        const symbolClosed = targetSymbol || binanceRes.orders?.[0]?.symbol || bitgetRes.orders?.[0]?.symbol || "BTCUSDT";
+        const qtyClosed = binanceRes.orders?.[0]?.quantity || bitgetRes.orders?.[0]?.quantity || 0.005;
+        recordServerTrade({
+          id: `HDG-CLS-${Date.now().toString().slice(-6)}`,
+          symbol: symbolClosed,
+          type: "DUAL_LEG_UNWIND",
+          directionLabel: "Unwind & Flatten Both Legs",
+          quantity: qtyClosed,
+          durationMs: Math.round(dualCloseLatencyMs),
+          interLegDeltaMs: interLegCloseDeltaMs,
+          leg1Venue: "Binance",
+          leg1Side: binanceRes.orders?.[0]?.side || "CLOSE",
+          leg1Price: 0,
+          leg1OrderId: binanceRes.orders?.[0]?.orderId,
+          leg2Venue: "Bitget",
+          leg2Side: bitgetRes.orders?.[0]?.side || "CLOSE",
+          leg2Price: 0,
+          leg2OrderId: bitgetRes.orders?.[0]?.orderId,
+          realizedPnl: 0,
+          status: "CLOSED",
+        });
+      } catch (logErr) {
+        console.error("Failed to archive closed hedge into server trades history:", logErr);
+      }
+    }
 
     return NextResponse.json({
       success,

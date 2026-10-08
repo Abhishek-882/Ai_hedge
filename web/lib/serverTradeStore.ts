@@ -113,7 +113,20 @@ export function recordServerTrade(trade: Partial<ServerHedgeTrade>): ServerHedge
     status: trade.status || "ACTIVE",
   };
 
-  const updated = [fullTrade, ...trades].slice(0, 200);
+  const existingIdx = trades.findIndex((t) => t.id === fullTrade.id);
+  let updated: ServerHedgeTrade[];
+  if (existingIdx >= 0) {
+    updated = [...trades];
+    updated[existingIdx] = {
+      ...updated[existingIdx],
+      ...fullTrade,
+      leg1OrderId: fullTrade.leg1OrderId || updated[existingIdx].leg1OrderId,
+      leg2OrderId: fullTrade.leg2OrderId || updated[existingIdx].leg2OrderId,
+    };
+  } else {
+    updated = [fullTrade, ...trades].slice(0, 200);
+  }
+
   saveTrades(updated);
   return fullTrade;
 }
