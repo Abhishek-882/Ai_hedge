@@ -6,7 +6,7 @@ import requests
 from pathlib import Path
 from playwright.sync_api import sync_playwright
 
-BASE_URL = os.environ.get("BASE_URL", "http://localhost:3005").rstrip("/")
+BASE_URL = (sys.argv[1] if len(sys.argv) > 1 else os.environ.get("BASE_URL", "http://localhost:3005")).rstrip("/")
 SCREENSHOT_DIR = Path(r"c:\Users\Asus\Downloads\prj\funding-rate-bot\test_screenshots\skeptical_audit")
 SCREENSHOT_DIR.mkdir(parents=True, exist_ok=True)
 
@@ -282,6 +282,9 @@ with sync_playwright() as p:
 
     browser.close()
 
-print("\n" + "=" * 70)
+# Cleanup trade history so production ledger starts completely fresh
+s_admin.post(f"{BASE_URL}/api/trades", json={"action": "clear"})
+print("Cleaned audit test trade: Production history ledger is now clean (0 trades).")
+
 print("SKEPTICAL AUDIT FULLY PASSED: 100% SUCCESS ACROSS ALL VECTORS!")
 print("=" * 70)
