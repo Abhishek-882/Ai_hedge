@@ -537,6 +537,7 @@ export default function TerminalPage() {
               onMinSpreadEntryChange={setMinSpreadEntry}
               exitSpreadTarget={exitSpreadTarget}
               onExitSpreadTargetChange={setExitSpreadTarget}
+              markPrice={wsData.binancePrice}
             />
           </div>
         </div>

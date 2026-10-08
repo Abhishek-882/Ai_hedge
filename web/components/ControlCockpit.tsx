@@ -52,6 +52,7 @@ interface ControlCockpitProps {
   onMinSpreadEntryChange?: (val: number) => void;
   exitSpreadTarget?: number;
   onExitSpreadTargetChange?: (val: number) => void;
+  markPrice?: number;
 }
 
 export default function ControlCockpit({
@@ -69,14 +70,34 @@ export default function ControlCockpit({
   onMinSpreadEntryChange,
   exitSpreadTarget = 2,
   onExitSpreadTargetChange,
+  markPrice = 0,
 }: ControlCockpitProps) {
   const currentAsset = selectedSymbol || "BTCUSDT";
   const assetMeta = getAssetMeta(currentAsset);
 
   const [quantity, setQuantity] = useState<string>(assetMeta.defaultQty);
+  const [selectedNotional, setSelectedNotional] = useState<number | null>(null);
   const [internalMinSpread, setInternalMinSpread] = useState<number>(12);
   const [internalExitTarget, setInternalExitTarget] = useState<number>(2);
   const [cockpitError, setCockpitError] = useState<string | null>(null);
+
+  const handleNotionalSelect = (dollars: number) => {
+    setSelectedNotional(dollars);
+    if (markPrice && markPrice > 0) {
+      const rawQty = dollars / markPrice;
+      let stepDecimals = 0;
+      if (assetMeta.step.includes(".")) {
+        stepDecimals = assetMeta.step.split(".")[1].length;
+      }
+      const formatted = stepDecimals > 0 ? rawQty.toFixed(stepDecimals) : Math.max(1, Math.round(rawQty)).toString();
+      setQuantity(formatted);
+    } else {
+      if (dollars <= 25) setQuantity(assetMeta.presets[0]);
+      else if (dollars <= 50) setQuantity(assetMeta.presets[1] || assetMeta.presets[0]);
+      else if (dollars <= 100) setQuantity(assetMeta.presets[2] || assetMeta.presets[1]);
+      else setQuantity(assetMeta.presets[3] || assetMeta.presets[2]);
+    }
+  };
 
   // Auto-sync quantity when selectedSymbol updates
   React.useEffect(() => {
@@ -475,43 +496,81 @@ export default function ControlCockpit({
         </div>
 
         {/* Size Selection & Custom Continuous Input */}
-        <div className="mt-4">
-          <div className="flex items-center justify-between mb-1.5">
-            <label className="text-xs text-zinc-400 uppercase">
-              ORDER QUANTITY ({assetMeta.base})
-            </label>
-            <span className="text-[10px] text-zinc-500">
-              Selected: <strong className="text-zinc-200">{quantity} {assetMeta.base}</strong>
-            </span>
+        <div className="mt-4 space-y-3">
+          {/* Quick Notional Dollar Chips */}
+          <div>
+            <div className="flex items-center justify-between mb-1.5">
+              <label className="text-[10px] text-zinc-400 uppercase font-semibold flex items-center space-x-1">
+                <span>QUICK NOTIONAL SIZING</span>
+              </label>
+              {markPrice && markPrice > 0 ? (
+                <span className="text-[10px] text-accent-cyan font-mono">
+                  Est. ${(parseFloat(quantity || "0") * markPrice).toFixed(2)} USDT
+                </span>
+              ) : null}
+            </div>
+            <div className="grid grid-cols-4 gap-1.5">
+              {[25, 50, 100, 250].map((dollars) => (
+                <button
+                  key={dollars}
+                  onClick={() => handleNotionalSelect(dollars)}
+                  className={`py-1 text-[11px] rounded border transition-all active:scale-95 ${
+                    selectedNotional === dollars
+                      ? "bg-amber-500/20 border-accent-amber text-accent-amber font-bold shadow-sm"
+                      : "bg-zinc-900 border-zinc-800 text-zinc-400 hover:text-zinc-200 hover:border-zinc-700"
+                  }`}
+                >
+                  ${dollars}
+                </button>
+              ))}
+            </div>
           </div>
 
-          <div className="grid grid-cols-4 gap-2 mb-2">
-            {assetMeta.presets.map((qty) => (
-              <button
-                key={qty}
-                onClick={() => setQuantity(qty)}
-                className={`py-1.5 text-xs rounded border transition-colors ${
-                  quantity === qty
-                    ? "bg-zinc-800 border-accent-amber text-zinc-100 font-bold"
-                    : "bg-surface-card border-border text-zinc-400 hover:border-zinc-700"
-                }`}
-              >
-                {qty} {assetMeta.base}
-              </button>
-            ))}
-          </div>
+          {/* Unit Quantity Presets */}
+          <div>
+            <div className="flex items-center justify-between mb-1.5">
+              <label className="text-xs text-zinc-400 uppercase">
+                COIN UNITS ({assetMeta.base})
+              </label>
+              <span className="text-[10px] text-zinc-500">
+                Selected: <strong className="text-zinc-200">{quantity} {assetMeta.base}</strong>
+              </span>
+            </div>
 
-          {/* Custom Numerical Quantity Input */}
-          <div className="flex items-center space-x-2">
-            <span className="text-[10px] text-zinc-500">Custom Size:</span>
-            <input
-              type="number"
-              step={assetMeta.step}
-              value={quantity}
-              onChange={(e) => setQuantity(e.target.value)}
-              className="flex-1 px-2.5 py-1 text-xs bg-zinc-900 border border-border rounded font-mono text-zinc-100 focus:outline-none focus:border-accent-amber"
-              placeholder={`Enter custom ${assetMeta.base}`}
-            />
+            <div className="grid grid-cols-4 gap-2 mb-2">
+              {assetMeta.presets.map((qty) => (
+                <button
+                  key={qty}
+                  onClick={() => {
+                    setSelectedNotional(null);
+                    setQuantity(qty);
+                  }}
+                  className={`py-1.5 text-xs rounded border transition-colors ${
+                    quantity === qty && selectedNotional === null
+                      ? "bg-zinc-800 border-accent-amber text-zinc-100 font-bold"
+                      : "bg-surface-card border-border text-zinc-400 hover:border-zinc-700"
+                  }`}
+                >
+                  {qty} {assetMeta.base}
+                </button>
+              ))}
+            </div>
+
+            {/* Custom Numerical Quantity Input */}
+            <div className="flex items-center space-x-2">
+              <span className="text-[10px] text-zinc-500">Custom Size:</span>
+              <input
+                type="number"
+                step={assetMeta.step}
+                value={quantity}
+                onChange={(e) => {
+                  setSelectedNotional(null);
+                  setQuantity(e.target.value);
+                }}
+                className="flex-1 px-2.5 py-1 text-xs bg-zinc-900 border border-border rounded font-mono text-zinc-100 focus:outline-none focus:border-accent-amber"
+                placeholder={`Enter custom ${assetMeta.base}`}
+              />
+            </div>
           </div>
         </div>
 
