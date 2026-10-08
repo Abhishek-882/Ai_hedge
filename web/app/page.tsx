@@ -331,19 +331,19 @@ export default function IntroPage() {
           </div>
         </section>
 
-        {/* Interactive 3D Prismatic Core Nexus Showcase */}
+        {/* Real-Time Arbitrage Basis Visualizer Showcase */}
         <section className="max-w-5xl mx-auto px-4 md:px-8 py-8">
-          <div className="bg-surface rounded-2xl border border-border p-6 space-y-4">
+          <div className="bg-surface rounded-2xl border border-border p-4 sm:p-6 space-y-4">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-4 border-b border-border">
               <div>
                 <div className="flex items-center space-x-2">
-                  <span className="w-2 h-2 rounded-full bg-accent-emerald animate-pulse" />
+                  <span className="w-2 h-2 rounded-full bg-accent-amber animate-pulse" />
                   <h2 className="text-sm font-bold uppercase tracking-wider text-zinc-100">
-                    Dual-Exchange Prismatic Nexus // Real-Time Basis Pulse
+                    Real-Time Arbitrage Basis Visualizer & Oscilloscope
                   </h2>
                 </div>
                 <p className="text-xs text-zinc-400 mt-0.5">
-                  Visual representation of basis spread equilibrium between Binance (Amber) and Bitget (Emerald).
+                  Live rolling spread waveform, dual-exchange order flow conduits, and 8-hour funding settlement radar.
                 </p>
               </div>
               <div className="text-xs font-mono text-zinc-400 self-start sm:self-center">
@@ -351,7 +351,12 @@ export default function IntroPage() {
               </div>
             </div>
 
-            <PrismaticCore3D spreadBps={spreadBps} />
+            <PrismaticCore3D
+              spreadBps={spreadBps}
+              symbol="BTCUSDT"
+              binancePrice={98450}
+              bitgetPrice={98438}
+            />
           </div>
         </section>
 

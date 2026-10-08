@@ -552,10 +552,16 @@ export default function TerminalPage() {
 
         {/* Grid: 3D Prismatic Core & Control Cockpit */}
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-          {/* Left Column: 3D Visualizer & Telemetry HUD */}
+          {/* Left Column: Real-Time Arbitrage Basis Visualizer & Telemetry HUD */}
           <div className="lg:col-span-7 flex flex-col gap-4">
             <PrismaticCore3D
               spreadBps={wsData.spreadBps}
+              symbol={selectedSymbol}
+              binancePrice={wsData.binancePrice}
+              bitgetPrice={wsData.bitgetPrice}
+              binanceFundingRate={wsData.binanceFundingRate}
+              bitgetFundingRate={wsData.bitgetFundingRate}
+              nextFundingTime={wsData.nextFundingTime}
               isInspecting={isStudioMode}
               onToggleInspect={() => setIsStudioMode(!isStudioMode)}
             />
