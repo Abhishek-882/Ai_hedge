@@ -13,9 +13,12 @@ export async function GET(req: NextRequest) {
     const symParam = req.nextUrl.searchParams.get("symbol") || "BTCUSDT";
     const symbol = symParam.trim().toUpperCase();
 
-    // 1. Fetch Binance live ticker & premiumIndex in parallel
-    const [binanceTickerRes, binancePremiumRes, bitgetTickerRes] = await Promise.allSettled([
-      fetch(`https://testnet.binancefuture.com/fapi/v1/ticker/24hr?symbol=${symbol}`, { cache: "no-store" }),
+    // 1. Fetch Binance live production ticker & premiumIndex (with testnet fallback) and Bitget ticker
+    const [binanceProdRes, binanceTestRes, bitgetTickerRes] = await Promise.allSettled([
+      fetch(`https://fapi.binance.com/fapi/v1/premiumIndex?symbol=${symbol}`, {
+        headers: { "User-Agent": "FundingArbitrage/2.0" },
+        cache: "no-store",
+      }),
       fetch(`https://testnet.binancefuture.com/fapi/v1/premiumIndex?symbol=${symbol}`, { cache: "no-store" }),
       fetch(`https://api.bitget.com/api/v2/mix/market/ticker?symbol=${symbol}&productType=USDT-FUTURES`, { cache: "no-store" }),
     ]);
@@ -26,21 +29,27 @@ export async function GET(req: NextRequest) {
     let high24h = 0;
     let low24h = 0;
 
-    if (binancePremiumRes.status === "fulfilled" && binancePremiumRes.value.ok) {
+    // Prefer production Binance for real market funding rate
+    if (binanceProdRes.status === "fulfilled" && binanceProdRes.value.ok) {
       try {
-        const premiumData = await binancePremiumRes.value.json();
-        binancePrice = parseFloat(premiumData.markPrice || "0");
-        binanceFundingRate = parseFloat(premiumData.lastFundingRate || "0.0001");
-        nextFundingTime = parseInt(premiumData.nextFundingTime || "0", 10);
+        const prodData = await binanceProdRes.value.json();
+        binancePrice = parseFloat(prodData.markPrice || "0");
+        const rawRate = parseFloat(prodData.lastFundingRate);
+        if (!isNaN(rawRate)) binanceFundingRate = rawRate;
+        nextFundingTime = parseInt(prodData.nextFundingTime || "0", 10);
       } catch {}
     }
 
-    if (binanceTickerRes.status === "fulfilled" && binanceTickerRes.value.ok) {
+    // Fallback to testnet if production mark price or rate is missing
+    if ((!binancePrice || binancePrice === 0) && binanceTestRes.status === "fulfilled" && binanceTestRes.value.ok) {
       try {
-        const tickerData = await binanceTickerRes.value.json();
-        if (!binancePrice) binancePrice = parseFloat(tickerData.lastPrice || "0");
-        high24h = parseFloat(tickerData.highPrice || "0");
-        low24h = parseFloat(tickerData.lowPrice || "0");
+        const testData = await binanceTestRes.value.json();
+        if (!binancePrice) binancePrice = parseFloat(testData.markPrice || "0");
+        if (binanceFundingRate === 0.0001 && testData.lastFundingRate) {
+          const rawRate = parseFloat(testData.lastFundingRate);
+          if (!isNaN(rawRate)) binanceFundingRate = rawRate;
+        }
+        if (!nextFundingTime) nextFundingTime = parseInt(testData.nextFundingTime || "0", 10);
       } catch {}
     }
 

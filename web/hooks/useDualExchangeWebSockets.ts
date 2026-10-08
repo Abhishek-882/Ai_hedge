@@ -126,16 +126,19 @@ export function useDualExchangeWebSockets(symbol: string = "BTCUSDT"): DualStrea
             const msg = JSON.parse(event.data);
             if (msg.e === "markPriceUpdate") {
               const markPrice = parseFloat(msg.p || "0");
-              const fundingRate = parseFloat(msg.r || "0.0001");
               const nextFunding = parseInt(msg.T || "0", 10);
 
               if (markPrice > 0) {
-                queueThrottledUpdate({
+                const updatePayload: Partial<DualStreamData> = {
                   binancePrice: markPrice,
-                  binanceFundingRate: fundingRate,
                   nextFundingTime: nextFunding > 0 ? nextFunding : undefined,
                   binanceWsConnected: true,
-                });
+                };
+                if (msg.r !== undefined && msg.r !== "") {
+                  const rawR = parseFloat(msg.r);
+                  if (!isNaN(rawR)) updatePayload.binanceFundingRate = rawR;
+                }
+                queueThrottledUpdate(updatePayload);
               }
             }
           } catch {}
@@ -190,14 +193,17 @@ export function useDualExchangeWebSockets(symbol: string = "BTCUSDT"): DualStrea
               const ticker = msg.data?.[0];
               if (ticker) {
                 const lastPrice = parseFloat(ticker.lastPr || ticker.markPrice || "0");
-                const fundingRate = parseFloat(ticker.fundingRate || "0.0002");
 
                 if (lastPrice > 0) {
-                  queueThrottledUpdate({
+                  const updatePayload: Partial<DualStreamData> = {
                     bitgetPrice: lastPrice,
-                    bitgetFundingRate: fundingRate,
                     bitgetWsConnected: true,
-                  });
+                  };
+                  if (ticker.fundingRate !== undefined && ticker.fundingRate !== "") {
+                    const rawBgRate = parseFloat(ticker.fundingRate);
+                    if (!isNaN(rawBgRate)) updatePayload.bitgetFundingRate = rawBgRate;
+                  }
+                  queueThrottledUpdate(updatePayload);
                 }
               }
             }

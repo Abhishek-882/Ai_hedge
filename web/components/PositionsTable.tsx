@@ -28,6 +28,15 @@ export default function PositionsTable({
   liveBitgetPrice,
   onClosePosition,
 }: PositionsTableProps) {
+  const totalUnrealizedPnl = positions.reduce((acc, p) => acc + (p.unrealizedPnl || 0), 0);
+  const longNotional = positions
+    .filter((p) => p.amount > 0)
+    .reduce((acc, p) => acc + ((p.entryPrice || 0) * Math.abs(p.amount)), 0);
+  const shortNotional = positions
+    .filter((p) => p.amount < 0)
+    .reduce((acc, p) => acc + ((p.entryPrice || 0) * Math.abs(p.amount)), 0);
+  const notionalImbalance = Math.abs(longNotional - shortNotional);
+
   return (
     <div className="bg-surface rounded-xl border border-border p-5 font-mono">
       <div className="flex items-center justify-between border-b border-border pb-3 mb-4">
@@ -47,6 +56,32 @@ export default function PositionsTable({
           )}
         </div>
       </div>
+
+      {positions.length > 0 && (
+        <div className="mb-4 grid grid-cols-1 md:grid-cols-3 gap-3 text-xs bg-zinc-950/70 p-3 rounded-xl border border-zinc-800">
+          <div>
+            <div className="text-[10px] text-zinc-500 uppercase">COMBINED NET UNREALIZED PnL</div>
+            <div className={`text-sm font-bold font-mono mt-0.5 ${totalUnrealizedPnl >= 0 ? "text-accent-emerald" : "text-accent-rose"}`}>
+              {totalUnrealizedPnl >= 0 ? "+" : ""}{totalUnrealizedPnl.toFixed(4)} USDT
+            </div>
+          </div>
+          <div>
+            <div className="text-[10px] text-zinc-500 uppercase">NOTIONAL BALANCE (LONG vs SHORT)</div>
+            <div className="text-xs text-zinc-300 font-mono mt-0.5">
+              Long: ${longNotional.toFixed(2)} | Short: ${shortNotional.toFixed(2)}
+            </div>
+            <div className="text-[9px] text-zinc-500">
+              Imbalance: ${notionalImbalance.toFixed(2)} USDT ({longNotional > 0 ? ((notionalImbalance / longNotional) * 100).toFixed(1) : 0}% skew)
+            </div>
+          </div>
+          <div>
+            <div className="text-[10px] text-zinc-500 uppercase">EXCHANGE BASIS MECHANICS</div>
+            <div className="text-[10px] text-zinc-400 mt-0.5 leading-tight">
+              Testnet simulated price feeds diverge on altcoins. Profit is captured via 8h funding rate payouts, flattening when basis converges.
+            </div>
+          </div>
+        </div>
+      )}
 
       {positions.length === 0 ? (
         <div className="py-8 text-center text-xs text-zinc-500">
