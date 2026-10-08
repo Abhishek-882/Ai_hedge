@@ -8,6 +8,7 @@ export interface CoinArbitrageOpportunity {
   baseAsset: string;
   binanceRate: number;
   bitgetRate: number;
+  rateDiffPct: number;
   spreadBps: number;
   annualizedApr: number;
   binanceMarkPrice: number;
@@ -161,6 +162,7 @@ export async function GET(req: NextRequest) {
       const spreadBps = parseFloat((Math.abs(bnRate - bgRate) * 10000).toFixed(2));
       // 3 funding intervals per day * 365 days = 1095 intervals/year
       const annualizedApr = parseFloat((spreadBps * 0.01 * 3 * 365).toFixed(2));
+      const rateDiffPct = parseFloat((Math.abs(bnRate - bgRate) * 100).toFixed(5));
 
       const direction: "SHORT_BINANCE_LONG_BITGET" | "LONG_BINANCE_SHORT_BITGET" =
         bnRate >= bgRate ? "SHORT_BINANCE_LONG_BITGET" : "LONG_BINANCE_SHORT_BITGET";
@@ -176,6 +178,7 @@ export async function GET(req: NextRequest) {
         baseAsset,
         binanceRate: parseFloat((bnRate * 100).toFixed(5)), // as % with 5 decimals (e.g. 0.01000%)
         bitgetRate: parseFloat((bgRate * 100).toFixed(5)), // as % with 5 decimals
+        rateDiffPct,
         spreadBps,
         annualizedApr,
         binanceMarkPrice: bnMark,
@@ -187,12 +190,15 @@ export async function GET(req: NextRequest) {
       });
     }
 
-    // Sort opportunities by highest 8h funding rate descending by default
+    // Sort opportunities by HIGHEST hedge rate difference (spread) descending
+    // 1st: Coin with highest |binanceRate - bitgetRate|
     opportunities.sort((a, b) => {
-      if (b.binanceRate !== a.binanceRate) {
-        return b.binanceRate - a.binanceRate;
+      const diffA = Math.abs(a.binanceRate - a.bitgetRate);
+      const diffB = Math.abs(b.binanceRate - b.bitgetRate);
+      if (Math.abs(diffB - diffA) > 0.00001) {
+        return diffB - diffA;
       }
-      return b.spreadBps - a.spreadBps;
+      return b.volume24h - a.volume24h;
     });
 
     if (!includeAllProduction) {

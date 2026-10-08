@@ -9,6 +9,7 @@ export interface CoinOpportunity {
   baseAsset: string;
   binanceRate: number;
   bitgetRate: number;
+  rateDiffPct?: number;
   spreadBps: number;
   annualizedApr: number;
   binanceMarkPrice: number;
@@ -19,7 +20,11 @@ export interface CoinOpportunity {
 }
 
 interface AllCoinsScannerProps {
-  onSelectCoin: (symbol: string, direction?: "SHORT_BINANCE_LONG_BITGET" | "LONG_BINANCE_SHORT_BITGET") => void;
+  onSelectCoin: (
+    symbol: string,
+    direction?: "SHORT_BINANCE_LONG_BITGET" | "LONG_BINANCE_SHORT_BITGET",
+    coin?: CoinOpportunity
+  ) => void;
   selectedSymbol?: string;
   onTradeExecuted?: (trade: any) => void;
   getVaultHeaders?: () => Record<string, string>;
@@ -30,8 +35,8 @@ export default function AllCoinsScanner({ onSelectCoin, selectedSymbol, onTradeE
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState<string>("");
-  const [filterMode, setFilterMode] = useState<"HIGHEST_FUNDING" | "TOP_SPREADS" | "HIGH_APR" | "NEGATIVE_FUNDING" | "MAJORS" | "ALL">("HIGHEST_FUNDING");
-  const [sortBy, setSortBy] = useState<"funding" | "spread" | "apr" | "countdown" | "volume" | "symbol">("funding");
+  const [filterMode, setFilterMode] = useState<"TOP_SPREADS" | "HIGH_APR" | "NEGATIVE_FUNDING" | "HIGHEST_FUNDING" | "MAJORS" | "ALL">("TOP_SPREADS");
+  const [sortBy, setSortBy] = useState<"spread" | "funding" | "apr" | "countdown" | "volume" | "symbol">("spread");
   const [lastUpdated, setLastUpdated] = useState<number>(Date.now());
   const [currentTime, setCurrentTime] = useState<number>(Date.now());
 
@@ -102,7 +107,7 @@ export default function AllCoinsScanner({ onSelectCoin, selectedSymbol, onTradeE
 
     // Category filter
     if (filterMode === "TOP_SPREADS") {
-      list = list.filter((c) => c.spreadBps >= 2.0);
+      list = list.filter((c) => c.spreadBps >= 0.5 || Math.abs(c.binanceRate - c.bitgetRate) > 0);
     } else if (filterMode === "HIGH_APR") {
       list = list.filter((c) => c.annualizedApr >= 25.0);
     } else if (filterMode === "NEGATIVE_FUNDING") {
@@ -112,13 +117,19 @@ export default function AllCoinsScanner({ onSelectCoin, selectedSymbol, onTradeE
       list = list.filter((c) => majors.includes(c.symbol));
     }
 
-    // Sorting
+    // Sorting: strictly rank by highest absolute funding rate difference |binanceRate - bitgetRate|
     list.sort((a, b) => {
+      if (sortBy === "spread") {
+        const diffA = Math.abs(a.binanceRate - a.bitgetRate);
+        const diffB = Math.abs(b.binanceRate - b.bitgetRate);
+        if (Math.abs(diffB - diffA) > 0.00001) return diffB - diffA;
+        if (b.spreadBps !== a.spreadBps) return b.spreadBps - a.spreadBps;
+        return b.volume24h - a.volume24h;
+      }
       if (sortBy === "funding") {
         if (b.binanceRate !== a.binanceRate) return b.binanceRate - a.binanceRate;
         return b.spreadBps - a.spreadBps;
       }
-      if (sortBy === "spread") return b.spreadBps - a.spreadBps;
       if (sortBy === "apr") return b.annualizedApr - a.annualizedApr;
       if (sortBy === "countdown") {
         const timeA = a.nextFundingTime > 0 ? a.nextFundingTime : fallbackTarget;
@@ -138,6 +149,8 @@ export default function AllCoinsScanner({ onSelectCoin, selectedSymbol, onTradeE
     setExecutingSymbol(coin.symbol);
     setErrorSymbol(null);
     setErrorFeedback(null);
+    // Immediately update selected coin and its specific funding rate countdown
+    onSelectCoin(coin.symbol, coin.direction, coin);
     try {
       // Calculate safe dynamic lot quantity ensuring notional >= exchange minimums ($60 for BTC, $30 for ETH, $15 for others)
       let minRequiredNotional = 15.0;
@@ -237,8 +250,8 @@ export default function AllCoinsScanner({ onSelectCoin, selectedSymbol, onTradeE
         body: JSON.stringify(tradeRecord),
       }).catch(() => {});
 
-      // Also set as active symbol
-      onSelectCoin(coin.symbol, coin.direction);
+      // Also set as active symbol with its specific funding rate countdown
+      onSelectCoin(coin.symbol, coin.direction, coin);
 
     } catch (err: any) {
       setErrorSymbol(coin.symbol);
@@ -264,8 +277,8 @@ export default function AllCoinsScanner({ onSelectCoin, selectedSymbol, onTradeE
           <span className="text-[10px] px-2 py-0.5 rounded bg-zinc-800 text-zinc-300 border border-zinc-700">
             {coins.length > 0 ? `${coins.length} Verified Pairs (Binance & Bitget)` : "Scanning..."}
           </span>
-          <span className="text-[10px] px-2 py-0.5 rounded bg-emerald-950/60 text-accent-emerald border border-emerald-800/50">
-            Ranked by Highest Funding (8h)
+          <span className="text-[10px] px-2 py-0.5 rounded bg-amber-950/60 text-accent-amber border border-amber-800/50 font-bold">
+            Ranked by Highest Hedge Diff
           </span>
         </div>
 
@@ -314,29 +327,17 @@ export default function AllCoinsScanner({ onSelectCoin, selectedSymbol, onTradeE
           <div className="flex flex-wrap items-center gap-1 text-[10px]">
             <button
               onClick={() => {
-                setFilterMode("HIGHEST_FUNDING");
-                setSortBy("funding");
-              }}
-              className={`px-2 py-1 rounded transition-colors ${
-                filterMode === "HIGHEST_FUNDING"
-                  ? "bg-accent-amber text-zinc-950 font-bold shadow-sm shadow-amber-500/20"
-                  : "bg-zinc-800 hover:bg-zinc-700 text-zinc-400"
-              }`}
-            >
-              Highest Funding
-            </button>
-            <button
-              onClick={() => {
                 setFilterMode("TOP_SPREADS");
                 setSortBy("spread");
               }}
               className={`px-2 py-1 rounded transition-colors ${
                 filterMode === "TOP_SPREADS"
-                  ? "bg-accent-amber text-zinc-950 font-bold"
+                  ? "bg-accent-amber text-zinc-950 font-bold shadow-sm shadow-amber-500/20"
                   : "bg-zinc-800 hover:bg-zinc-700 text-zinc-400"
               }`}
+              title="Rank by highest absolute funding rate difference |Binance - Bitget|"
             >
-              Top Spreads
+              ⚡ Top Hedge Diff
             </button>
             <button
               onClick={() => {
@@ -364,6 +365,19 @@ export default function AllCoinsScanner({ onSelectCoin, selectedSymbol, onTradeE
               title="Coins with negative funding (shorts pay longs)"
             >
               ❄️ Inverted / Negative
+            </button>
+            <button
+              onClick={() => {
+                setFilterMode("HIGHEST_FUNDING");
+                setSortBy("funding");
+              }}
+              className={`px-2 py-1 rounded transition-colors ${
+                filterMode === "HIGHEST_FUNDING"
+                  ? "bg-zinc-200 text-zinc-950 font-bold"
+                  : "bg-zinc-800 hover:bg-zinc-700 text-zinc-400"
+              }`}
+            >
+              Binance Rate
             </button>
             <button
               onClick={() => setFilterMode("MAJORS")}
@@ -428,20 +442,30 @@ export default function AllCoinsScanner({ onSelectCoin, selectedSymbol, onTradeE
         </div>
       ) : (
         <div className="overflow-x-auto mt-3 max-h-96 overflow-y-auto -mx-1 sm:mx-0 px-1 sm:px-0">
-          <table className="w-full min-w-[720px] text-left text-xs">
+          <table className="w-full min-w-[760px] text-left text-xs">
             <thead className="sticky top-0 bg-surface border-b border-border text-[10px] text-zinc-400 uppercase z-10">
               <tr>
+                <th className="pb-2 cursor-pointer w-14 text-center" onClick={() => setSortBy("spread")}>
+                  # Rank {sortBy === "spread" && "▾"}
+                </th>
                 <th className="pb-2 cursor-pointer" onClick={() => setSortBy("symbol")}>
                   Coin / Asset {sortBy === "symbol" && "▾"}
                 </th>
                 <th
-                  className="pb-2 cursor-pointer text-accent-emerald"
-                  onClick={() => setSortBy("funding")}
-                  title="Click to sort by Highest 8h Funding Rate"
+                  className="pb-2 cursor-pointer text-accent-amber"
+                  onClick={() => setSortBy("spread")}
+                  title="Hedge Difference |Binance - Bitget| (Spread)"
                 >
-                  Binance 8h Rate {sortBy === "funding" && "▾"}
+                  Rate Diff (Spread) {sortBy === "spread" && "▾"}
                 </th>
-                <th className="pb-2">Bitget 8h Rate</th>
+                <th
+                  className="pb-2 cursor-pointer text-zinc-300"
+                  onClick={() => setSortBy("funding")}
+                  title="Click to sort by Binance 8h Funding Rate"
+                >
+                  Binance 8h {sortBy === "funding" && "▾"}
+                </th>
+                <th className="pb-2 text-zinc-300">Bitget 8h</th>
                 <th
                   className="pb-2 cursor-pointer text-zinc-300"
                   onClick={() => setSortBy("countdown")}
@@ -451,9 +475,6 @@ export default function AllCoinsScanner({ onSelectCoin, selectedSymbol, onTradeE
                     <Clock className="w-3 h-3 text-zinc-400" />
                     <span>Countdown {sortBy === "countdown" && "▾"}</span>
                   </div>
-                </th>
-                <th className="pb-2 cursor-pointer text-accent-amber" onClick={() => setSortBy("spread")}>
-                  Spread (bps) {sortBy === "spread" && "▾"}
                 </th>
                 <th className="pb-2 cursor-pointer text-accent-emerald" onClick={() => setSortBy("apr")}>
                   Annualized APR {sortBy === "apr" && "▾"}
@@ -466,7 +487,7 @@ export default function AllCoinsScanner({ onSelectCoin, selectedSymbol, onTradeE
               </tr>
             </thead>
             <tbody className="divide-y border-border">
-              {filteredCoins.slice(0, 50).map((coin) => {
+              {filteredCoins.slice(0, 50).map((coin, index) => {
                 const isSelected = selectedSymbol === coin.symbol;
                 const isShortBn = coin.direction === "SHORT_BINANCE_LONG_BITGET";
                 const coinFundingTarget = coin.nextFundingTime > 0 ? coin.nextFundingTime : fallbackTarget;
@@ -474,18 +495,39 @@ export default function AllCoinsScanner({ onSelectCoin, selectedSymbol, onTradeE
                 const isExecuting = executingSymbol === coin.symbol;
                 const isFilled = filledSymbol === coin.symbol;
                 const isError = errorSymbol === coin.symbol;
+                const rankNum = index + 1;
+                const rateDiff = Math.abs(coin.binanceRate - coin.bitgetRate);
 
                 return (
                   <tr
                     key={coin.symbol}
-                    onClick={() => onSelectCoin(coin.symbol, coin.direction)}
+                    onClick={() => onSelectCoin(coin.symbol, coin.direction, coin)}
                     className={`cursor-pointer transition-all duration-150 group select-none ${
                       isSelected
                         ? "bg-amber-950/30 border-l-4 border-accent-amber shadow-sm shadow-amber-500/10"
                         : "hover:bg-zinc-800/50 hover:border-l-2 hover:border-amber-500/40"
                     }`}
-                    title={`Click row to load ${coin.symbol} into Execution Cockpit`}
+                    title={`Click row to load ${coin.symbol} and update funding countdown`}
                   >
+                    <td className="py-2.5 text-center">
+                      {rankNum === 1 ? (
+                        <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-amber-500/20 text-amber-300 border border-amber-500/40 shadow-sm shadow-amber-500/10">
+                          🥇 #1
+                        </span>
+                      ) : rankNum === 2 ? (
+                        <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-zinc-700/50 text-zinc-200 border border-zinc-600/60">
+                          🥈 #2
+                        </span>
+                      ) : rankNum === 3 ? (
+                        <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-amber-900/30 text-amber-400 border border-amber-800/40">
+                          🥉 #3
+                        </span>
+                      ) : (
+                        <span className="text-[10px] font-mono text-zinc-500 font-semibold">
+                          #{rankNum}
+                        </span>
+                      )}
+                    </td>
                     <td className="py-2.5">
                       <div className="flex items-center space-x-2">
                         <span className={`font-bold transition-colors ${isSelected ? "text-accent-amber" : "text-zinc-100 group-hover:text-amber-300"}`}>
@@ -504,6 +546,16 @@ export default function AllCoinsScanner({ onSelectCoin, selectedSymbol, onTradeE
                         )}
                       </div>
                     </td>
+                    <td className="py-2.5 font-mono">
+                      <div className="flex flex-col">
+                        <span className="font-bold text-accent-amber text-xs">
+                          +{rateDiff.toFixed(4)}%
+                        </span>
+                        <span className="text-[10px] text-zinc-400 font-semibold">
+                          +{coin.spreadBps.toFixed(1)} bps
+                        </span>
+                      </div>
+                    </td>
                     <td className="py-2.5">
                       <span className={coin.binanceRate >= 0 ? "text-emerald-400 font-semibold font-mono" : "text-rose-400 font-semibold font-mono"}>
                         {coin.binanceRate >= 0 ? "+" : ""}{coin.binanceRate.toFixed(5)}%
@@ -518,9 +570,6 @@ export default function AllCoinsScanner({ onSelectCoin, selectedSymbol, onTradeE
                       <span className="px-1.5 py-0.5 rounded bg-zinc-800/80 border border-zinc-700/60 text-[11px] text-zinc-200 font-semibold">
                         {countdownDisplay}
                       </span>
-                    </td>
-                    <td className="py-2.5 font-bold text-accent-amber font-mono">
-                      +{coin.spreadBps.toFixed(2)} bps
                     </td>
                     <td className="py-2.5 font-bold text-accent-emerald font-mono">
                       +{coin.annualizedApr.toFixed(1)}% APR
@@ -568,11 +617,11 @@ export default function AllCoinsScanner({ onSelectCoin, selectedSymbol, onTradeE
                         <button
                           onClick={(e) => {
                             e.stopPropagation();
-                            onSelectCoin(coin.symbol, coin.direction);
+                            onSelectCoin(coin.symbol, coin.direction, coin);
                           }}
                           className={`px-2 py-1 text-[10px] font-bold rounded transition-all active:scale-95 ${
                             isSelected
-                              ? "bg-amber-500/20 text-accent-amber border border-amber-500/40"
+                              ? "bg-amber-500/20 text-accent-amber border-amber-500/40"
                               : "bg-zinc-800 hover:bg-zinc-700 text-zinc-300 border border-zinc-700 group-hover:border-zinc-500"
                           }`}
                           title={`Load ${coin.symbol} into Execution Cockpit`}
@@ -592,7 +641,7 @@ export default function AllCoinsScanner({ onSelectCoin, selectedSymbol, onTradeE
       {/* Footer Info */}
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between pt-3 mt-3 border-t border-border text-[10px] text-zinc-500 gap-2">
         <span>
-          Showing top {Math.min(filteredCoins.length, 50)} opportunities of {filteredCoins.length} filtered coins (Ranked by 8h Funding)
+          Showing top {Math.min(filteredCoins.length, 50)} opportunities of {filteredCoins.length} filtered coins (Ranked by Highest Hedge Rate Difference)
         </span>
         <div className="flex items-center space-x-3">
           <span>Click <strong>QUICK HEDGE</strong> for 1-click dual fill</span>

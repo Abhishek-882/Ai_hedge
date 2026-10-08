@@ -8,12 +8,14 @@ interface TelemetryHUDProps {
   spreadBps?: number;
   nextFundingTime?: number;
   clockOffsetMs?: number;
+  symbol?: string;
 }
 
 export default function TelemetryHUD({
   spreadBps = 0,
   nextFundingTime = 0,
   clockOffsetMs = 24,
+  symbol = "BTCUSDT",
 }: TelemetryHUDProps) {
   const effectiveFundingTime = nextFundingTime && nextFundingTime > Date.now() 
     ? nextFundingTime 
@@ -35,6 +37,8 @@ export default function TelemetryHUD({
     return () => clearInterval(interval);
   }, [nextFundingTime]);
 
+  const baseAsset = symbol ? symbol.replace("USDT", "") : "BTC";
+
   return (
     <div className="grid grid-cols-2 md:grid-cols-4 gap-2.5 sm:gap-3 font-mono">
       {/* 1. Settlement Countdown */}
@@ -44,7 +48,9 @@ export default function TelemetryHUD({
           <Clock className="w-3.5 h-3.5 text-zinc-500" />
         </div>
         <div className="mt-1.5 sm:mt-2 text-lg sm:text-xl font-bold tracking-tight text-zinc-100">{countdown}</div>
-        <div className="mt-1 text-[9px] sm:text-[10px] text-zinc-500">8-hour funding boundary</div>
+        <div className="mt-1 text-[9px] sm:text-[10px] text-zinc-500">
+          {baseAsset} settlement cycle
+        </div>
       </div>
 
       {/* 2. Clock Drift Offset */}
@@ -79,7 +85,7 @@ export default function TelemetryHUD({
           <span>DELTA GUARANTEE</span>
           <ShieldCheck className="w-3.5 h-3.5 text-accent-cyan" />
         </div>
-        <div className="mt-1.5 sm:mt-2 text-lg sm:text-xl font-bold tracking-tight text-accent-cyan">0.0000 BTC</div>
+        <div className="mt-1.5 sm:mt-2 text-lg sm:text-xl font-bold tracking-tight text-accent-cyan">0.0000 {baseAsset}</div>
         <div className="mt-1 text-[9px] sm:text-[10px] text-zinc-500">Residual directional risk</div>
       </div>
     </div>

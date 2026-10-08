@@ -4,7 +4,6 @@ import React, { useState, useEffect, useCallback, useRef } from "react";
 import { KeyRound, RefreshCw, Wallet, ShieldCheck, ExternalLink, Activity, Radio, History, User, AlertCircle, ArrowRight, Flame } from "lucide-react";
 import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
-import PrismaticCore3D from "@/components/PrismaticCore3D";
 import TelemetryHUD from "@/components/TelemetryHUD";
 import SpreadTracker from "@/components/SpreadTracker";
 import ControlCockpit, { SupportedAsset } from "@/components/ControlCockpit";
@@ -20,6 +19,7 @@ import { useRouter } from "next/navigation";
 export default function TerminalPage() {
   const router = useRouter();
   const [selectedSymbol, setSelectedSymbol] = useState<SupportedAsset>("BTCUSDT");
+  const [selectedCoinFundingTime, setSelectedCoinFundingTime] = useState<number | null>(null);
   const [loadedPulse, setLoadedPulse] = useState(false);
 
   // Live Dual-Exchange WebSockets Stream
@@ -36,7 +36,6 @@ export default function TerminalPage() {
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [isProfileOpen, setIsProfileOpen] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
-  const [isStudioMode, setIsStudioMode] = useState(false);
 
   // 24/7 Autonomous Autopilot State
   const [isAutopilotActive, setIsAutopilotActive] = useState(false);
@@ -68,8 +67,13 @@ export default function TerminalPage() {
     verifyAuth();
   }, [verifyAuth]);
 
-  const handleSelectCoinFromScanner = useCallback((symbol: string) => {
+  const handleSelectCoinFromScanner = useCallback((symbol: string, direction?: string, coin?: any) => {
     setSelectedSymbol(symbol as any);
+    if (coin?.nextFundingTime && coin.nextFundingTime > 0) {
+      setSelectedCoinFundingTime(coin.nextFundingTime);
+    } else {
+      setSelectedCoinFundingTime(null);
+    }
     setLoadedPulse(true);
     setTimeout(() => setLoadedPulse(false), 2000);
     const el = document.getElementById("execution-cockpit-section");
@@ -533,6 +537,7 @@ export default function TerminalPage() {
                 key={item.sym}
                 onClick={() => {
                   setSelectedSymbol(item.sym as any);
+                  setSelectedCoinFundingTime(null);
                   setLoadedPulse(true);
                   setTimeout(() => setLoadedPulse(false), 2000);
                 }}
@@ -550,65 +555,69 @@ export default function TerminalPage() {
           })}
         </div>
 
-        {/* Grid: 3D Prismatic Core & Control Cockpit */}
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-          {/* Left Column: Real-Time Arbitrage Basis Visualizer & Telemetry HUD */}
-          <div className="lg:col-span-7 flex flex-col gap-4">
-            <PrismaticCore3D
-              spreadBps={wsData.spreadBps}
-              symbol={selectedSymbol}
-              binancePrice={wsData.binancePrice}
-              bitgetPrice={wsData.bitgetPrice}
-              binanceFundingRate={wsData.binanceFundingRate}
-              bitgetFundingRate={wsData.bitgetFundingRate}
-              nextFundingTime={wsData.nextFundingTime}
-              isInspecting={isStudioMode}
-              onToggleInspect={() => setIsStudioMode(!isStudioMode)}
-            />
-            <TelemetryHUD
-              spreadBps={wsData.spreadBps}
-              nextFundingTime={wsData.nextFundingTime}
-              clockOffsetMs={wsData.clockOffsetMs || 24}
-            />
-          </div>
+        {(() => {
+          const effectiveFundingTime = (selectedCoinFundingTime && selectedCoinFundingTime > Date.now())
+            ? selectedCoinFundingTime
+            : (wsData.nextFundingTime || 0);
 
-          {/* Right Column: Execution Cockpit */}
-          <div
-            id="execution-cockpit-section"
-            className={`lg:col-span-5 rounded-xl transition-all duration-300 ${
-              loadedPulse ? "ring-2 ring-accent-amber shadow-xl shadow-amber-500/20" : ""
-            }`}
-          >
-            <ControlCockpit
-              onRefresh={fetchData}
-              getVaultHeaders={getVaultHeaders}
-              selectedSymbol={selectedSymbol}
-              onSymbolChange={setSelectedSymbol}
-              isAutopilotActive={isAutopilotActive}
-              onToggleAutopilot={setIsAutopilotActive}
-              autopilotState={autopilotState}
-              spreadBps={wsData.spreadBps}
-              minSpreadEntry={minSpreadEntry}
-              onMinSpreadEntryChange={setMinSpreadEntry}
-              exitSpreadTarget={exitSpreadTarget}
-              onExitSpreadTargetChange={setExitSpreadTarget}
-              markPrice={wsData.binancePrice}
-              binanceFundingRate={wsData.binanceFundingRate}
-              bitgetFundingRate={wsData.bitgetFundingRate}
-            />
-          </div>
-        </div>
+          return (
+            <>
+              {/* Telemetry HUD: Real-time Quantitative Telemetry Cards */}
+              <div>
+                <TelemetryHUD
+                  spreadBps={wsData.spreadBps}
+                  nextFundingTime={effectiveFundingTime}
+                  clockOffsetMs={wsData.clockOffsetMs || 24}
+                  symbol={selectedSymbol}
+                />
+              </div>
 
-        {/* Spread Comparison Tracker */}
-        <div>
-          <SpreadTracker
-            symbol={selectedSymbol}
-            binanceFundingRate={wsData.binanceFundingRate}
-            bitgetFundingRate={wsData.bitgetFundingRate}
-            spreadBps={wsData.spreadBps}
-            markPrice={wsData.binancePrice}
-          />
-        </div>
+              {/* Main Trading Cockpit & Live Spread Corridor Grid */}
+              <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+                {/* Left Column: Live Cross-Exchange Funding Spread Tracker & Corridor */}
+                <div className="lg:col-span-7">
+                  <SpreadTracker
+                    symbol={selectedSymbol}
+                    binanceFundingRate={wsData.binanceFundingRate}
+                    bitgetFundingRate={wsData.bitgetFundingRate}
+                    spreadBps={wsData.spreadBps}
+                    markPrice={wsData.binancePrice}
+                  />
+                </div>
+
+                {/* Right Column: Execution Cockpit */}
+                <div
+                  id="execution-cockpit-section"
+                  className={`lg:col-span-5 rounded-xl transition-all duration-300 ${
+                    loadedPulse ? "ring-2 ring-accent-amber shadow-xl shadow-amber-500/20" : ""
+                  }`}
+                >
+                  <ControlCockpit
+                    onRefresh={fetchData}
+                    getVaultHeaders={getVaultHeaders}
+                    selectedSymbol={selectedSymbol}
+                    onSymbolChange={(sym) => {
+                      setSelectedSymbol(sym);
+                      setSelectedCoinFundingTime(null);
+                    }}
+                    isAutopilotActive={isAutopilotActive}
+                    onToggleAutopilot={setIsAutopilotActive}
+                    autopilotState={autopilotState}
+                    spreadBps={wsData.spreadBps}
+                    minSpreadEntry={minSpreadEntry}
+                    onMinSpreadEntryChange={setMinSpreadEntry}
+                    exitSpreadTarget={exitSpreadTarget}
+                    onExitSpreadTargetChange={setExitSpreadTarget}
+                    markPrice={wsData.binancePrice}
+                    binanceFundingRate={wsData.binanceFundingRate}
+                    bitgetFundingRate={wsData.bitgetFundingRate}
+                    nextFundingTime={effectiveFundingTime}
+                  />
+                </div>
+              </div>
+            </>
+          );
+        })()}
 
         {closeError && (
           <div className="px-4 py-2.5 rounded-lg bg-rose-950/80 border border-rose-800 text-rose-300 text-xs flex items-center justify-between shadow-lg">

@@ -14,7 +14,9 @@ import {
   ShieldCheck,
   Cpu,
   Sparkles,
+  Clock,
 } from "lucide-react";
+import { formatCountdown } from "@/lib/settlementTime";
 
 export type SupportedAsset = string;
 
@@ -56,6 +58,7 @@ interface ControlCockpitProps {
   markPrice?: number;
   binanceFundingRate?: number;
   bitgetFundingRate?: number;
+  nextFundingTime?: number;
 }
 
 export default function ControlCockpit({
@@ -76,6 +79,7 @@ export default function ControlCockpit({
   markPrice = 0,
   binanceFundingRate,
   bitgetFundingRate,
+  nextFundingTime = 0,
 }: ControlCockpitProps) {
   const currentAsset = selectedSymbol || "BTCUSDT";
   const assetMeta = getAssetMeta(currentAsset);
@@ -599,9 +603,17 @@ export default function ControlCockpit({
                   <Sparkles className="w-3.5 h-3.5 text-accent-amber animate-pulse" />
                   <span>ESTIMATED 8H FUNDING HARVEST</span>
                 </div>
-                <span className="text-[10px] px-2 py-0.5 rounded bg-emerald-500/10 text-accent-emerald border border-emerald-500/30 font-bold">
-                  +{estAnnualApy.toFixed(1)}% APR
-                </span>
+                <div className="flex items-center space-x-2">
+                  {nextFundingTime && nextFundingTime > Date.now() && (
+                    <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-zinc-800 text-zinc-300 border border-zinc-700 flex items-center space-x-1">
+                      <Clock className="w-3 h-3 text-zinc-400" />
+                      <span>{formatCountdown(nextFundingTime)}</span>
+                    </span>
+                  )}
+                  <span className="text-[10px] px-2 py-0.5 rounded bg-emerald-500/10 text-accent-emerald border border-emerald-500/30 font-bold">
+                    +{estAnnualApy.toFixed(1)}% APR
+                  </span>
+                </div>
               </div>
 
               <div className="grid grid-cols-3 gap-2 text-center py-1">

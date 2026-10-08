@@ -4,7 +4,6 @@ import React, { useState, useEffect } from "react";
 import Link from "next/link";
 import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
-import PrismaticCore3D from "@/components/PrismaticCore3D";
 import {
   ShieldCheck,
   Zap,
@@ -328,35 +327,6 @@ export default function IntroPage() {
                 </div>
               </div>
             </div>
-          </div>
-        </section>
-
-        {/* Real-Time Arbitrage Basis Visualizer Showcase */}
-        <section className="max-w-5xl mx-auto px-4 md:px-8 py-8">
-          <div className="bg-surface rounded-2xl border border-border p-4 sm:p-6 space-y-4">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-4 border-b border-border">
-              <div>
-                <div className="flex items-center space-x-2">
-                  <span className="w-2 h-2 rounded-full bg-accent-amber animate-pulse" />
-                  <h2 className="text-sm font-bold uppercase tracking-wider text-zinc-100">
-                    Real-Time Arbitrage Basis Visualizer & Oscilloscope
-                  </h2>
-                </div>
-                <p className="text-xs text-zinc-400 mt-0.5">
-                  Live rolling spread waveform, dual-exchange order flow conduits, and 8-hour funding settlement radar.
-                </p>
-              </div>
-              <div className="text-xs font-mono text-zinc-400 self-start sm:self-center">
-                Basis Spread: <span className="font-bold text-accent-amber">{spreadBps.toFixed(1)} bps</span>
-              </div>
-            </div>
-
-            <PrismaticCore3D
-              spreadBps={spreadBps}
-              symbol="BTCUSDT"
-              binancePrice={98450}
-              bitgetPrice={98438}
-            />
           </div>
         </section>
 
