@@ -12,6 +12,7 @@ import AllCoinsScanner from "@/components/AllCoinsScanner";
 import SettingsModal from "@/components/SettingsModal";
 import UserProfileModal from "@/components/UserProfileModal";
 import ServerDaemonIndicator from "@/components/ServerDaemonIndicator";
+import AutoBotPanel from "@/components/AutoBotPanel";
 import { useDualExchangeWebSockets } from "@/hooks/useDualExchangeWebSockets";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -189,70 +190,8 @@ export default function TerminalPage() {
     return () => clearInterval(interval);
   }, [currentUser, fetchData]);
 
-  // 24/7 Autonomous Scanner & Auto-Hedger Loop
-  useEffect(() => {
-    if (!isAutopilotActive) return;
-
-    const autopilotInterval = setInterval(async () => {
-      const now = Date.now();
-      if (now - lastAutopilotActionRef.current < 10000) return; // 10s throttle
-
-      const spread = wsData.spreadBps;
-
-      // Rule: Spread >= minSpreadEntry bps -> Enter Dual Hedge
-      if (autopilotState === "IDLE_SCANNING" && spread >= minSpreadEntry) {
-        try {
-          setAutopilotState("ENTERING_HEDGE");
-          lastAutopilotActionRef.current = now;
-
-          const res = await fetch("/api/hedge", {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-              ...getVaultHeaders(),
-            },
-            body: JSON.stringify({
-              action: "entry",
-              quantity: 0.005,
-              leg1Side: "SELL",
-            }),
-          });
-          const data = await res.json();
-          if (data.success) {
-            setAutopilotState("HEDGED_MONITORING");
-            fetchData();
-          } else {
-            setAutopilotState("IDLE_SCANNING");
-          }
-        } catch {
-          setAutopilotState("IDLE_SCANNING");
-        }
-      }
-
-      // Rule: Spread <= exitSpreadTarget bps -> Close Dual Hedge
-      if (autopilotState === "HEDGED_MONITORING" && spread <= exitSpreadTarget) {
-        try {
-          setAutopilotState("CLOSING_HEDGE");
-          lastAutopilotActionRef.current = now;
-
-          const res = await fetch("/api/close", {
-            method: "POST",
-            headers: getVaultHeaders(),
-          });
-          const data = await res.json();
-          if (data.success) {
-            setAutopilotState("COOLDOWN");
-            fetchData();
-            setTimeout(() => setAutopilotState("IDLE_SCANNING"), 30000);
-          }
-        } catch {
-          setAutopilotState("HEDGED_MONITORING");
-        }
-      }
-    }, 4000);
-
-    return () => clearInterval(autopilotInterval);
-  }, [isAutopilotActive, autopilotState, wsData.spreadBps, minSpreadEntry, exitSpreadTarget, getVaultHeaders, fetchData]);
+  // Autonomous 24/7 Bot execution is managed server-side by botEngine.ts
+  // Client terminal reflects daemon state via AutoBotPanel and ServerDaemonIndicator
 
   const handleClosePosition = async (targetSymbol?: string) => {
     try {
@@ -686,6 +625,11 @@ export default function TerminalPage() {
             </button>
           </div>
         )}
+
+        {/* 24/7 Server Autonomous Arbitrage Bot Cockpit */}
+        <div id="auto-bot-panel-section">
+          <AutoBotPanel />
+        </div>
 
         {/* Live Positions Table */}
         <div>

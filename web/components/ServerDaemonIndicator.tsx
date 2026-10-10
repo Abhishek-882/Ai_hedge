@@ -38,9 +38,18 @@ export default function ServerDaemonIndicator({ onOpenProfile }: ServerDaemonInd
     return () => clearInterval(interval);
   }, []);
 
+  const handleClick = () => {
+    const el = document.getElementById("auto-bot-panel-section");
+    if (el) {
+      el.scrollIntoView({ behavior: "smooth" });
+    } else {
+      onOpenProfile();
+    }
+  };
+
   return (
     <button
-      onClick={onOpenProfile}
+      onClick={handleClick}
       className={`flex items-center space-x-2 px-2.5 py-1 rounded-lg border text-[11px] font-mono transition-colors ${
         daemonState.isRunning
           ? "bg-emerald-950/40 text-emerald-400 border-emerald-800/60 hover:bg-emerald-900/40"
