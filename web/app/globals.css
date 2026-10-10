@@ -1,6 +1,12 @@
+@import "animate.css/animate.min.css";
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+/* AOS pointer-events safety to prevent click traps */
+[data-aos] {
+  pointer-events: auto !important;
+}
 
 :root {
   --background: #09090b;

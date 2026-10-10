@@ -3,8 +3,8 @@
   "runInBackgroundWhenClosed": true,
   "mode": "AUTONOMOUS_SERVER_24_7",
   "startedAt": 1791382174180,
-  "lastCycleAt": 1791629560505,
-  "cyclesCompleted": 99,
+  "lastCycleAt": 1791634558204,
+  "cyclesCompleted": 101,
   "activeBotId": "bot-1",
   "bots": [
     {
@@ -30,7 +30,7 @@
       "flattenedCoinsBlacklist": [],
       "activeHedges": [],
       "completedHedges": [],
-      "statusText": "SCANNING (Top: TRXUSDT - Spread: 1.66 bps - Countdown: 18439s)",
+      "statusText": "SCANNING (Top: TRXUSDT - Spread: 2.2 bps - Countdown: 13441s)",
       "lastEvaluatedCandidate": null,
       "createdAt": 1791382174180,
       "updatedAt": 1791627281948
@@ -56,7 +56,7 @@
         "scanIntervalSeconds": 5,
         "timingMode": "FUNDING_SNIPER_1M"
       },
-      "contentText": "; ============================================================\n; AI-Hedge Delta-Neutral Quantitative Strategy Set File\n; Strategy Preset: Conservative 5bps Sniper\n; Exported: 2026-10-10T10:52:40.502Z\n; Compatible with: MetaTrader 4/5 & AI-Hedge Daemon Engine\n; ============================================================\nEnabled=true\nMinSpreadBps=5\nMaxPriceDivergencePct=0.03\nBalanceAllocationPct=20\nLeverageMode=MAX_PER_COIN\nCustomLeverage=50\nMaxSimultaneousHedges=3\nMaxMarginCapUsdt=500\nPostSettlementWaitSeconds=15\nCloseMaxPriceDivergencePct=0.03\nScanIntervalSeconds=5\nTimingMode=FUNDING_SNIPER_1M",
+      "contentText": "; ============================================================\n; AI-Hedge Delta-Neutral Quantitative Strategy Set File\n; Strategy Preset: Conservative 5bps Sniper\n; Exported: 2026-10-10T12:15:58.184Z\n; Compatible with: MetaTrader 4/5 & AI-Hedge Daemon Engine\n; ============================================================\nEnabled=true\nMinSpreadBps=5\nMaxPriceDivergencePct=0.03\nBalanceAllocationPct=20\nLeverageMode=MAX_PER_COIN\nCustomLeverage=50\nMaxSimultaneousHedges=3\nMaxMarginCapUsdt=500\nPostSettlementWaitSeconds=15\nCloseMaxPriceDivergencePct=0.03\nScanIntervalSeconds=5\nTimingMode=FUNDING_SNIPER_1M",
       "isBuiltIn": true,
       "createdAt": 1775000000000,
       "updatedAt": 1775000000000
@@ -80,7 +80,7 @@
         "scanIntervalSeconds": 5,
         "timingMode": "CONTINUOUS_SPREAD"
       },
-      "contentText": "; ============================================================\n; AI-Hedge Delta-Neutral Quantitative Strategy Set File\n; Strategy Preset: Aggressive Continuous Arbitrage\n; Exported: 2026-10-10T10:52:40.503Z\n; Compatible with: MetaTrader 4/5 & AI-Hedge Daemon Engine\n; ============================================================\nEnabled=true\nMinSpreadBps=3\nMaxPriceDivergencePct=0.05\nBalanceAllocationPct=25\nLeverageMode=MAX_PER_COIN\nCustomLeverage=50\nMaxSimultaneousHedges=5\nMaxMarginCapUsdt=1000\nPostSettlementWaitSeconds=15\nCloseMaxPriceDivergencePct=0.05\nScanIntervalSeconds=5\nTimingMode=CONTINUOUS_SPREAD",
+      "contentText": "; ============================================================\n; AI-Hedge Delta-Neutral Quantitative Strategy Set File\n; Strategy Preset: Aggressive Continuous Arbitrage\n; Exported: 2026-10-10T12:15:58.186Z\n; Compatible with: MetaTrader 4/5 & AI-Hedge Daemon Engine\n; ============================================================\nEnabled=true\nMinSpreadBps=3\nMaxPriceDivergencePct=0.05\nBalanceAllocationPct=25\nLeverageMode=MAX_PER_COIN\nCustomLeverage=50\nMaxSimultaneousHedges=5\nMaxMarginCapUsdt=1000\nPostSettlementWaitSeconds=15\nCloseMaxPriceDivergencePct=0.05\nScanIntervalSeconds=5\nTimingMode=CONTINUOUS_SPREAD",
       "isBuiltIn": true,
       "createdAt": 1775000000000,
       "updatedAt": 1775000000000
@@ -104,7 +104,7 @@
         "scanIntervalSeconds": 5,
         "timingMode": "FUNDING_SNIPER_1M"
       },
-      "contentText": "; ============================================================\n; AI-Hedge Delta-Neutral Quantitative Strategy Set File\n; Strategy Preset: Balanced Institutional Harvest\n; Exported: 2026-10-10T10:52:40.503Z\n; Compatible with: MetaTrader 4/5 & AI-Hedge Daemon Engine\n; ============================================================\nEnabled=true\nMinSpreadBps=4\nMaxPriceDivergencePct=0.03\nBalanceAllocationPct=20\nLeverageMode=MAX_PER_COIN\nCustomLeverage=50\nMaxSimultaneousHedges=4\nMaxMarginCapUsdt=750\nPostSettlementWaitSeconds=15\nCloseMaxPriceDivergencePct=0.03\nScanIntervalSeconds=5\nTimingMode=FUNDING_SNIPER_1M",
+      "contentText": "; ============================================================\n; AI-Hedge Delta-Neutral Quantitative Strategy Set File\n; Strategy Preset: Balanced Institutional Harvest\n; Exported: 2026-10-10T12:15:58.186Z\n; Compatible with: MetaTrader 4/5 & AI-Hedge Daemon Engine\n; ============================================================\nEnabled=true\nMinSpreadBps=4\nMaxPriceDivergencePct=0.03\nBalanceAllocationPct=20\nLeverageMode=MAX_PER_COIN\nCustomLeverage=50\nMaxSimultaneousHedges=4\nMaxMarginCapUsdt=750\nPostSettlementWaitSeconds=15\nCloseMaxPriceDivergencePct=0.03\nScanIntervalSeconds=5\nTimingMode=FUNDING_SNIPER_1M",
       "isBuiltIn": true,
       "createdAt": 1775000000000,
       "updatedAt": 1775000000000
@@ -208,6 +208,6 @@
   },
   "activeHedges": [],
   "completedHedges": [],
-  "statusText": "SCANNING (Top: TRXUSDT - Spread: 1.66 bps - Countdown: 18439s)",
+  "statusText": "SCANNING (Top: TRXUSDT - Spread: 2.2 bps - Countdown: 13441s)",
   "lastEvaluatedCandidate": null
 }

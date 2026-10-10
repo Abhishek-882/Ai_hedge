@@ -71,7 +71,7 @@ export default function Navbar() {
           <div className="flex flex-col">
             <span className="text-xs font-black tracking-wider text-zinc-100 uppercase group-hover:text-accent-amber transition-colors flex items-center space-x-1">
               <span>AI-HEDGE</span>
-              <span className="text-zinc-500 font-normal">// QUANT</span>
+              <span className="text-zinc-500 font-normal">{"// QUANT"}</span>
             </span>
             <span className="text-[9px] text-zinc-500 font-normal">
               Delta-Neutral Arbitrage

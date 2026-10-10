@@ -4,6 +4,8 @@ import React, { useState, useEffect } from "react";
 import Link from "next/link";
 import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
+import AmbientHeroShader from "@/components/AmbientHeroShader";
+import { animate, spring } from "animejs";
 import {
   TrendingUp,
   ArrowRight,
@@ -34,6 +36,37 @@ export default function IntroPage() {
       })
       .catch(() => {});
   }, []);
+
+  // Anime.js tactile spring physics handlers
+  const handleCtaMouseEnter = (e: React.MouseEvent<HTMLElement>) => {
+    animate(e.currentTarget, {
+      scale: 1.04,
+      ease: spring({ bounce: 0.25, duration: 400 }),
+    });
+  };
+
+  const handleCtaMouseLeave = (e: React.MouseEvent<HTMLElement>) => {
+    animate(e.currentTarget, {
+      scale: 1.0,
+      ease: spring({ bounce: 0.25, duration: 400 }),
+    });
+  };
+
+  const handleCardMouseEnter = (e: React.MouseEvent<HTMLElement>) => {
+    animate(e.currentTarget, {
+      scale: 1.02,
+      y: -3,
+      ease: spring({ bounce: 0.25, duration: 400 }),
+    });
+  };
+
+  const handleCardMouseLeave = (e: React.MouseEvent<HTMLElement>) => {
+    animate(e.currentTarget, {
+      scale: 1.0,
+      y: 0,
+      ease: spring({ bounce: 0.25, duration: 400 }),
+    });
+  };
 
   const marketHighlights = [
     {
@@ -94,7 +127,7 @@ export default function IntroPage() {
       <div className="w-full bg-[#0c0c0f] border-b border-border/80 px-4 py-1.5 text-[10px] text-zinc-400 overflow-x-auto whitespace-nowrap scrollbar-none flex items-center justify-between shadow-sm">
         <div className="flex items-center space-x-4">
           <div className="flex items-center space-x-1.5">
-            <span className="w-1.5 h-1.5 rounded-full bg-accent-emerald animate-pulse" />
+            <span className="w-1.5 h-1.5 rounded-full bg-accent-emerald animate__animated animate__pulse animate__infinite" />
             <span className="font-bold text-zinc-200">PRODUCTION ENGINE v2.5</span>
           </div>
           <span className="text-zinc-700">•</span>
@@ -107,7 +140,7 @@ export default function IntroPage() {
           </div>
           <span className="text-zinc-700">•</span>
           <div>
-            DAEMON: <strong className="text-accent-emerald font-mono">24/7 BACKGROUND PERSISTENT</strong>
+            DAEMON: <strong className="text-accent-emerald font-mono animate__animated animate__pulse animate__infinite inline-block">24/7 BACKGROUND PERSISTENT</strong>
           </div>
         </div>
 
@@ -117,13 +150,16 @@ export default function IntroPage() {
       </div>
 
       <main className="flex-1 w-full pb-20 relative">
+        {/* Ambient WebGPU Hero Shader & Procedural Gradient with instant CSS fallback */}
+        <AmbientHeroShader />
+
         {/* Subtle Architectural Grid Pattern */}
         <div className="absolute inset-0 bg-[linear-gradient(to_right,#27272a12_1px,transparent_1px),linear-gradient(to_bottom,#27272a12_1px,transparent_1px)] bg-[size:32px_32px] pointer-events-none -z-10" />
 
         {/* Hero Section */}
-        <section className="max-w-5xl mx-auto px-4 md:px-8 pt-12 pb-14 md:pt-20 md:pb-16 text-center space-y-6">
+        <section data-aos="fade-up" className="max-w-5xl mx-auto px-4 md:px-8 pt-12 pb-14 md:pt-20 md:pb-16 text-center space-y-6">
           <div className="inline-flex items-center space-x-2 px-3 py-1 rounded-full bg-amber-500/10 border border-amber-500/30 text-accent-amber text-[11px] font-bold tracking-wide">
-            <span className="w-2 h-2 rounded-full bg-accent-emerald animate-pulse" />
+            <span className="w-2 h-2 rounded-full bg-accent-emerald animate__animated animate__pulse animate__infinite" />
             <span>CROSS-EXCHANGE BASIS ARBITRAGE TERMINAL</span>
           </div>
 
@@ -144,6 +180,8 @@ export default function IntroPage() {
           <div className="flex flex-col sm:flex-row items-center justify-center gap-3 pt-3">
             <Link
               href="/terminal"
+              onMouseEnter={handleCtaMouseEnter}
+              onMouseLeave={handleCtaMouseLeave}
               className="w-full sm:w-auto px-7 py-3.5 rounded-xl bg-accent-amber hover:bg-amber-400 text-zinc-950 font-bold text-xs uppercase tracking-wider transition-all flex items-center justify-center space-x-2 shadow-xl shadow-amber-500/10 active:scale-95"
             >
               <Terminal className="w-4 h-4" />
@@ -178,7 +216,7 @@ export default function IntroPage() {
 
         {/* Live Opportunity Corridor Matrix */}
         <section className="max-w-6xl mx-auto px-4 md:px-8 py-8 space-y-4">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-zinc-800/80 pb-3">
+          <div data-aos="fade-up" className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-zinc-800/80 pb-3">
             <div>
               <div className="flex items-center space-x-2">
                 <Activity className="w-4 h-4 text-accent-amber" />
@@ -201,10 +239,14 @@ export default function IntroPage() {
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3.5">
-            {marketHighlights.map((m) => (
+            {marketHighlights.map((m, idx) => (
               <div
                 key={m.symbol}
-                className="bg-surface/80 p-4 rounded-xl border border-border hover:border-zinc-700 transition-all space-y-2 group"
+                data-aos="fade-up"
+                data-aos-delay={((idx % 3) + 1) * 100}
+                onMouseEnter={handleCardMouseEnter}
+                onMouseLeave={handleCardMouseLeave}
+                className="bg-surface/80 p-4 rounded-xl border border-border hover:border-zinc-700 transition-all space-y-2 group cursor-pointer"
               >
                 <div className="flex items-center justify-between">
                   <div className="flex items-center space-x-2">
@@ -240,7 +282,7 @@ export default function IntroPage() {
 
         {/* Institutional Bento Grid Feature Architecture */}
         <section className="max-w-6xl mx-auto px-4 md:px-8 py-12 space-y-8">
-          <div className="text-center space-y-2 max-w-2xl mx-auto">
+          <div data-aos="fade-up" className="text-center space-y-2 max-w-2xl mx-auto">
             <h2 className="text-2xl sm:text-3xl font-bold tracking-tight text-zinc-100">
               Institutional Core Infrastructure
             </h2>
@@ -251,7 +293,7 @@ export default function IntroPage() {
 
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
             {/* Bento Card 1: 50-Coin Ranking Engine (Col Span 2) */}
-            <div className="md:col-span-2 bg-gradient-to-br from-surface via-zinc-900 to-zinc-950 p-6 md:p-8 rounded-2xl border border-zinc-800 space-y-4 shadow-xl">
+            <div data-aos="fade-up" data-aos-delay="100" className="md:col-span-2 bg-gradient-to-br from-surface via-zinc-900 to-zinc-950 p-6 md:p-8 rounded-2xl border border-zinc-800 space-y-4 shadow-xl">
               <div className="flex items-center justify-between">
                 <div className="w-10 h-10 rounded-xl bg-amber-500/10 border border-amber-500/30 flex items-center justify-center text-accent-amber font-bold text-sm">
                   <TrendingUp className="w-5 h-5" />
@@ -281,13 +323,13 @@ export default function IntroPage() {
                 </div>
                 <div className="bg-zinc-900/60 p-2.5 rounded-lg border border-zinc-800">
                   <div className="text-[10px] text-zinc-500">Execution Mode</div>
-                  <div className="font-bold text-accent-emerald mt-0.5">1-Click Dual Hedge</div>
+                  <div className="font-bold text-accent-emerald mt-0.5 animate__animated animate__pulse animate__infinite inline-block">1-Click Dual Hedge</div>
                 </div>
               </div>
             </div>
 
             {/* Bento Card 2: Atomic Lead-Lag Engine */}
-            <div className="bg-surface p-6 rounded-2xl border border-zinc-800 space-y-4 shadow-xl">
+            <div data-aos="fade-up" data-aos-delay="200" className="bg-surface p-6 rounded-2xl border border-zinc-800 space-y-4 shadow-xl">
               <div className="flex items-center justify-between">
                 <div className="w-10 h-10 rounded-xl bg-cyan-500/10 border border-cyan-500/30 flex items-center justify-center text-accent-cyan font-bold text-sm">
                   <Zap className="w-5 h-5" />
@@ -312,12 +354,12 @@ export default function IntroPage() {
             </div>
 
             {/* Bento Card 3: 24/7 Autopilot */}
-            <div className="bg-surface p-6 rounded-2xl border border-zinc-800 space-y-4 shadow-xl">
+            <div data-aos="fade-up" data-aos-delay="300" className="bg-surface p-6 rounded-2xl border border-zinc-800 space-y-4 shadow-xl">
               <div className="flex items-center justify-between">
                 <div className="w-10 h-10 rounded-xl bg-emerald-500/10 border border-emerald-800/40 flex items-center justify-center text-accent-emerald font-bold text-sm">
                   <Cpu className="w-5 h-5" />
                 </div>
-                <span className="text-[10px] px-2 py-0.5 rounded bg-emerald-500/10 text-accent-emerald border border-emerald-800/40 font-bold uppercase">
+                <span className="text-[10px] px-2 py-0.5 rounded bg-emerald-500/10 text-accent-emerald border border-emerald-800/40 font-bold uppercase animate__animated animate__pulse animate__infinite inline-flex items-center">
                   Server Daemon
                 </span>
               </div>
@@ -337,7 +379,7 @@ export default function IntroPage() {
             </div>
 
             {/* Bento Card 4: Multi-Tenant Key Vault (Col Span 2) */}
-            <div className="md:col-span-2 bg-gradient-to-br from-zinc-950 via-surface to-zinc-900 p-6 md:p-8 rounded-2xl border border-zinc-800 space-y-4 shadow-xl">
+            <div data-aos="fade-up" data-aos-delay="400" className="md:col-span-2 bg-gradient-to-br from-zinc-950 via-surface to-zinc-900 p-6 md:p-8 rounded-2xl border border-zinc-800 space-y-4 shadow-xl">
               <div className="flex items-center justify-between">
                 <div className="w-10 h-10 rounded-xl bg-emerald-500/10 border border-emerald-500/30 flex items-center justify-center text-accent-emerald font-bold text-sm">
                   <ShieldCheck className="w-5 h-5" />
@@ -367,7 +409,7 @@ export default function IntroPage() {
 
         {/* Quantitative Methodology & Risks */}
         <section className="max-w-5xl mx-auto px-4 md:px-8 py-10 space-y-6">
-          <div className="bg-surface/90 rounded-2xl border border-border p-6 md:p-8 space-y-6">
+          <div data-aos="fade-up" className="bg-surface/90 rounded-2xl border border-border p-6 md:p-8 space-y-6">
             <div className="flex items-center space-x-2 border-b border-zinc-800 pb-3">
               <Scale className="w-5 h-5 text-accent-amber" />
               <h2 className="text-sm font-bold uppercase tracking-wider text-zinc-100">
@@ -376,7 +418,7 @@ export default function IntroPage() {
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-3 gap-5 text-xs text-zinc-400 leading-relaxed">
-              <div className="space-y-2">
+              <div data-aos="fade-up" data-aos-delay="100" className="space-y-2">
                 <div className="font-bold text-zinc-200 uppercase text-[11px] flex items-center space-x-1">
                   <span className="text-accent-amber">01.</span>
                   <span>Basis Divergence</span>
@@ -388,7 +430,7 @@ export default function IntroPage() {
                 </p>
               </div>
 
-              <div className="space-y-2">
+              <div data-aos="fade-up" data-aos-delay="200" className="space-y-2">
                 <div className="font-bold text-zinc-200 uppercase text-[11px] flex items-center space-x-1">
                   <span className="text-accent-cyan">02.</span>
                   <span>Hedging Mechanics</span>
@@ -399,7 +441,7 @@ export default function IntroPage() {
                 </p>
               </div>
 
-              <div className="space-y-2">
+              <div data-aos="fade-up" data-aos-delay="300" className="space-y-2">
                 <div className="font-bold text-zinc-200 uppercase text-[11px] flex items-center space-x-1">
                   <span className="text-accent-emerald">03.</span>
                   <span>Execution & Risk Factors</span>
@@ -414,7 +456,7 @@ export default function IntroPage() {
         </section>
 
         {/* Launch CTA Strip */}
-        <section className="max-w-4xl mx-auto px-4 md:px-8 py-14 text-center space-y-6">
+        <section data-aos="fade-up" className="max-w-4xl mx-auto px-4 md:px-8 py-14 text-center space-y-6">
           <h2 className="text-2xl sm:text-3xl font-extrabold text-zinc-100 tracking-tight">
             Launch Institutional Arbitrage
           </h2>
@@ -427,6 +469,8 @@ export default function IntroPage() {
           <div className="flex flex-col sm:flex-row items-center justify-center gap-3 pt-2">
             <Link
               href="/terminal"
+              onMouseEnter={handleCtaMouseEnter}
+              onMouseLeave={handleCtaMouseLeave}
               className="w-full sm:w-auto px-8 py-3.5 rounded-xl bg-accent-amber hover:bg-amber-400 text-zinc-950 font-bold text-xs uppercase tracking-wider transition-all shadow-xl shadow-amber-500/10 active:scale-95 flex items-center justify-center space-x-2"
             >
               <Terminal className="w-4 h-4" />

@@ -1,5 +1,6 @@
 import type { Metadata, Viewport } from "next";
 import "./globals.css";
+import AOSProvider from "@/components/AOSProvider";
 
 export const metadata: Metadata = {
   title: "Funding Rate Arbitrage | Dual-Venue Basis Trading",
@@ -23,7 +24,7 @@ export default function RootLayout({
   return (
     <html lang="en" className="dark">
       <body className="bg-background text-zinc-100 min-h-screen antialiased selection:bg-accent-amber/20 selection:text-accent-amber">
-        {children}
+        <AOSProvider>{children}</AOSProvider>
       </body>
     </html>
   );
