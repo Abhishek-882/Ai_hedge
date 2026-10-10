@@ -453,7 +453,7 @@ export default function ControlCockpit({
           <div className="flex items-center space-x-2">
             <span className="w-2.5 h-2.5 rounded-full bg-accent-amber animate-pulse" />
             <h2 className="text-sm font-semibold text-zinc-100 tracking-wide uppercase">
-              EXECUTION COCKPIT
+              ORDER EXECUTION PANEL
             </h2>
           </div>
           <div className="flex items-center space-x-2">

@@ -62,7 +62,7 @@ export default function Footer() {
               Platform Intro
             </Link>
             <Link href="/terminal" className="hover:text-zinc-300 transition-colors">
-              Trading Cockpit
+              Trading Terminal
             </Link>
             <Link href="/history" className="hover:text-zinc-300 transition-colors">
               Hedge History

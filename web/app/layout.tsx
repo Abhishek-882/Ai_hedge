@@ -2,8 +2,8 @@ import type { Metadata, Viewport } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "Funding Rate Arbitrage Cockpit // 3D Dual-Leg Engine",
-  description: "Cross-exchange funding rate arbitrage platform with 3D WebGL Prismatic Core and testnet execution engine.",
+  title: "Funding Rate Arbitrage | Dual-Venue Basis Trading",
+  description: "Cross-exchange funding rate basis trading across Binance USD-M and Bitget Perpetuals.",
 };
 
 export const viewport: Viewport = {

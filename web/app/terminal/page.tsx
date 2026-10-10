@@ -264,7 +264,7 @@ export default function TerminalPage() {
             <div className="flex items-center space-x-2.5">
               <span className={`w-2.5 h-2.5 rounded-full shrink-0 ${accountError ? "bg-accent-rose animate-ping" : "bg-accent-amber animate-pulse"}`} />
               <h1 className="text-base sm:text-lg md:text-xl font-bold tracking-tight uppercase text-zinc-100">
-                FUNDING RATE ARBITRAGE // COCKPIT
+                CROSS-EXCHANGE FUNDING ARBITRAGE
               </h1>
               <span className="px-2 py-0.5 rounded text-[10px] bg-zinc-800 text-zinc-300 border border-zinc-700 font-mono">
                 {accountEndpoint ? accountEndpoint.replace("https://", "") : "TESTNET v2.4"}
@@ -550,7 +550,6 @@ export default function TerminalPage() {
                 <TelemetryHUD
                   spreadBps={wsData.spreadBps}
                   nextFundingTime={effectiveFundingTime}
-                  clockOffsetMs={wsData.clockOffsetMs || 24}
                   symbol={selectedSymbol}
                 />
               </div>

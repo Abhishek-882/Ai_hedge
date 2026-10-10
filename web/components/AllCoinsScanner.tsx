@@ -624,7 +624,7 @@ export default function AllCoinsScanner({ onSelectCoin, selectedSymbol, onTradeE
                               ? "bg-amber-500/20 text-accent-amber border-amber-500/40"
                               : "bg-zinc-800 hover:bg-zinc-700 text-zinc-300 border border-zinc-700 group-hover:border-zinc-500"
                           }`}
-                          title={`Load ${coin.symbol} into Execution Cockpit`}
+                          title={`Load ${coin.symbol} into Execution Panel`}
                         >
                           {isSelected ? "LOADED" : "LOAD"}
                         </button>
@@ -645,7 +645,7 @@ export default function AllCoinsScanner({ onSelectCoin, selectedSymbol, onTradeE
         </span>
         <div className="flex items-center space-x-3">
           <span>Click <strong>QUICK HEDGE</strong> for 1-click dual fill</span>
-          <span>Click <strong>LOAD</strong> to configure in Execution Cockpit</span>
+          <span>Click <strong>LOAD</strong> to configure in Execution Panel</span>
         </div>
       </div>
     </div>

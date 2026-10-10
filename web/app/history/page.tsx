@@ -116,7 +116,7 @@ export default function HistoryPage() {
               href="/terminal"
               className="flex items-center space-x-1.5 px-4 py-2 rounded-lg bg-accent-amber hover:bg-amber-400 text-zinc-950 font-bold text-xs transition-colors shadow-sm"
             >
-              <span>Back to Cockpit</span>
+              <span>Back to Terminal</span>
               <ArrowRight className="w-3.5 h-3.5" />
             </Link>
           </div>

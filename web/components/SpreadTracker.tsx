@@ -81,7 +81,7 @@ export default function SpreadTracker({
         <div className="flex items-center space-x-2">
           <TrendingUp className="w-4 h-4 text-accent-amber" />
           <h2 className="text-sm font-bold text-zinc-100 tracking-wider uppercase">
-            CROSS-EXCHANGE FUNDING SPREAD // {symbol}
+            CROSS-EXCHANGE FUNDING SPREAD • {symbol}
           </h2>
         </div>
 

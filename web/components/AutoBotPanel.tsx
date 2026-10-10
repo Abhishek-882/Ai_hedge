@@ -1573,64 +1573,97 @@ export default function AutoBotPanel() {
 
       {/* Modal: Presets Library Manager */}
       {isSetManagerOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 backdrop-blur-sm p-4">
-          <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-5 max-w-2xl w-full space-y-4 shadow-2xl max-h-[85vh] flex flex-col">
-            <div className="flex items-center justify-between border-b border-zinc-800 pb-3">
-              <div className="flex items-center space-x-2">
-                <FolderOpen className="w-5 h-5 text-accent-amber" />
-                <h3 className="font-bold text-sm text-zinc-100">METATRADER STRATEGY SET FILES (.SET)</h3>
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-md p-4">
+          <div className="bg-[#101014] border border-zinc-800 rounded-xl p-5 max-w-2xl w-full space-y-4 shadow-2xl max-h-[85vh] flex flex-col font-mono">
+            <div className="flex items-center justify-between border-b border-zinc-800/80 pb-3">
+              <div className="space-y-0.5">
+                <div className="flex items-center space-x-2">
+                  <FolderOpen className="w-4 h-4 text-accent-amber" />
+                  <h3 className="font-bold text-xs uppercase tracking-wider text-zinc-100">
+                    Strategy Presets (.set)
+                  </h3>
+                </div>
+                <p className="text-[10px] text-zinc-500">
+                  Target Bot: <strong className="text-zinc-300">{activeBot?.name}</strong>
+                </p>
               </div>
-              <button onClick={() => setIsSetManagerOpen(false)} className="text-zinc-400 hover:text-zinc-200">
+              <button
+                onClick={() => setIsSetManagerOpen(false)}
+                className="p-1 rounded text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800 transition-colors"
+              >
                 <X className="w-4 h-4" />
               </button>
             </div>
 
-            <div className="overflow-y-auto flex-1 space-y-2.5 pr-1">
+            <div className="overflow-y-auto flex-1 space-y-2 pr-1">
               {(daemon?.setFiles || []).map((sf) => {
                 const isCurrentBotActive = activeBot?.activeSetFileName?.toLowerCase() === sf.fileName?.toLowerCase();
 
                 return (
                   <div
                     key={sf.fileName}
-                    className="p-3.5 rounded-xl bg-zinc-950 border border-zinc-800 hover:border-zinc-700 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs"
+                    className={`p-3 rounded-lg border transition-all flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs ${
+                      isCurrentBotActive
+                        ? "bg-amber-500/5 border-amber-500/30"
+                        : "bg-zinc-950/80 border-zinc-800/90 hover:border-zinc-700"
+                    }`}
                   >
-                    <div className="space-y-1">
-                      <div className="flex items-center space-x-2">
-                        <span className="font-bold text-zinc-100 text-sm">{sf.name}</span>
-                        <span className="text-[10px] px-2 py-0.2 rounded bg-zinc-900 text-accent-cyan border border-zinc-800 font-mono">
+                    <div className="space-y-1.5 flex-1 min-w-0">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span className="font-bold text-zinc-100 text-xs">{sf.name}</span>
+                        <span className="text-[9px] px-1.5 py-0.5 rounded bg-zinc-900 text-zinc-400 border border-zinc-800">
                           {sf.fileName}
                         </span>
                         {sf.isBuiltIn && (
-                          <span className="text-[9px] px-1.5 py-0.2 rounded bg-emerald-950 text-emerald-400 border border-emerald-800">
-                            BUILT-IN
+                          <span className="text-[9px] px-1.5 py-0.5 rounded bg-zinc-800/80 text-zinc-400 border border-zinc-700 font-semibold">
+                            Built-in
                           </span>
                         )}
                         {isCurrentBotActive && (
-                          <span className="text-[9px] px-1.5 py-0.2 rounded bg-amber-950 text-amber-400 border border-amber-800 font-bold">
-                            CURRENT BOT ACTIVE
+                          <span className="text-[9px] px-1.5 py-0.5 rounded bg-amber-500/10 text-accent-amber border border-amber-500/30 font-bold">
+                            Active
                           </span>
                         )}
                       </div>
-                      <p className="text-[11px] text-zinc-400">{sf.description}</p>
-                      <div className="text-[10px] text-zinc-500 font-mono">
-                        Spread: &ge;{sf.config?.minSpreadBps} bps | Div: &le;{sf.config?.maxPriceDivergencePct}% | Cap: ${sf.config?.maxMarginCapUsdt || 500} | Mode: {sf.config?.timingMode || "FUNDING_SNIPER_1M"}
+
+                      {/* Compact parameters chips */}
+                      <div className="flex flex-wrap items-center gap-1.5 text-[10px] text-zinc-400">
+                        <span className="px-1.5 py-0.5 rounded bg-zinc-900 border border-zinc-800">
+                          Spread: &ge;{sf.config?.minSpreadBps} bps
+                        </span>
+                        <span className="px-1.5 py-0.5 rounded bg-zinc-900 border border-zinc-800">
+                          Parity: &le;{sf.config?.maxPriceDivergencePct}%
+                        </span>
+                        <span className="px-1.5 py-0.5 rounded bg-zinc-900 border border-zinc-800">
+                          Cap: ${sf.config?.maxMarginCapUsdt || 500}
+                        </span>
+                        <span className="px-1.5 py-0.5 rounded bg-zinc-900 border border-zinc-800 text-cyan-400">
+                          {sf.config?.timingMode === "CONTINUOUS_SPREAD" ? "Continuous" : "Sniper"}
+                        </span>
                       </div>
                     </div>
 
-                    <div className="flex items-center space-x-2 shrink-0">
-                      <button
-                        onClick={() => {
-                          handleApplySetFile(sf.fileName);
-                          setIsSetManagerOpen(false);
-                        }}
-                        className="px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-[11px] shadow-sm"
-                      >
-                        Apply to {activeBot?.name}
-                      </button>
+                    {/* Action buttons */}
+                    <div className="flex items-center space-x-1.5 shrink-0 self-end sm:self-center">
+                      {isCurrentBotActive ? (
+                        <span className="px-3 py-1.5 rounded-lg bg-zinc-900 text-accent-amber border border-amber-500/30 font-bold text-[11px]">
+                          Loaded ✓
+                        </span>
+                      ) : (
+                        <button
+                          onClick={() => {
+                            handleApplySetFile(sf.fileName);
+                            setIsSetManagerOpen(false);
+                          }}
+                          className="px-3.5 py-1.5 rounded-lg bg-accent-amber hover:bg-amber-400 text-zinc-950 font-bold text-[11px] transition-all active:scale-95 shadow-sm"
+                        >
+                          Load
+                        </button>
+                      )}
 
                       <button
                         onClick={() => handleDownloadSetFile(sf.fileName)}
-                        className="p-1.5 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-zinc-300 border border-zinc-700"
+                        className="p-1.5 rounded-lg bg-zinc-900 hover:bg-zinc-800 text-zinc-300 border border-zinc-800 hover:border-zinc-700 transition-colors"
                         title="Download .set file"
                       >
                         <Download className="w-3.5 h-3.5" />
@@ -1639,7 +1672,7 @@ export default function AutoBotPanel() {
                       {!sf.isBuiltIn && (
                         <button
                           onClick={() => handleDeleteSetFile(sf.fileName)}
-                          className="p-1.5 rounded-lg bg-rose-950/60 hover:bg-rose-900 text-rose-300 border border-rose-800/60"
+                          className="p-1.5 rounded-lg bg-zinc-900 hover:bg-rose-950/60 text-zinc-400 hover:text-rose-300 border border-zinc-800 hover:border-rose-800/60 transition-colors"
                           title="Delete custom preset"
                         >
                           <Trash2 className="w-3.5 h-3.5" />
@@ -1651,10 +1684,10 @@ export default function AutoBotPanel() {
               })}
             </div>
 
-            <div className="pt-2 border-t border-zinc-800 flex justify-end">
+            <div className="pt-2 border-t border-zinc-800/80 flex justify-end">
               <button
                 onClick={() => setIsSetManagerOpen(false)}
-                className="px-4 py-2 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-zinc-200 font-semibold text-xs"
+                className="px-4 py-1.5 rounded-lg bg-zinc-900 hover:bg-zinc-800 text-zinc-300 border border-zinc-800 text-xs font-semibold transition-colors"
               >
                 Close
               </button>
