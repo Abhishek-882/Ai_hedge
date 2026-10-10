@@ -5,6 +5,7 @@ import { placeBitgetOrder, setBitgetLeverage, BitgetCredentials } from "./bitget
 import { getLeadStaggerDelays, recordExecutionRTT } from "./latencyTracker";
 import { recordServerTrade } from "./serverTradeStore";
 import { getDeterministicNextFundingTime } from "./settlementTime";
+import { fetchFundingMetaMap, SymbolFundingMeta } from "./exchangeFundingMeta";
 import {
   SYSTEM_DEFAULT_BINANCE_KEY,
   SYSTEM_DEFAULT_BINANCE_SECRET,
@@ -964,7 +965,7 @@ async function getTradableSymbolsSet(): Promise<Set<string>> {
 async function fetchOpportunityCoins(): Promise<any[]> {
   try {
     const tradableSet = await getTradableSymbolsSet();
-    const [bnRes, bgRes] = await Promise.all([
+    const [bnRes, bgRes, metaMap] = await Promise.all([
       fetch("https://fapi.binance.com/fapi/v1/premiumIndex", {
         headers: { "User-Agent": "AutonomousBotEngine/1.0" },
         cache: "no-store",
@@ -975,6 +976,7 @@ async function fetchOpportunityCoins(): Promise<any[]> {
         headers: { "User-Agent": "AutonomousBotEngine/1.0" },
         cache: "no-store",
       }),
+      fetchFundingMetaMap(),
     ]);
 
     const bnRaw = await bnRes.json().catch(() => []);
@@ -1011,8 +1013,30 @@ async function fetchOpportunityCoins(): Promise<any[]> {
       const priceDiff = Math.abs(bnMark - bgMark);
       const divergencePct = bnMark > 0 ? (priceDiff / bnMark) * 100 : 0;
 
-      const rawNextFunding = parseInt(bn.nextFundingTime || "0", 10);
-      const nextFundingTime = rawNextFunding > now ? rawNextFunding : getDeterministicNextFundingTime(now);
+      const meta: SymbolFundingMeta = metaMap.get(sym) || {
+        symbol: sym,
+        fundingIntervalHours: 8,
+        binanceIntervalHours: 8,
+        bitgetIntervalHours: 8,
+        settlementCycleLabel: "8h Cycle",
+        payoutsPerDay: 3,
+        bitgetNextUpdate: 0,
+      };
+
+      const effInterval = meta.fundingIntervalHours;
+      const rawBnNext = parseInt(bn.nextFundingTime || "0", 10);
+      const bgNext = meta.bitgetNextUpdate || 0;
+      let nextFundingTime = 0;
+
+      if (rawBnNext > now && bgNext > now) {
+        nextFundingTime = Math.min(rawBnNext, bgNext);
+      } else if (rawBnNext > now) {
+        nextFundingTime = rawBnNext;
+      } else if (bgNext > now) {
+        nextFundingTime = bgNext;
+      } else {
+        nextFundingTime = getDeterministicNextFundingTime(now, effInterval);
+      }
 
       const direction: "SHORT_BINANCE_LONG_BITGET" | "LONG_BINANCE_SHORT_BITGET" =
         bnRate >= bgRate ? "SHORT_BINANCE_LONG_BITGET" : "LONG_BINANCE_SHORT_BITGET";
@@ -1028,6 +1052,9 @@ async function fetchOpportunityCoins(): Promise<any[]> {
         divergencePct: parseFloat(divergencePct.toFixed(5)),
         nextFundingTime,
         secondsToFunding: Math.round((nextFundingTime - now) / 1000),
+        fundingIntervalHours: effInterval,
+        settlementCycleLabel: meta.settlementCycleLabel,
+        payoutsPerDay: meta.payoutsPerDay,
         direction,
       });
     }
@@ -1092,7 +1119,9 @@ async function fetchFreshPrices(symbol: string): Promise<{ bnPrice: number; bgPr
 async function executeDualHedgeEntry(
   coin: any,
   config: BotConfig,
-  allocatedMargin: number
+  allocatedMargin: number,
+  botName: string,
+  state: BotEngineState
 ): Promise<{ success: boolean; hedge?: ActiveBotHedge; error?: string }> {
   const symbol = coin.symbol;
   const maxLev = getCoinMaxLeverage(symbol);
@@ -1119,6 +1148,12 @@ async function executeDualHedgeEntry(
   const leg1Side: "BUY" | "SELL" = coin.direction === "SHORT_BINANCE_LONG_BITGET" ? "SELL" : "BUY";
   const leg2Side: "buy" | "sell" = leg1Side === "SELL" ? "buy" : "sell";
 
+  appendBotLog(
+    state,
+    `[ORDER PREPARE] Bot "${botName}": Sizing calculated for ${symbol} | Notional: $${totalNotional.toFixed(2)} USDT (${formattedQty} units) | Lev: BN ${binanceLeverage}x / BG ${bitgetLeverage}x | Direction: ${coin.direction === "SHORT_BINANCE_LONG_BITGET" ? "Short BN + Long BG" : "Long BN + Short BG"}`,
+    "info"
+  );
+
   await Promise.allSettled([
     setBinanceLeverage(ADMIN_BINANCE_KEY, ADMIN_BINANCE_SECRET, symbol, binanceLeverage, ADMIN_BINANCE_ENDPOINT),
     setBitgetLeverage(ADMIN_BITGET_CREDS, symbol, bitgetLeverage),
@@ -1130,6 +1165,12 @@ async function executeDualHedgeEntry(
   let leg2AckTime = 0;
   let leg1OrderDurationMs = 0;
   let leg2OrderDurationMs = 0;
+
+  appendBotLog(
+    state,
+    `[ORDER DISPATCH] Bot "${botName}": Firing parallel orders for ${symbol} (Leg 1: ${leg1Side} Binance, Leg 2: ${leg2Side.toUpperCase()} Bitget) with ${leadStaggerAppliedMs.toFixed(0)}ms lead-stagger...`,
+    "info"
+  );
 
   // Leg 1: Binance
   const leg1Promise = (async () => {
@@ -1153,8 +1194,18 @@ async function executeDualHedgeEntry(
       leg1AckTime = performance.now();
       leg1OrderDurationMs = leg1AckTime - t0;
       const fillPrice = parseFloat(res.avgPrice || "0") || refPrice;
+      appendBotLog(
+        state,
+        `[LEG 1 FILLED] Bot "${botName}": Binance ${leg1Side} ${symbol} filled successfully! Order #${res.orderId} @ $${fillPrice} (${leg1OrderDurationMs.toFixed(0)}ms)`,
+        "info"
+      );
       return { success: true, orderId: res.orderId, price: fillPrice, venue: "Binance" };
     } catch (err: any) {
+      appendBotLog(
+        state,
+        `[LEG 1 REJECTED] Bot "${botName}": Binance ${leg1Side} ${symbol} failed: ${err.message}`,
+        "error"
+      );
       return { success: false, error: err.message, venue: "Binance", price: refPrice };
     }
   })();
@@ -1192,10 +1243,26 @@ async function executeDualHedgeEntry(
 
     leg2AckTime = performance.now();
     leg2OrderDurationMs = leg2AckTime - t0;
+    const bitgetPrice = res.avgPrice || coin.bitgetMarkPrice || refPrice;
+
+    if (res.success) {
+      appendBotLog(
+        state,
+        `[LEG 2 FILLED] Bot "${botName}": Bitget ${leg2Side.toUpperCase()} ${symbol} filled successfully! Order #${res.orderId} @ $${bitgetPrice} (${leg2OrderDurationMs.toFixed(0)}ms)`,
+        "info"
+      );
+    } else {
+      appendBotLog(
+        state,
+        `[LEG 2 REJECTED] Bot "${botName}": Bitget ${leg2Side.toUpperCase()} ${symbol} failed: ${res.error || "Order execution error"}`,
+        "error"
+      );
+    }
+
     return {
       success: res.success,
       orderId: res.orderId,
-      price: res.avgPrice || coin.bitgetMarkPrice || refPrice,
+      price: bitgetPrice,
       error: res.error,
       venue: "Bitget",
     };
@@ -1207,6 +1274,11 @@ async function executeDualHedgeEntry(
   // Circuit breaker unwind if one leg failed
   if (leg1Res.success && !leg2Res.success) {
     const unwindSide = leg1Side === "BUY" ? "SELL" : "BUY";
+    appendBotLog(
+      state,
+      `[CIRCUIT BREAKER] Bot "${botName}": Bitget rejected (${leg2Res.error}). Triggering immediate emergency IOC unwind on Binance for ${symbol}...`,
+      "warn"
+    );
     try {
       await signAndFetchBinance(
         ADMIN_BINANCE_KEY,
@@ -1223,8 +1295,18 @@ async function executeDualHedgeEntry(
         true,
         ADMIN_BINANCE_ENDPOINT
       );
-    } catch (unwindErr) {
+      appendBotLog(
+        state,
+        `[UNWIND SUCCESS] Bot "${botName}": Successfully unwound Binance leg for ${symbol}. Net exposure neutralized to $0.00.`,
+        "warn"
+      );
+    } catch (unwindErr: any) {
       console.error("Critical: Leg 1 emergency unwind failed:", unwindErr);
+      appendBotLog(
+        state,
+        `[CRITICAL ALERT] Bot "${botName}": Binance emergency unwind failed for ${symbol}: ${unwindErr.message}`,
+        "error"
+      );
     }
     return {
       success: false,
@@ -1233,6 +1315,11 @@ async function executeDualHedgeEntry(
   }
 
   if (!leg1Res.success && leg2Res.success) {
+    appendBotLog(
+      state,
+      `[CIRCUIT BREAKER] Bot "${botName}": Binance rejected (${leg1Res.error}). Triggering immediate emergency IOC unwind on Bitget for ${symbol}...`,
+      "warn"
+    );
     try {
       const unwindSide = leg2Side === "buy" ? "sell" : "buy";
       await placeBitgetOrder(
@@ -1245,8 +1332,18 @@ async function executeDualHedgeEntry(
         },
         ADMIN_BITGET_CREDS
       );
-    } catch (unwindErr) {
+      appendBotLog(
+        state,
+        `[UNWIND SUCCESS] Bot "${botName}": Successfully unwound Bitget leg for ${symbol}. Net exposure neutralized to $0.00.`,
+        "warn"
+      );
+    } catch (unwindErr: any) {
       console.error("Critical: Leg 2 emergency unwind failed:", unwindErr);
+      appendBotLog(
+        state,
+        `[CRITICAL ALERT] Bot "${botName}": Bitget emergency unwind failed for ${symbol}: ${unwindErr.message}`,
+        "error"
+      );
     }
     return {
       success: false,
@@ -1255,6 +1352,11 @@ async function executeDualHedgeEntry(
   }
 
   if (!leg1Res.success && !leg2Res.success) {
+    appendBotLog(
+      state,
+      `[TRADE FAILED] Bot "${botName}": Both venue orders rejected for ${symbol}. Binance: ${leg1Res.error} | Bitget: ${leg2Res.error}`,
+      "error"
+    );
     return {
       success: false,
       error: `Both legs failed. BN: ${leg1Res.error} | BG: ${leg2Res.error}`,
@@ -1303,6 +1405,12 @@ async function executeDualHedgeEntry(
     status: "ACTIVE",
   });
 
+  appendBotLog(
+    state,
+    `[HEDGE FILLED] Bot "${botName}": Successfully entered dual delta-neutral hedge on ${symbol}! Net Delta = 0.00. Inter-leg arrival delta: ${interLegDelta.toFixed(1)}ms. BN #${leg1Res.orderId} @ $${leg1Res.price} | BG #${leg2Res.orderId} @ $${leg2Res.price}.`,
+    "success"
+  );
+
   return { success: true, hedge };
 }
 
@@ -1311,12 +1419,20 @@ async function executeDualHedgeEntry(
  */
 async function executeDualHedgeClose(
   hedge: ActiveBotHedge,
-  freshPrices: { bnPrice: number; bgPrice: number; divergencePct: number }
+  freshPrices: { bnPrice: number; bgPrice: number; divergencePct: number },
+  botName: string,
+  state: BotEngineState
 ): Promise<{ success: boolean; pnl: number; error?: string }> {
   const symbol = hedge.symbol;
   const formattedQty = hedge.quantity;
   const leg1CloseSide: "BUY" | "SELL" = hedge.direction === "SHORT_BINANCE_LONG_BITGET" ? "BUY" : "SELL";
   const leg2CloseSide: "buy" | "sell" = leg1CloseSide === "BUY" ? "sell" : "buy";
+
+  appendBotLog(
+    state,
+    `[CLOSE DISPATCH] Bot "${botName}": Submitting synchronized market close for ${symbol} (Binance ${leg1CloseSide} & Bitget ${leg2CloseSide.toUpperCase()})...`,
+    "info"
+  );
 
   const { binanceDelayMs, bitgetDelayMs } = getLeadStaggerDelays();
 
@@ -1339,6 +1455,11 @@ async function executeDualHedgeClose(
         ADMIN_BINANCE_ENDPOINT
       );
       const exitPrice = parseFloat(res.avgPrice || "0") || freshPrices.bnPrice;
+      appendBotLog(
+        state,
+        `[CLOSE LEG 1] Bot "${botName}": Binance ${leg1CloseSide} ${symbol} close filled @ $${exitPrice}`,
+        "info"
+      );
       return { success: true, price: exitPrice };
     })(),
     (async () => {
@@ -1353,7 +1474,21 @@ async function executeDualHedgeClose(
         },
         ADMIN_BITGET_CREDS
       );
-      return { success: res.success, price: res.avgPrice || freshPrices.bgPrice };
+      const exitPrice = res.avgPrice || freshPrices.bgPrice;
+      if (res.success) {
+        appendBotLog(
+          state,
+          `[CLOSE LEG 2] Bot "${botName}": Bitget ${leg2CloseSide.toUpperCase()} ${symbol} close filled @ $${exitPrice}`,
+          "info"
+        );
+      } else {
+        appendBotLog(
+          state,
+          `[CLOSE LEG 2 REJECTED] Bot "${botName}": Bitget close failed for ${symbol}: ${res.error || "Close error"}`,
+          "error"
+        );
+      }
+      return { success: res.success, price: exitPrice };
     })(),
   ]);
 
@@ -1382,6 +1517,12 @@ async function executeDualHedgeClose(
     realizedPnl: netPnl,
     status: "CLOSED",
   });
+
+  appendBotLog(
+    state,
+    `[CLOSE COMPLETED] Bot "${botName}": Successfully unwound ${symbol} hedge. Binance PnL: $${bnPnl.toFixed(4)}, Bitget PnL: $${bgPnl.toFixed(4)}, Net Realized PnL: $${netPnl.toFixed(4)} USDT.`,
+    "success"
+  );
 
   return { success: true, pnl: netPnl };
 }
@@ -1464,7 +1605,7 @@ export async function runAutonomousBotCycle(): Promise<void> {
         );
 
         hedge.status = "CLOSING";
-        const closeRes = await executeDualHedgeClose(hedge, freshPrices);
+        const closeRes = await executeDualHedgeClose(hedge, freshPrices, bot.name, state);
 
         if (closeRes.success) {
           hedge.status = "CLOSED";
@@ -1518,17 +1659,34 @@ export async function runAutonomousBotCycle(): Promise<void> {
       const marginCap = bot.maxMarginCapUsdt || config.maxMarginCapUsdt || 500;
       if (currentBotMargin >= marginCap) {
         bot.statusText = `MARGIN_CAP_REACHED ($${currentBotMargin.toFixed(0)}/$${marginCap} USDT)`;
+        if (state.cyclesCompleted % 6 === 0) {
+          appendBotLog(
+            state,
+            `[CAPACITY CHECK] Bot "${bot.name}": Margin cap reached ($${currentBotMargin.toFixed(2)}/$${marginCap} USDT). New entries paused until hedges unwind.`,
+            "warn"
+          );
+        }
         continue;
       }
 
       const availableSlots = (config.maxSimultaneousHedges || 3) - bot.activeHedges.length;
       if (availableSlots <= 0) {
         bot.statusText = `AT_MAX_CAPACITY (${bot.activeHedges.length}/${config.maxSimultaneousHedges} ACTIVE)`;
+        if (state.cyclesCompleted % 6 === 0) {
+          appendBotLog(
+            state,
+            `[CAPACITY CHECK] Bot "${bot.name}": Maximum simultaneous hedges active (${bot.activeHedges.length}/${config.maxSimultaneousHedges}). Capacity full.`,
+            "info"
+          );
+        }
         continue;
       }
 
       if (opportunities.length === 0) {
         bot.statusText = "SCANNING_OPPORTUNITIES";
+        if (state.cyclesCompleted % 6 === 0) {
+          appendBotLog(state, `[SCAN CHECK] Bot "${bot.name}": No market opportunities returned from exchanges. Retrying...`, "warn");
+        }
         continue;
       }
 
@@ -1589,7 +1747,17 @@ export async function runAutonomousBotCycle(): Promise<void> {
 
       if (!topCandidate) {
         const topOpp = opportunities[0];
-        bot.statusText = `SCANNING (Top: ${topOpp?.symbol || "N/A"} - Spread: ${topOpp?.spreadBps || 0} bps - Countdown: ${topOpp?.secondsToFunding || 0}s)`;
+        bot.statusText = `SCANNING (Top: ${topOpp?.symbol || "N/A"} - Spread: ${topOpp?.spreadBps || 0} bps - Cycle: ${topOpp?.fundingIntervalHours || 8}h - Countdown: ${topOpp?.secondsToFunding || 0}s)`;
+        if (state.cyclesCompleted % 6 === 0 && topOpp) {
+          const timingInfo = config.timingMode === "FUNDING_SNIPER_1M"
+            ? `Countdown: ${topOpp.secondsToFunding}s (${topOpp.fundingIntervalHours || 8}h cycle, >60s sniper window)`
+            : `Spread: ${topOpp.spreadBps} bps (${topOpp.fundingIntervalHours || 8}h cycle, Min: ${config.minSpreadBps} bps)`;
+          appendBotLog(
+            state,
+            `[SCAN CHECK] Bot "${bot.name}": Inspected ${opportunities.length} pairs. Top: ${topOpp.symbol} (Spread: ${topOpp.spreadBps} bps, Cycle: ${topOpp.fundingIntervalHours || 8}h, Div: ${topOpp.divergencePct}%). ${timingInfo}. Standing by.`,
+            "info"
+          );
+        }
         continue;
       }
 
@@ -1598,7 +1766,7 @@ export async function runAutonomousBotCycle(): Promise<void> {
       if (freshCheck.divergencePct > (config.maxPriceDivergencePct || 0.03)) {
         appendBotLog(
           state,
-          `[SNIPER PAUSE] Bot "${bot.name}": ${topCandidate.symbol} spread is ${topCandidate.spreadBps} bps, but fresh price divergence drifted to ${freshCheck.divergencePct.toFixed(3)}% (Limit: ${config.maxPriceDivergencePct}%). Waiting for parity.`,
+          `[PARITY DRIFT BLOCKED] Bot "${bot.name}": ${topCandidate.symbol} spread is ${topCandidate.spreadBps} bps, but fresh price divergence drifted to ${freshCheck.divergencePct.toFixed(3)}% (Limit: ${config.maxPriceDivergencePct}%). Waiting for parity.`,
           "warn"
         );
         bot.statusText = `WAITING_PARITY (${topCandidate.symbol} ${freshCheck.divergencePct.toFixed(3)}%)`;
@@ -1612,12 +1780,12 @@ export async function runAutonomousBotCycle(): Promise<void> {
 
       appendBotLog(
         state,
-        `[OPPORTUNITY QUALIFIED] Bot "${bot.name}" selected ${topCandidate.symbol} (Spread: ${topCandidate.spreadBps} bps, Div: ${freshCheck.divergencePct.toFixed(4)}%, Alloc: $${allocatedMargin.toFixed(0)} USDT). Executing dual hedge...`,
+        `[OPPORTUNITY QUALIFIED] Bot "${bot.name}" selected ${topCandidate.symbol} (Spread: ${topCandidate.spreadBps} bps, Cycle: ${topCandidate.fundingIntervalHours || 8}h, Div: ${freshCheck.divergencePct.toFixed(4)}%, Alloc: $${allocatedMargin.toFixed(0)} USDT). Executing dual hedge...`,
         "info"
       );
 
       bot.statusText = `EXECUTING_HEDGE (${topCandidate.symbol})`;
-      const entryRes = await executeDualHedgeEntry(topCandidate, config, allocatedMargin);
+      const entryRes = await executeDualHedgeEntry(topCandidate, config, allocatedMargin, bot.name, state);
 
       if (entryRes.success && entryRes.hedge) {
         bot.activeHedges.push(entryRes.hedge);

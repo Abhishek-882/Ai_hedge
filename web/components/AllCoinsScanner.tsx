@@ -17,6 +17,9 @@ export interface CoinOpportunity {
   direction: "SHORT_BINANCE_LONG_BITGET" | "LONG_BINANCE_SHORT_BITGET";
   volume24h: number;
   nextFundingTime: number;
+  fundingIntervalHours?: number;
+  settlementCycleLabel?: string;
+  payoutsPerDay?: number;
 }
 
 interface AllCoinsScannerProps {
@@ -35,7 +38,7 @@ export default function AllCoinsScanner({ onSelectCoin, selectedSymbol, onTradeE
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState<string>("");
-  const [filterMode, setFilterMode] = useState<"TOP_SPREADS" | "HIGH_APR" | "NEGATIVE_FUNDING" | "HIGHEST_FUNDING" | "MAJORS" | "ALL">("TOP_SPREADS");
+  const [filterMode, setFilterMode] = useState<"TOP_SPREADS" | "HIGH_APR" | "4H_CYCLES" | "8H_CYCLES" | "NEGATIVE_FUNDING" | "HIGHEST_FUNDING" | "MAJORS" | "ALL">("TOP_SPREADS");
   const [sortBy, setSortBy] = useState<"spread" | "funding" | "apr" | "countdown" | "volume" | "symbol">("spread");
   const [lastUpdated, setLastUpdated] = useState<number>(Date.now());
   const [currentTime, setCurrentTime] = useState<number>(Date.now());
@@ -94,8 +97,6 @@ export default function AllCoinsScanner({ onSelectCoin, selectedSymbol, onTradeE
     return () => clearInterval(interval);
   }, []);
 
-  const fallbackTarget = useMemo(() => getDeterministicNextFundingTime(currentTime), [currentTime]);
-
   const filteredCoins = useMemo(() => {
     let list = [...coins];
 
@@ -110,6 +111,10 @@ export default function AllCoinsScanner({ onSelectCoin, selectedSymbol, onTradeE
       list = list.filter((c) => c.spreadBps >= 0.5 || Math.abs(c.binanceRate - c.bitgetRate) > 0);
     } else if (filterMode === "HIGH_APR") {
       list = list.filter((c) => c.annualizedApr >= 25.0);
+    } else if (filterMode === "4H_CYCLES") {
+      list = list.filter((c) => c.fundingIntervalHours === 4);
+    } else if (filterMode === "8H_CYCLES") {
+      list = list.filter((c) => !c.fundingIntervalHours || c.fundingIntervalHours === 8);
     } else if (filterMode === "NEGATIVE_FUNDING") {
       list = list.filter((c) => c.binanceRate < 0 || c.bitgetRate < 0);
     } else if (filterMode === "MAJORS") {
@@ -132,8 +137,8 @@ export default function AllCoinsScanner({ onSelectCoin, selectedSymbol, onTradeE
       }
       if (sortBy === "apr") return b.annualizedApr - a.annualizedApr;
       if (sortBy === "countdown") {
-        const timeA = a.nextFundingTime > 0 ? a.nextFundingTime : fallbackTarget;
-        const timeB = b.nextFundingTime > 0 ? b.nextFundingTime : fallbackTarget;
+        const timeA = a.nextFundingTime > 0 ? a.nextFundingTime : getDeterministicNextFundingTime(currentTime, a.fundingIntervalHours || 8);
+        const timeB = b.nextFundingTime > 0 ? b.nextFundingTime : getDeterministicNextFundingTime(currentTime, b.fundingIntervalHours || 8);
         return timeA - timeB;
       }
       if (sortBy === "volume") return b.volume24h - a.volume24h;
@@ -142,7 +147,7 @@ export default function AllCoinsScanner({ onSelectCoin, selectedSymbol, onTradeE
     });
 
     return list;
-  }, [coins, searchQuery, filterMode, sortBy, fallbackTarget]);
+  }, [coins, searchQuery, filterMode, sortBy, currentTime]);
 
   // 1-Click Quick Hedge on ANY coin row
   const handleQuickHedge = async (coin: CoinOpportunity) => {
@@ -354,6 +359,34 @@ export default function AllCoinsScanner({ onSelectCoin, selectedSymbol, onTradeE
             </button>
             <button
               onClick={() => {
+                setFilterMode("4H_CYCLES");
+                setSortBy("spread");
+              }}
+              className={`px-2 py-1 rounded transition-colors ${
+                filterMode === "4H_CYCLES"
+                  ? "bg-purple-600 text-white font-bold shadow-sm shadow-purple-600/30"
+                  : "bg-zinc-800 hover:bg-purple-950/50 text-purple-300 border border-purple-900/40"
+              }`}
+              title="Coins that settle every 4 hours (6 payouts / day)"
+            >
+              🟣 4h Fast Cycles
+            </button>
+            <button
+              onClick={() => {
+                setFilterMode("8H_CYCLES");
+                setSortBy("spread");
+              }}
+              className={`px-2 py-1 rounded transition-colors ${
+                filterMode === "8H_CYCLES"
+                  ? "bg-blue-600 text-white font-bold shadow-sm shadow-blue-600/30"
+                  : "bg-zinc-800 hover:bg-blue-950/50 text-blue-300 border border-blue-900/40"
+              }`}
+              title="Standard 8-hour funding settlement coins (3 payouts / day)"
+            >
+              🔵 8h Standard
+            </button>
+            <button
+              onClick={() => {
                 setFilterMode("NEGATIVE_FUNDING");
                 setSortBy("spread");
               }}
@@ -461,11 +494,11 @@ export default function AllCoinsScanner({ onSelectCoin, selectedSymbol, onTradeE
                 <th
                   className="pb-2 cursor-pointer text-zinc-300"
                   onClick={() => setSortBy("funding")}
-                  title="Click to sort by Binance 8h Funding Rate"
+                  title="Click to sort by Binance Funding Rate"
                 >
-                  Binance 8h {sortBy === "funding" && "▾"}
+                  Binance Rate {sortBy === "funding" && "▾"}
                 </th>
-                <th className="pb-2 text-zinc-300">Bitget 8h</th>
+                <th className="pb-2 text-zinc-300">Bitget Rate</th>
                 <th
                   className="pb-2 cursor-pointer text-zinc-300"
                   onClick={() => setSortBy("countdown")}
@@ -473,7 +506,7 @@ export default function AllCoinsScanner({ onSelectCoin, selectedSymbol, onTradeE
                 >
                   <div className="flex items-center space-x-1">
                     <Clock className="w-3 h-3 text-zinc-400" />
-                    <span>Countdown {sortBy === "countdown" && "▾"}</span>
+                    <span>Cycle / Countdown {sortBy === "countdown" && "▾"}</span>
                   </div>
                 </th>
                 <th className="pb-2 cursor-pointer text-accent-emerald" onClick={() => setSortBy("apr")}>
@@ -490,7 +523,10 @@ export default function AllCoinsScanner({ onSelectCoin, selectedSymbol, onTradeE
               {filteredCoins.slice(0, 50).map((coin, index) => {
                 const isSelected = selectedSymbol === coin.symbol;
                 const isShortBn = coin.direction === "SHORT_BINANCE_LONG_BITGET";
-                const coinFundingTarget = coin.nextFundingTime > 0 ? coin.nextFundingTime : fallbackTarget;
+                const effInterval = coin.fundingIntervalHours || 8;
+                const coinFundingTarget = coin.nextFundingTime > 0
+                  ? coin.nextFundingTime
+                  : getDeterministicNextFundingTime(currentTime, effInterval);
                 const countdownDisplay = formatCountdown(coinFundingTarget, currentTime);
                 const isExecuting = executingSymbol === coin.symbol;
                 const isFilled = filledSymbol === coin.symbol;
@@ -567,9 +603,23 @@ export default function AllCoinsScanner({ onSelectCoin, selectedSymbol, onTradeE
                       </span>
                     </td>
                     <td className="py-2.5 font-mono text-zinc-200">
-                      <span className="px-1.5 py-0.5 rounded bg-zinc-800/80 border border-zinc-700/60 text-[11px] text-zinc-200 font-semibold">
-                        {countdownDisplay}
-                      </span>
+                      <div className="flex items-center space-x-1.5">
+                        <span
+                          className={`px-1.5 py-0.5 rounded text-[10px] font-bold border tracking-wider ${
+                            effInterval === 4
+                              ? "bg-purple-950/70 text-purple-300 border-purple-700/60 shadow-sm shadow-purple-900/30"
+                              : effInterval === 1
+                              ? "bg-amber-950/70 text-amber-300 border-amber-700/60 shadow-sm shadow-amber-900/30"
+                              : "bg-blue-950/70 text-blue-300 border-blue-700/60 shadow-sm shadow-blue-900/30"
+                          }`}
+                          title={`${effInterval}h funding settlement cycle (${coin.payoutsPerDay || (24 / effInterval)} payouts per day)`}
+                        >
+                          {effInterval}H
+                        </span>
+                        <span className="px-1.5 py-0.5 rounded bg-zinc-800/80 border border-zinc-700/60 text-[11px] text-zinc-200 font-semibold">
+                          {countdownDisplay}
+                        </span>
+                      </div>
                     </td>
                     <td className="py-2.5 font-bold text-accent-emerald font-mono">
                       +{coin.annualizedApr.toFixed(1)}% APR

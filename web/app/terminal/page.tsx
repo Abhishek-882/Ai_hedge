@@ -21,6 +21,7 @@ export default function TerminalPage() {
   const router = useRouter();
   const [selectedSymbol, setSelectedSymbol] = useState<SupportedAsset>("BTCUSDT");
   const [selectedCoinFundingTime, setSelectedCoinFundingTime] = useState<number | null>(null);
+  const [selectedCoinInterval, setSelectedCoinInterval] = useState<number>(8);
   const [selectedCoinSeed, setSelectedCoinSeed] = useState<any>(null);
   const [loadedPulse, setLoadedPulse] = useState(false);
 
@@ -75,6 +76,7 @@ export default function TerminalPage() {
       if (coin.nextFundingTime && coin.nextFundingTime > 0) {
         setSelectedCoinFundingTime(coin.nextFundingTime);
       }
+      setSelectedCoinInterval(coin.fundingIntervalHours || 8);
       setSelectedCoinSeed({
         symbol,
         binancePrice: coin.binanceMarkPrice || 0,
@@ -84,9 +86,11 @@ export default function TerminalPage() {
         spreadBps: coin.spreadBps || 0,
         annualizedYieldPct: coin.annualizedApr || 0,
         nextFundingTime: coin.nextFundingTime || 0,
+        fundingIntervalHours: coin.fundingIntervalHours || 8,
       });
     } else {
       setSelectedCoinFundingTime(null);
+      setSelectedCoinInterval(8);
     }
     setLoadedPulse(true);
     setTimeout(() => setLoadedPulse(false), 2000);
@@ -543,6 +547,8 @@ export default function TerminalPage() {
           const livePriceDiff = Math.abs(liveBnPrice - liveBgPrice);
           const livePriceDivergencePct = liveBnPrice > 0 ? (livePriceDiff / liveBnPrice) * 100 : 0;
 
+          const effectiveInterval = selectedCoinInterval || wsData.fundingIntervalHours || 8;
+
           return (
             <>
               {/* Telemetry HUD: Real-time Quantitative Telemetry Cards */}
@@ -551,6 +557,7 @@ export default function TerminalPage() {
                   spreadBps={wsData.spreadBps}
                   nextFundingTime={effectiveFundingTime}
                   symbol={selectedSymbol}
+                  fundingIntervalHours={effectiveInterval}
                 />
               </div>
 
@@ -568,6 +575,7 @@ export default function TerminalPage() {
                     bitgetPrice={liveBgPrice}
                     priceDiff={livePriceDiff}
                     priceDivergencePct={livePriceDivergencePct}
+                    fundingIntervalHours={effectiveInterval}
                   />
                 </div>
 
@@ -585,6 +593,7 @@ export default function TerminalPage() {
                     onSymbolChange={(sym) => {
                       setSelectedSymbol(sym);
                       setSelectedCoinFundingTime(null);
+                      setSelectedCoinInterval(8);
                       setSelectedCoinSeed(null);
                     }}
                     isAutopilotActive={isAutopilotActive}
@@ -603,6 +612,7 @@ export default function TerminalPage() {
                     binanceFundingRate={wsData.binanceFundingRate}
                     bitgetFundingRate={wsData.bitgetFundingRate}
                     nextFundingTime={effectiveFundingTime}
+                    fundingIntervalHours={effectiveInterval}
                   />
                 </div>
               </div>

@@ -12,6 +12,7 @@ export interface DualStreamData {
   spreadBps: number;
   annualizedYieldPct: number;
   nextFundingTime: number;
+  fundingIntervalHours?: number;
   clockOffsetMs: number;
   binanceWsConnected: boolean;
   bitgetWsConnected: boolean;
@@ -44,13 +45,15 @@ export function useDualExchangeWebSockets(
   const getInitialSnapshot = (targetSym = symUpper): DualStreamData => {
     const cached = SESSION_PRICE_CACHE.get(targetSym);
     const isMatchingSeed = seedData?.symbol === targetSym;
+    const intervalHours = (isMatchingSeed ? seedData?.fundingIntervalHours : undefined) ?? cached?.fundingIntervalHours ?? 8;
+    const payoutsPerDay = 24 / intervalHours;
     const bPrice = (isMatchingSeed ? seedData?.binancePrice : 0) || cached?.binancePrice || 0;
     const gPrice = (isMatchingSeed ? seedData?.bitgetPrice : 0) || cached?.bitgetPrice || bPrice;
     const bRate = normalizeFundingRate((isMatchingSeed ? seedData?.binanceFundingRate : undefined) ?? cached?.binanceFundingRate ?? 0.0001);
     const gRate = normalizeFundingRate((isMatchingSeed ? seedData?.bitgetFundingRate : undefined) ?? cached?.bitgetFundingRate ?? 0.0002);
     const spread = (isMatchingSeed ? seedData?.spreadBps : undefined) ?? cached?.spreadBps ?? parseFloat(((gRate - bRate) * 10000).toFixed(2));
-    const apy = (isMatchingSeed ? seedData?.annualizedYieldPct : undefined) ?? cached?.annualizedYieldPct ?? parseFloat(((Math.abs(spread) * 3 * 365) / 100).toFixed(2));
-    const nextFunding = (isMatchingSeed ? seedData?.nextFundingTime : undefined) || cached?.nextFundingTime || getDeterministicNextFundingTime();
+    const apy = (isMatchingSeed ? seedData?.annualizedYieldPct : undefined) ?? cached?.annualizedYieldPct ?? parseFloat(((Math.abs(spread) * payoutsPerDay * 365) / 100).toFixed(2));
+    const nextFunding = (isMatchingSeed ? seedData?.nextFundingTime : undefined) || cached?.nextFundingTime || getDeterministicNextFundingTime(Date.now(), intervalHours);
 
     return {
       symbol: targetSym,
@@ -61,6 +64,7 @@ export function useDualExchangeWebSockets(
       spreadBps: spread,
       annualizedYieldPct: apy,
       nextFundingTime: nextFunding,
+      fundingIntervalHours: intervalHours,
       clockOffsetMs: cached?.clockOffsetMs ?? 24,
       binanceWsConnected: cached?.binanceWsConnected ?? false,
       bitgetWsConnected: cached?.bitgetWsConnected ?? false,
@@ -167,7 +171,9 @@ export function useDualExchangeWebSockets(
                 binanceFundingRate: normalizeFundingRate(t.binanceFundingRate),
                 bitgetPrice: t.bitgetPrice || t.binancePrice,
                 bitgetFundingRate: normalizeFundingRate(t.bitgetFundingRate),
-                nextFundingTime: t.nextFundingTime || getDeterministicNextFundingTime(),
+                nextFundingTime: t.nextFundingTime || getDeterministicNextFundingTime(Date.now(), t.fundingIntervalHours || 8),
+                fundingIntervalHours: t.fundingIntervalHours || 8,
+                annualizedYieldPct: t.annualizedYieldPct,
               },
               symUpper
             );

@@ -73,6 +73,7 @@ interface ControlCockpitProps {
   binanceFundingRate?: number;
   bitgetFundingRate?: number;
   nextFundingTime?: number;
+  fundingIntervalHours?: number;
 }
 
 export default function ControlCockpit({
@@ -98,6 +99,7 @@ export default function ControlCockpit({
   binanceFundingRate,
   bitgetFundingRate,
   nextFundingTime = 0,
+  fundingIntervalHours = 8,
 }: ControlCockpitProps) {
   const currentAsset = selectedSymbol || "BTCUSDT";
   const assetMeta = getAssetMeta(currentAsset);
@@ -883,9 +885,11 @@ export default function ControlCockpit({
         {/* Real-Time Funding Harvest & Yield Projection Engine */}
         {(() => {
           const absSpread = Math.abs(spreadBps || 0);
-          const est8hPayout = (notionalDollars * absSpread) / 10000;
-          const estDailyPayout = est8hPayout * 3;
-          const estAnnualApy = (absSpread * 3 * 365) / 100;
+          const cycleHours = fundingIntervalHours && fundingIntervalHours > 0 ? fundingIntervalHours : 8;
+          const payoutsPerDay = 24 / cycleHours;
+          const estCyclePayout = (notionalDollars * absSpread) / 10000;
+          const estDailyPayout = estCyclePayout * payoutsPerDay;
+          const estAnnualApy = (absSpread * payoutsPerDay * 365) / 100;
           const isShortBnOptimal =
             binanceFundingRate !== undefined && bitgetFundingRate !== undefined
               ? binanceFundingRate >= bitgetFundingRate
@@ -896,9 +900,18 @@ export default function ControlCockpit({
               <div className="flex items-center justify-between mb-2 pb-2 border-b border-border/60">
                 <div className="flex items-center space-x-1.5 text-xs font-bold text-zinc-200">
                   <Sparkles className="w-3.5 h-3.5 text-accent-amber animate-pulse" />
-                  <span>ESTIMATED 8H FUNDING HARVEST</span>
+                  <span>ESTIMATED {cycleHours}H FUNDING HARVEST</span>
                 </div>
                 <div className="flex items-center space-x-2">
+                  <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded border ${
+                    cycleHours === 4
+                      ? "bg-purple-950/70 text-purple-300 border-purple-700/60"
+                      : cycleHours === 1
+                      ? "bg-amber-950/70 text-amber-300 border-amber-700/60"
+                      : "bg-blue-950/70 text-blue-300 border-blue-700/60"
+                  }`}>
+                    {cycleHours}H Cycle ({payoutsPerDay}x/day)
+                  </span>
                   {nextFundingTime && nextFundingTime > Date.now() && (
                     <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-zinc-800 text-zinc-300 border border-zinc-700 flex items-center space-x-1">
                       <Clock className="w-3 h-3 text-zinc-400" />
@@ -919,9 +932,9 @@ export default function ControlCockpit({
                   </div>
                 </div>
                 <div className="p-2 rounded-lg bg-surface/80 border border-border">
-                  <div className="text-[9px] text-zinc-500 uppercase">Est. 8h Payout</div>
+                  <div className="text-[9px] text-zinc-500 uppercase">Est. {cycleHours}h Payout</div>
                   <div className="text-xs font-bold text-accent-emerald font-mono mt-0.5">
-                    +${est8hPayout.toFixed(4)}
+                    +${estCyclePayout.toFixed(4)}
                   </div>
                 </div>
                 <div className="p-2 rounded-lg bg-surface/80 border border-border">

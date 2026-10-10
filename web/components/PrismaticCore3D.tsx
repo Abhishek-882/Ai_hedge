@@ -11,6 +11,7 @@ interface PrismaticCoreProps {
   binanceFundingRate?: number;
   bitgetFundingRate?: number;
   nextFundingTime?: number;
+  fundingIntervalHours?: number;
   isInspecting?: boolean;
   onToggleInspect?: () => void;
 }
@@ -25,6 +26,7 @@ export default function PrismaticCore3D({
   binanceFundingRate = 0.0001,
   bitgetFundingRate = 0.0002,
   nextFundingTime = 0,
+  fundingIntervalHours = 8,
   isInspecting = false,
   onToggleInspect,
 }: PrismaticCoreProps) {
@@ -43,8 +45,13 @@ export default function PrismaticCore3D({
   const symbolRef = useRef<string>(symbol);
   const modeRef = useRef<VisualMode>(mode);
   const isPausedRef = useRef<boolean>(isPaused);
+  const fundingIntervalHoursRef = useRef<number>(fundingIntervalHours);
 
   // Sync props to refs
+  useEffect(() => {
+    fundingIntervalHoursRef.current = fundingIntervalHours;
+  }, [fundingIntervalHours]);
+
   useEffect(() => {
     spreadBpsRef.current = spreadBps;
   }, [spreadBps]);
@@ -455,7 +462,7 @@ export default function PrismaticCore3D({
         ctx.fillStyle = "#f59e0b";
         ctx.font = "bold 9px monospace";
         ctx.textAlign = "center";
-        ctx.fillText("8H UTC", centerX, centerY - 2);
+        ctx.fillText(`${fundingIntervalHoursRef.current || 8}H UTC`, centerX, centerY - 2);
         ctx.fillStyle = "#10b981";
         ctx.font = "8px monospace";
         ctx.fillText("RADAR", centerX, centerY + 9);
@@ -484,7 +491,8 @@ export default function PrismaticCore3D({
   }, []);
 
   const absSpread = Math.abs(spreadBps || 0);
-  const apy = ((absSpread * 3 * 365) / 100).toFixed(1);
+  const payoutsPerDay = Math.round(24 / (fundingIntervalHours || 8));
+  const apy = ((absSpread * payoutsPerDay * 365) / 100).toFixed(1);
 
   return (
     <div className="relative w-full h-[220px] sm:h-[280px] bg-[#0c0c0e] rounded-xl border border-border overflow-hidden font-mono group select-none flex flex-col justify-between">
@@ -545,10 +553,10 @@ export default function PrismaticCore3D({
                 ? "bg-emerald-500/20 text-accent-emerald border border-emerald-500/40 shadow-sm"
                 : "text-zinc-400 hover:text-zinc-200"
             }`}
-            title="8-Hour Funding Settlement Sweep Radar"
+            title={`${fundingIntervalHours || 8}-Hour Funding Settlement Sweep Radar`}
           >
             <Clock className="w-3 h-3" />
-            <span className="hidden sm:inline">8H Radar</span>
+            <span className="hidden sm:inline">{fundingIntervalHours || 8}H Radar</span>
           </button>
         </div>
       </div>
@@ -572,7 +580,7 @@ export default function PrismaticCore3D({
               ? "60s Oscilloscope • Green = Entry Zone (>12 bps)"
               : mode === "BRIDGE"
               ? "Binance ⇄ Bitget Order Flow • Sub-250ms Stagger"
-              : "8H UTC Settlement Boundary Polar Radar"}
+              : `${fundingIntervalHours || 8}H UTC Settlement Boundary Polar Radar`}
           </span>
         </div>
 

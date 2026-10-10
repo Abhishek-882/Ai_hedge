@@ -8,17 +8,22 @@ interface TelemetryHUDProps {
   spreadBps?: number;
   nextFundingTime?: number;
   symbol?: string;
+  fundingIntervalHours?: number;
 }
 
 export default function TelemetryHUD({
   spreadBps = 0,
   nextFundingTime = 0,
   symbol = "BTCUSDT",
+  fundingIntervalHours = 8,
 }: TelemetryHUDProps) {
+  const intervalHours = fundingIntervalHours && fundingIntervalHours > 0 ? fundingIntervalHours : 8;
+  const payoutsPerDay = 24 / intervalHours;
+
   const effectiveFundingTime =
     nextFundingTime && nextFundingTime > Date.now()
       ? nextFundingTime
-      : getDeterministicNextFundingTime();
+      : getDeterministicNextFundingTime(Date.now(), intervalHours);
 
   const [countdown, setCountdown] = useState<string>(() => formatCountdown(effectiveFundingTime));
 
@@ -26,7 +31,7 @@ export default function TelemetryHUD({
     const targetTime =
       nextFundingTime && nextFundingTime > Date.now()
         ? nextFundingTime
-        : getDeterministicNextFundingTime();
+        : getDeterministicNextFundingTime(Date.now(), intervalHours);
 
     setCountdown(formatCountdown(targetTime));
 
@@ -35,10 +40,10 @@ export default function TelemetryHUD({
     }, 1000);
 
     return () => clearInterval(interval);
-  }, [nextFundingTime]);
+  }, [nextFundingTime, intervalHours]);
 
   const baseAsset = symbol ? symbol.replace("USDT", "") : "BTC";
-  const apy = ((Math.abs(spreadBps) * 3 * 365) / 100).toFixed(1);
+  const apy = ((Math.abs(spreadBps) * payoutsPerDay * 365) / 100).toFixed(1);
 
   return (
     <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-4 font-mono">
@@ -53,7 +58,7 @@ export default function TelemetryHUD({
         </div>
         <div className="mt-1.5 text-[9px] sm:text-[10px] text-zinc-500 flex items-center space-x-1">
           <span className="w-1.5 h-1.5 rounded-full bg-cyan-400 animate-pulse" />
-          <span>{baseAsset} 8h settlement cycle</span>
+          <span>{baseAsset} {intervalHours}h settlement cycle ({payoutsPerDay}x/day)</span>
         </div>
       </div>
 

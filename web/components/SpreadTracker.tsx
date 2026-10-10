@@ -13,6 +13,7 @@ interface SpreadTrackerProps {
   bitgetPrice?: number;
   priceDiff?: number;
   priceDivergencePct?: number;
+  fundingIntervalHours?: number;
 }
 
 export default function SpreadTracker({
@@ -25,6 +26,7 @@ export default function SpreadTracker({
   bitgetPrice = 0,
   priceDiff,
   priceDivergencePct,
+  fundingIntervalHours = 8,
 }: SpreadTrackerProps) {
   const [copiedPrice, setCopiedPrice] = useState<string | null>(null);
 
@@ -36,7 +38,9 @@ export default function SpreadTracker({
   const binancePct = formatRatePct(binanceFundingRate || 0);
   const bitgetPct = formatRatePct(bitgetFundingRate || 0);
   const absSpread = Math.abs(spreadBps || 0);
-  const apy = ((absSpread * 3 * 365) / 100).toFixed(1);
+  const intervalHours = fundingIntervalHours && fundingIntervalHours > 0 ? fundingIntervalHours : 8;
+  const payoutsPerDay = 24 / intervalHours;
+  const apy = ((absSpread * payoutsPerDay * 365) / 100).toFixed(1);
 
   // Cross-Exchange Mark Price Divergence Calculations
   const bnPrice = binancePrice > 0 ? binancePrice : markPrice > 0 ? markPrice : 0;
@@ -260,7 +264,7 @@ export default function SpreadTracker({
             </span>
           </div>
           <span className="text-accent-emerald font-black font-mono tracking-wider">
-            Net Basis: +{absSpread.toFixed(1)} bps / 8h (+{apy}% APY)
+            Net Basis: +{absSpread.toFixed(1)} bps / {intervalHours}h (+{apy}% APY)
           </span>
         </div>
       </div>

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getDeterministicNextFundingTime } from "@/lib/settlementTime";
+import { fetchFundingMetaMap } from "@/lib/exchangeFundingMeta";
 
 export const dynamic = "force-dynamic";
 
@@ -16,6 +17,11 @@ export interface CoinArbitrageOpportunity {
   direction: "SHORT_BINANCE_LONG_BITGET" | "LONG_BINANCE_SHORT_BITGET";
   volume24h: number;
   nextFundingTime: number;
+  fundingIntervalHours: number;
+  settlementCycleLabel: string;
+  payoutsPerDay: number;
+  binanceIntervalHours?: number;
+  bitgetIntervalHours?: number;
   isTestnetSupported: boolean;
 }
 
@@ -96,7 +102,7 @@ export async function GET(req: NextRequest) {
   }
 
   try {
-    const [binanceRes, bitgetRes, testnetSet] = await Promise.all([
+    const [binanceRes, bitgetRes, testnetSet, metaMap] = await Promise.all([
       fetch("https://fapi.binance.com/fapi/v1/premiumIndex", {
         headers: { "User-Agent": "FundingArbitrage/2.0" },
         cache: "no-store",
@@ -109,6 +115,7 @@ export async function GET(req: NextRequest) {
         cache: "no-store",
       }),
       getMutualDemoCryptoSymbols(),
+      fetchFundingMetaMap(),
     ]);
 
     const binanceRaw = await binanceRes.json().catch(() => []);
@@ -160,8 +167,13 @@ export async function GET(req: NextRequest) {
       const bgMark = parseFloat(bg.markPrice || bg.lastPr || "0") || bnMark;
 
       const spreadBps = parseFloat((Math.abs(bnRate - bgRate) * 10000).toFixed(2));
-      // 3 funding intervals per day * 365 days = 1095 intervals/year
-      const annualizedApr = parseFloat((spreadBps * 0.01 * 3 * 365).toFixed(2));
+
+      // Resolve funding interval metadata (4h, 8h, 1h)
+      const meta = metaMap.get(sym);
+      const effInterval = meta?.fundingIntervalHours || 8;
+      const payoutsPerDay = meta?.payoutsPerDay || 3;
+      // Real annualized APR: spreadBps * 0.01 * payoutsPerDay * 365
+      const annualizedApr = parseFloat((spreadBps * 0.01 * payoutsPerDay * 365).toFixed(2));
       const rateDiffPct = parseFloat((Math.abs(bnRate - bgRate) * 100).toFixed(5));
 
       const direction: "SHORT_BINANCE_LONG_BITGET" | "LONG_BINANCE_SHORT_BITGET" =
@@ -170,8 +182,20 @@ export async function GET(req: NextRequest) {
       const vol24h = parseFloat(bg.quoteVolume || bg.usdtVolume || "0");
       const baseAsset = sym.replace("USDT", "");
 
-      const rawNextFunding = parseInt(bn.nextFundingTime || "0", 10);
-      const nextFundingTime = rawNextFunding > now ? rawNextFunding : getDeterministicNextFundingTime(now);
+      // Resolve accurate next funding timestamp
+      const rawBnNext = parseInt(bn.nextFundingTime || "0", 10);
+      const bgNext = meta?.bitgetNextUpdate || 0;
+      let nextFundingTime = 0;
+
+      if (rawBnNext > now && bgNext > now) {
+        nextFundingTime = Math.min(rawBnNext, bgNext);
+      } else if (rawBnNext > now) {
+        nextFundingTime = rawBnNext;
+      } else if (bgNext > now) {
+        nextFundingTime = bgNext;
+      } else {
+        nextFundingTime = getDeterministicNextFundingTime(now, effInterval);
+      }
 
       opportunities.push({
         symbol: sym,
@@ -186,6 +210,11 @@ export async function GET(req: NextRequest) {
         direction,
         volume24h: Math.round(vol24h),
         nextFundingTime,
+        fundingIntervalHours: effInterval,
+        settlementCycleLabel: meta?.settlementCycleLabel || "8h Cycle",
+        payoutsPerDay,
+        binanceIntervalHours: meta?.binanceIntervalHours || 8,
+        bitgetIntervalHours: meta?.bitgetIntervalHours || 8,
         isTestnetSupported,
       });
     }
