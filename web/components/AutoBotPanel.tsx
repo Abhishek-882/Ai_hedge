@@ -670,7 +670,7 @@ export default function AutoBotPanel() {
             <div className="font-bold text-zinc-300">NO ACTIVE HEDGES CURRENTLY RUNNING</div>
             <p className="text-[11px] text-zinc-500 max-w-xl mx-auto">
               {isBotActive
-                ? "The engine is actively scanning all perpetual contracts. When a coin reaches &lt;1m to settlement with spread &ge; 5 bps and near-zero price difference, a hedge will be opened automatically."
+                ? "The engine is actively scanning all perpetual contracts. When a coin reaches under 1 minute to settlement with spread ≥ 5 bps and near-zero price difference, a hedge will be opened automatically."
                 : "Bot is currently paused. Activate the bot above to begin autonomous 24/7 arbitrage."}
             </p>
           </div>
