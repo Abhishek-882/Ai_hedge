@@ -82,6 +82,7 @@ export interface BotEngineState {
 }
 
 const STATE_FILE_PATH = path.join(process.cwd(), "bot_daemon_state.json");
+const AUDIT_LOG_FILE_PATH = path.join(process.cwd(), "bot_audit_log.json");
 
 // System admin API credentials for 24/7 background worker
 const ADMIN_BINANCE_KEY = SYSTEM_DEFAULT_BINANCE_KEY;
@@ -210,8 +211,30 @@ export function appendBotLog(
     level,
   };
   state.logs.unshift(log);
-  if (state.logs.length > 80) {
-    state.logs = state.logs.slice(0, 80);
+  if (state.logs.length > 100) {
+    state.logs = state.logs.slice(0, 100);
+  }
+
+  // AUTO-SAVE AUDIT STREAM: Immediately persist to disk for diagnosis
+  try {
+    saveBotState(state);
+
+    let auditHistory: BotLog[] = [];
+    if (fs.existsSync(AUDIT_LOG_FILE_PATH)) {
+      try {
+        const raw = fs.readFileSync(AUDIT_LOG_FILE_PATH, "utf-8");
+        const parsed = JSON.parse(raw);
+        if (Array.isArray(parsed)) auditHistory = parsed;
+      } catch {}
+    }
+    auditHistory.unshift(log);
+    // Keep up to 500 audit events persisted for comprehensive diagnosis
+    if (auditHistory.length > 500) {
+      auditHistory = auditHistory.slice(0, 500);
+    }
+    fs.writeFileSync(AUDIT_LOG_FILE_PATH, JSON.stringify(auditHistory, null, 2), "utf-8");
+  } catch (err: any) {
+    console.error("Auto-save audit log error:", err.message);
   }
 }
 
@@ -257,11 +280,75 @@ async function fetchAvailableBalances(): Promise<{ binanceBal: number; bitgetBal
   return { binanceBal, bitgetBal };
 }
 
+// ─────────────────────────────────────────────────────────────
+// TRADABLE SYMBOL UNIVERSE VALIDATOR
+// Eliminates rejections by ensuring only symbols active on BOTH testnets qualify
+// ─────────────────────────────────────────────────────────────
+let cachedTradableSymbols: Set<string> | null = null;
+let lastTradableSymbolsFetch = 0;
+
+const FALLBACK_DUAL_SYMBOLS = new Set([
+  "BTCUSDT", "ETHUSDT", "SOLUSDT", "ADAUSDT", "DOGEUSDT", 
+  "LTCUSDT", "BNBUSDT", "XRPUSDT", "LINKUSDT", "AVAXUSDT", 
+  "DOTUSDT", "NEARUSDT", "TRXUSDT", "UNIUSDT", "PEPEUSDT", 
+  "SHIBUSDT", "BCHUSDT", "USDCUSDT"
+]);
+
+async function getTradableSymbolsSet(): Promise<Set<string>> {
+  const now = Date.now();
+  if (cachedTradableSymbols && (now - lastTradableSymbolsFetch < 300_000)) {
+    return cachedTradableSymbols;
+  }
+
+  try {
+    const [bnRes, bgRes] = await Promise.allSettled([
+      fetch("https://demo-fapi.binance.com/fapi/v1/exchangeInfo", { cache: "no-store" }).then((r) => r.json()),
+      fetch("https://api.bitget.com/api/v2/mix/market/contracts?productType=USDT-FUTURES", {
+        headers: { papertrading: "1", paptrading: "1" },
+        cache: "no-store",
+      }).then((r) => r.json()),
+    ]);
+
+    const bnSymbols = new Set<string>();
+    if (bnRes.status === "fulfilled" && Array.isArray(bnRes.value?.symbols)) {
+      for (const s of bnRes.value.symbols) {
+        if (s.status === "TRADING" && s.symbol) bnSymbols.add(s.symbol);
+      }
+    }
+
+    const bgSymbols = new Set<string>();
+    if (bgRes.status === "fulfilled" && Array.isArray(bgRes.value?.data)) {
+      for (const c of bgRes.value.data) {
+        if (c.symbol) bgSymbols.add(c.symbol);
+      }
+    }
+
+    const common = new Set<string>();
+    bnSymbols.forEach((sym) => {
+      if (bgSymbols.has(sym)) {
+        common.add(sym);
+      }
+    });
+
+    if (common.size === 0) {
+      cachedTradableSymbols = FALLBACK_DUAL_SYMBOLS;
+    } else {
+      cachedTradableSymbols = common;
+    }
+    lastTradableSymbolsFetch = now;
+    return cachedTradableSymbols;
+  } catch {
+    cachedTradableSymbols = FALLBACK_DUAL_SYMBOLS;
+    return cachedTradableSymbols;
+  }
+}
+
 /**
  * Fetch live tickers and candidates from exchanges
  */
 async function fetchOpportunityCoins(): Promise<any[]> {
   try {
+    const tradableSet = await getTradableSymbolsSet();
     const [bnRes, bgRes] = await Promise.all([
       fetch("https://fapi.binance.com/fapi/v1/premiumIndex", {
         headers: { "User-Agent": "AutonomousBotEngine/1.0" },
@@ -293,6 +380,10 @@ async function fetchOpportunityCoins(): Promise<any[]> {
     for (const bn of bnList) {
       const sym = bn.symbol;
       if (!sym || !sym.endsWith("USDT")) continue;
+
+      // CRITICAL TRADABILITY GATE: Only consider symbols supported by BOTH testnet/demo matching engines
+      if (!tradableSet.has(sym)) continue;
+
       const bg = bgMap.get(sym);
       if (!bg) continue;
 
