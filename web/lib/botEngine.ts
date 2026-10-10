@@ -705,6 +705,7 @@ export function editBot(
     maxMarginCapUsdt?: number;
     enabled?: boolean;
     config?: Partial<BotConfig>;
+    flattenedCoinsBlacklist?: string[];
   }
 ): BotInstance | null {
   const state = loadBotState();
@@ -724,6 +725,9 @@ export function editBot(
   if (updates.maxMarginCapUsdt !== undefined && updates.maxMarginCapUsdt > 0) {
     bot.maxMarginCapUsdt = updates.maxMarginCapUsdt;
     bot.config.maxMarginCapUsdt = updates.maxMarginCapUsdt;
+  }
+  if (Array.isArray(updates.flattenedCoinsBlacklist)) {
+    bot.flattenedCoinsBlacklist = updates.flattenedCoinsBlacklist;
   }
   if (updates.config) {
     bot.config = {

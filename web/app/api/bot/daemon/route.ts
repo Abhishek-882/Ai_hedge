@@ -13,6 +13,7 @@ import {
   deleteSetFile,
   resetBotMemory,
   unlockSingleCoin,
+  lockFlattenedCoinForBot,
   loadSetFiles,
   BotConfig,
 } from "@/lib/botEngine";
@@ -187,6 +188,12 @@ export async function POST(req: Request) {
     const botId = body.botId || state.activeBotId;
     if (symbol) {
       unlockSingleCoin(symbol, botId);
+    }
+  } else if (action === "lock_coin") {
+    const symbol = body.symbol;
+    const botId = body.botId || state.activeBotId;
+    if (symbol) {
+      lockFlattenedCoinForBot(symbol, botId);
     }
   } else if (action === "toggle_background") {
     state.runInBackgroundWhenClosed = !state.runInBackgroundWhenClosed;

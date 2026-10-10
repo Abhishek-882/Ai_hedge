@@ -155,6 +155,9 @@ export default function AutoBotPanel() {
   const [saveSetName, setSaveSetName] = useState("");
   const [saveSetDescription, setSaveSetDescription] = useState("");
 
+  // Manual Lock Symbol Form
+  const [manualLockSymbol, setManualLockSymbol] = useState("");
+
   // Active Bot Form Config State
   const [minSpreadBps, setMinSpreadBps] = useState<number>(5.0);
   const [maxPriceDivergencePct, setMaxPriceDivergencePct] = useState<number>(0.03);
@@ -420,6 +423,10 @@ export default function AutoBotPanel() {
 
   const handleResetBotMemory = async () => {
     if (!activeBot) return;
+    if (!activeBot.flattenedCoinsBlacklist || activeBot.flattenedCoinsBlacklist.length === 0) {
+      showToast(`Memory already clean! All coins eligible.`);
+      return;
+    }
     try {
       const res = await fetch("/api/bot/daemon", {
         method: "POST",
@@ -430,6 +437,25 @@ export default function AutoBotPanel() {
       if (data.success && data.daemon) {
         setDaemon(data.daemon);
         showToast(`Cleared all flatten memory locks for "${activeBot.name}"!`);
+      }
+    } catch {}
+  };
+
+  const handleManualLockCoin = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!activeBot || !manualLockSymbol.trim()) return;
+    const sym = manualLockSymbol.trim().toUpperCase();
+    try {
+      const res = await fetch("/api/bot/daemon", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "lock_coin", symbol: sym, botId: activeBot.id }),
+      });
+      const data = await res.json();
+      if (data.success && data.daemon) {
+        setDaemon(data.daemon);
+        setManualLockSymbol("");
+        showToast(`Locked ${sym} in bot "${activeBot.name}"`);
       }
     } catch {}
   };
@@ -820,15 +846,32 @@ export default function AutoBotPanel() {
             </span>
           </div>
 
-          <button
-            onClick={handleResetBotMemory}
-            disabled={!activeBot?.flattenedCoinsBlacklist || activeBot.flattenedCoinsBlacklist.length === 0}
-            className="px-2.5 py-1 rounded-lg bg-rose-950/40 hover:bg-rose-900/60 border border-rose-800/60 text-rose-300 text-[10px] font-bold flex items-center space-x-1 transition-all disabled:opacity-40"
-            title="Clear all memory locks for this bot"
-          >
-            <RefreshCw className="w-3 h-3" />
-            <span>FORCE RESET BOT MEMORY</span>
-          </button>
+          <div className="flex flex-wrap items-center gap-2">
+            <form onSubmit={handleManualLockCoin} className="flex items-center space-x-1">
+              <input
+                type="text"
+                placeholder="SYMBOL (e.g. BTCUSDT)"
+                value={manualLockSymbol}
+                onChange={(e) => setManualLockSymbol(e.target.value)}
+                className="bg-zinc-900 border border-zinc-800 rounded-lg px-2 py-1 text-[10px] text-zinc-100 uppercase font-mono outline-none focus:border-amber-500 w-36"
+              />
+              <button
+                type="submit"
+                className="px-2 py-1 rounded-lg bg-zinc-800 hover:bg-zinc-700 border border-zinc-700 text-zinc-300 text-[10px] font-bold"
+              >
+                + LOCK COIN
+              </button>
+            </form>
+
+            <button
+              onClick={handleResetBotMemory}
+              className="px-2.5 py-1 rounded-lg bg-rose-950/40 hover:bg-rose-900/60 border border-rose-800/60 text-rose-300 text-[10px] font-bold flex items-center space-x-1 transition-all active:scale-95"
+              title="Clear all memory locks for this bot"
+            >
+              <RefreshCw className="w-3 h-3" />
+              <span>FORCE RESET BOT MEMORY</span>
+            </button>
+          </div>
         </div>
 
         <p className="text-[11px] text-zinc-400 leading-relaxed mb-2.5">
