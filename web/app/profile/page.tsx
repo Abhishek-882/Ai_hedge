@@ -108,7 +108,8 @@ export default function ProfilePage() {
       } else {
         router.push("/login");
       }
-    } catch {
+    } catch (err) {
+      console.error("[Profile] Failed to fetch authenticated user:", err);
       router.push("/login");
     } finally {
       setIsLoadingAuth(false);
@@ -122,7 +123,9 @@ export default function ProfilePage() {
       if (data.success && data.daemon) {
         setDaemon(data.daemon);
       }
-    } catch {}
+    } catch (err) {
+      console.error("[Profile] Failed to fetch daemon state:", err);
+    }
   }, []);
 
   useEffect(() => {
@@ -166,7 +169,9 @@ export default function ProfilePage() {
           },
         }),
       });
-    } catch {}
+    } catch (err) {
+      console.error("[Profile] Failed to save keys to server:", err);
+    }
 
     setSaveSuccessMsg("API Keys saved successfully! Your trading terminal is now calibrated.");
     setTimeout(() => setSaveSuccessMsg(null), 5000);
@@ -238,7 +243,8 @@ export default function ProfilePage() {
       } else {
         router.push("/login");
       }
-    } catch {
+    } catch (err) {
+      console.error("[Profile] Logout network error:", err);
       if (typeof window !== "undefined") {
         window.location.href = "/login";
       } else {

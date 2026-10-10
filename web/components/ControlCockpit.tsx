@@ -305,11 +305,13 @@ export default function ControlCockpit({
     executeHedgeRef.current = executeHedge;
   });
 
+  const isWithinTolerance = effectiveDivergencePct <= maxPriceDivergencePct;
+
   // Auto-Wait Limit Sniper Loop with 1.2s Hysteresis Dwell Confirmation
   useEffect(() => {
     if (!sniperWaitingDirection || loadingAction) return;
 
-    if (effectiveDivergencePct <= maxPriceDivergencePct) {
+    if (isWithinTolerance) {
       // Basis gap is within tolerance - require it to hold steady for 1.2s before firing
       const dwellTimer = setTimeout(() => {
         const dir = sniperWaitingDirection;
@@ -319,7 +321,7 @@ export default function ControlCockpit({
 
       return () => clearTimeout(dwellTimer);
     }
-  }, [sniperWaitingDirection, effectiveDivergencePct, maxPriceDivergencePct, loadingAction]);
+  }, [sniperWaitingDirection, isWithinTolerance, loadingAction]);
 
   const executeCloseAll = async () => {
     setLoadingAction("CLOSE");
