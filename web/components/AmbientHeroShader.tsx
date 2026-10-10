@@ -12,6 +12,12 @@ export function AmbientHeroShader() {
     let device: any = null;
     let resizeObserver: ResizeObserver | null = null;
 
+    const canvas = canvasRef.current;
+    if (canvas) {
+      canvas.width = Math.max(1, canvas.clientWidth || 1440);
+      canvas.height = Math.max(1, canvas.clientHeight || 640);
+    }
+
     async function initWebGPU() {
       // Runtime check for WebGPU availability
       if (typeof window === "undefined" || !("gpu" in navigator)) {
@@ -28,7 +34,11 @@ export function AmbientHeroShader() {
         device = await adapter.requestDevice();
         if (!device || !isMounted) return;
 
-        const canvas = canvasRef.current;
+        device.lost?.then((info: any) => {
+          console.warn("AmbientHeroShader WebGPU device lost:", info);
+          if (isMounted) setIsWebGPUActive(false);
+        });
+
         if (!canvas) return;
 
         const context = (canvas.getContext("webgpu") as any);
@@ -159,36 +169,41 @@ export function AmbientHeroShader() {
             return;
           }
 
-          const elapsed = (performance.now() - startTime) / 1000;
-          uniformData[0] = canvas.width;
-          uniformData[1] = canvas.height;
-          uniformData[2] = elapsed;
-          uniformData[3] = 0;
+          try {
+            const elapsed = (performance.now() - startTime) / 1000;
+            uniformData[0] = canvas.width;
+            uniformData[1] = canvas.height;
+            uniformData[2] = elapsed;
+            uniformData[3] = 0;
 
-          device.queue.writeBuffer(uniformBuffer, 0, uniformData.buffer);
+            device.queue.writeBuffer(uniformBuffer, 0, uniformData.buffer);
 
-          const commandEncoder = device.createCommandEncoder();
-          const textureView = context.getCurrentTexture().createView();
+            const commandEncoder = device.createCommandEncoder();
+            const textureView = context.getCurrentTexture().createView();
 
-          const renderPass = commandEncoder.beginRenderPass({
-            colorAttachments: [
-              {
-                view: textureView,
-                clearValue: { r: 0.0196, g: 0.0275, b: 0.0549, a: 1.0 },
-                loadOp: "clear",
-                storeOp: "store",
-              },
-            ],
-          });
+            const renderPass = commandEncoder.beginRenderPass({
+              colorAttachments: [
+                {
+                  view: textureView,
+                  clearValue: { r: 0.0196, g: 0.0275, b: 0.0549, a: 1.0 },
+                  loadOp: "clear",
+                  storeOp: "store",
+                },
+              ],
+            });
 
-          renderPass.setPipeline(pipeline);
-          renderPass.setBindGroup(0, bindGroup);
-          renderPass.draw(3);
-          renderPass.end();
+            renderPass.setPipeline(pipeline);
+            renderPass.setBindGroup(0, bindGroup);
+            renderPass.draw(3);
+            renderPass.end();
 
-          device.queue.submit([commandEncoder.finish()]);
+            device.queue.submit([commandEncoder.finish()]);
 
-          animationFrameId = requestAnimationFrame(renderFrame);
+            animationFrameId = requestAnimationFrame(renderFrame);
+          } catch (renderErr) {
+            console.warn("AmbientHeroShader frame error:", renderErr);
+            if (isMounted) setIsWebGPUActive(false);
+          }
         };
 
         animationFrameId = requestAnimationFrame(renderFrame);
@@ -216,7 +231,7 @@ export function AmbientHeroShader() {
 
   return (
     <div
-      className="absolute inset-0 w-full h-full pointer-events-none overflow-hidden -z-10"
+      className="absolute top-0 left-0 right-0 h-[640px] pointer-events-none overflow-hidden -z-10"
       style={{
         // High-fidelity instant CSS radial/mesh fallback layer for SSR, mobile, and non-WebGPU runtimes
         backgroundColor: "#05070e",
@@ -225,6 +240,8 @@ export function AmbientHeroShader() {
           radial-gradient(circle at 75% 75%, rgba(0, 163, 255, 0.06) 0%, transparent 60%),
           radial-gradient(circle at 50% 30%, rgba(245, 158, 11, 0.03) 0%, transparent 50%)
         `,
+        maskImage: "linear-gradient(to bottom, black 70%, transparent 100%)",
+        WebkitMaskImage: "linear-gradient(to bottom, black 70%, transparent 100%)",
       }}
     >
       <canvas

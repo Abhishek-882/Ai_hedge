@@ -8,6 +8,33 @@
   pointer-events: auto !important;
 }
 
+/* Mobile & tablet responsiveness: guarantee all content is instantly visible below 768px */
+@media (max-width: 768px) {
+  [data-aos] {
+    opacity: 1 !important;
+    transform: none !important;
+    transition: none !important;
+  }
+}
+
+/* Accessibility: respect user prefers-reduced-motion */
+@media (prefers-reduced-motion: reduce) {
+  [data-aos] {
+    opacity: 1 !important;
+    transform: none !important;
+    transition: none !important;
+  }
+}
+
+/* Resilience: fallback when scripting is unavailable */
+@media (scripting: none) {
+  [data-aos] {
+    opacity: 1 !important;
+    transform: none !important;
+    transition: none !important;
+  }
+}
+
 :root {
   --background: #09090b;
   --foreground: #f4f4f5;

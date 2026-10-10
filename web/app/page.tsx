@@ -182,7 +182,7 @@ export default function IntroPage() {
               href="/terminal"
               onMouseEnter={handleCtaMouseEnter}
               onMouseLeave={handleCtaMouseLeave}
-              className="w-full sm:w-auto px-7 py-3.5 rounded-xl bg-accent-amber hover:bg-amber-400 text-zinc-950 font-bold text-xs uppercase tracking-wider transition-all flex items-center justify-center space-x-2 shadow-xl shadow-amber-500/10 active:scale-95"
+              className="w-full sm:w-auto px-7 py-3.5 rounded-xl bg-accent-amber hover:bg-amber-400 text-zinc-950 font-bold text-xs uppercase tracking-wider transition-colors flex items-center justify-center space-x-2 shadow-xl shadow-amber-500/10 active:scale-95"
             >
               <Terminal className="w-4 h-4" />
               <span>{user ? "Enter Trading Terminal" : "Launch Trading Terminal"}</span>
@@ -246,7 +246,7 @@ export default function IntroPage() {
                 data-aos-delay={((idx % 3) + 1) * 100}
                 onMouseEnter={handleCardMouseEnter}
                 onMouseLeave={handleCardMouseLeave}
-                className="bg-surface/80 p-4 rounded-xl border border-border hover:border-zinc-700 transition-all space-y-2 group cursor-pointer"
+                className="bg-surface/80 p-4 rounded-xl border border-border hover:border-zinc-700 transition-colors space-y-2 group cursor-pointer"
               >
                 <div className="flex items-center justify-between">
                   <div className="flex items-center space-x-2">
@@ -471,7 +471,7 @@ export default function IntroPage() {
               href="/terminal"
               onMouseEnter={handleCtaMouseEnter}
               onMouseLeave={handleCtaMouseLeave}
-              className="w-full sm:w-auto px-8 py-3.5 rounded-xl bg-accent-amber hover:bg-amber-400 text-zinc-950 font-bold text-xs uppercase tracking-wider transition-all shadow-xl shadow-amber-500/10 active:scale-95 flex items-center justify-center space-x-2"
+              className="w-full sm:w-auto px-8 py-3.5 rounded-xl bg-accent-amber hover:bg-amber-400 text-zinc-950 font-bold text-xs uppercase tracking-wider transition-colors shadow-xl shadow-amber-500/10 active:scale-95 flex items-center justify-center space-x-2"
             >
               <Terminal className="w-4 h-4" />
               <span>Launch Trading Terminal</span>
