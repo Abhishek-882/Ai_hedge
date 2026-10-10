@@ -19,14 +19,14 @@ def test_daemon_api():
       data = res.json()
       assert data.get("success") == True, "GET /api/bot/daemon failed"
       daemon = data.get("daemon", {})
-      print(f"✓ Daemon isRunning: {daemon.get('isRunning')}")
-      print(f"✓ Daemon statusText: {daemon.get('statusText')}")
-      print(f"✓ Config Min Spread: {daemon.get('config', {}).get('minSpreadBps')} bps")
-      print(f"✓ Config Max Divergence: {daemon.get('config', {}).get('maxPriceDivergencePct')}%")
-      print(f"✓ Config Allocation: {daemon.get('config', {}).get('balanceAllocationPct')}%")
-      print(f"✓ Config Max Hedges: {daemon.get('config', {}).get('maxSimultaneousHedges')}")
-      print(f"✓ Active Hedges Count: {len(daemon.get('activeHedges', []))}")
-      print(f"✓ Logs Count: {len(daemon.get('logs', []))}")
+      print(f"[OK] Daemon isRunning: {daemon.get('isRunning')}")
+      print(f"[OK] Daemon statusText: {daemon.get('statusText')}")
+      print(f"[OK] Config Min Spread: {daemon.get('config', {}).get('minSpreadBps')} bps")
+      print(f"[OK] Config Max Divergence: {daemon.get('config', {}).get('maxPriceDivergencePct')}%")
+      print(f"[OK] Config Allocation: {daemon.get('config', {}).get('balanceAllocationPct')}%")
+      print(f"[OK] Config Max Hedges: {daemon.get('config', {}).get('maxSimultaneousHedges')}")
+      print(f"[OK] Active Hedges Count: {len(daemon.get('activeHedges', []))}")
+      print(f"[OK] Logs Count: {len(daemon.get('logs', []))}")
     except Exception as e:
       print(f"GET error: {e}")
 
@@ -52,7 +52,7 @@ def test_daemon_api():
       assert updated_config.get("minSpreadBps") == 5.0, "minSpreadBps mismatch"
       assert updated_config.get("maxPriceDivergencePct") == 0.01, "maxPriceDivergencePct mismatch"
       assert updated_config.get("balanceAllocationPct") == 20, "balanceAllocationPct mismatch"
-      print("✓ Configuration successfully updated and confirmed by server.")
+      print("[OK] Configuration successfully updated and confirmed by server.")
     except Exception as e:
       print(f"Config update error: {e}")
 
@@ -64,13 +64,13 @@ def test_daemon_api():
       data = res.json()
       assert data.get("success") == True, "Force scan failed"
       daemon = data.get("daemon", {})
-      print(f"✓ Cycles Completed: #{daemon.get('cyclesCompleted')}")
-      print(f"✓ Current Status: {daemon.get('statusText')}")
+      print(f"[OK] Cycles Completed: #{daemon.get('cyclesCompleted')}")
+      print(f"[OK] Current Status: {daemon.get('statusText')}")
       candidate = daemon.get("lastEvaluatedCandidate")
       if candidate:
-          print(f"✓ Last Evaluated Candidate: {candidate.get('symbol')} | Spread: {candidate.get('spreadBps')} bps | Countdown: {candidate.get('secondsToFunding')}s | Qualified: {candidate.get('qualified')}")
+          print(f"[OK] Last Evaluated Candidate: {candidate.get('symbol')} | Spread: {candidate.get('spreadBps')} bps | Countdown: {candidate.get('secondsToFunding')}s | Qualified: {candidate.get('qualified')}")
       else:
-          print("✓ Scan completed. No coin currently in imminent <1m funding window.")
+          print("[OK] Scan completed. No coin currently in imminent <1m funding window.")
     except Exception as e:
       print(f"Force scan error: {e}")
 
