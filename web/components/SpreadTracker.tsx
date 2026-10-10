@@ -1,7 +1,7 @@
 "use client";
 
-import React from "react";
-import { ArrowRight, TrendingUp, Sparkles, Activity, AlertTriangle, CheckCircle2, ShieldAlert } from "lucide-react";
+import React, { useState } from "react";
+import { ArrowRight, TrendingUp, Sparkles, Activity, AlertTriangle, CheckCircle2, ShieldAlert, Copy, Check } from "lucide-react";
 
 interface SpreadTrackerProps {
   symbol?: string;
@@ -26,11 +26,11 @@ export default function SpreadTracker({
   priceDiff,
   priceDivergencePct,
 }: SpreadTrackerProps) {
+  const [copiedPrice, setCopiedPrice] = useState<string | null>(null);
+
   const formatRatePct = (rate: number): number => {
     if (!rate || isNaN(rate)) return 0;
-    // If absolute rate is >= 0.05, it is already in percentage format (e.g. 0.01%)
     if (Math.abs(rate) >= 0.05) return rate;
-    // Otherwise it is in decimal fraction format (e.g. 0.0001), convert to percentage
     return rate * 100;
   };
   const binancePct = formatRatePct(binanceFundingRate || 0);
@@ -56,7 +56,7 @@ export default function SpreadTracker({
   let corridorStatus = "COMPRESSED (< 3 bps)";
   let corridorBadge = "bg-amber-500/10 text-amber-400 border-amber-500/30";
   let barGradient = "from-amber-500 to-amber-400";
-  let corridorPercent = Math.min(100, Math.max(10, (absSpread / 25) * 100));
+  let corridorPercent = Math.min(100, Math.max(8, (absSpread / 25) * 100));
 
   if (absSpread >= 12) {
     corridorStatus = "PRIME ARBITRAGE WINDOW (> 12 bps)";
@@ -68,20 +68,26 @@ export default function SpreadTracker({
     barGradient = "from-cyan-500 to-blue-400";
   }
 
+  const handleCopyPrice = (val: string, label: string) => {
+    navigator.clipboard?.writeText(val);
+    setCopiedPrice(label);
+    setTimeout(() => setCopiedPrice(null), 1500);
+  };
+
   return (
-    <div className="bg-surface rounded-xl border border-border p-3.5 sm:p-5 font-mono space-y-4 shadow-xl">
+    <div className="bg-surface rounded-2xl border border-border p-4 sm:p-6 font-mono space-y-4 shadow-xl relative overflow-hidden">
       {/* Header with Live Mark Price & Cross-Exchange Price Divergence */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between border-b border-border pb-3 gap-2">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between border-b border-border/80 pb-3.5 gap-2.5">
         <div className="flex items-center space-x-2">
           <TrendingUp className="w-4 h-4 text-accent-amber" />
-          <h2 className="text-sm font-semibold text-zinc-100 tracking-wide uppercase">
+          <h2 className="text-sm font-bold text-zinc-100 tracking-wider uppercase">
             CROSS-EXCHANGE FUNDING SPREAD // {symbol}
           </h2>
         </div>
 
         {/* Live Cross-Exchange Price Divergence Badge */}
         <div className="flex flex-wrap items-center gap-2 text-xs">
-          <div className="flex items-center space-x-1.5 px-2 py-0.5 rounded bg-zinc-900 border border-zinc-800 text-[10px]">
+          <div className="flex items-center space-x-1.5 px-2.5 py-1 rounded-lg bg-zinc-900 border border-zinc-800 text-[10px]">
             <span className="text-zinc-500">PRICE GAP:</span>
             <strong className="text-zinc-200">
               ${effectivePriceDiff.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 4 })}
@@ -100,7 +106,7 @@ export default function SpreadTracker({
           </div>
 
           <span
-            className={`text-[10px] px-2 py-0.5 rounded border font-bold flex items-center space-x-1 ${
+            className={`text-[10px] px-2.5 py-1 rounded-lg border font-bold flex items-center space-x-1 ${
               isHighDivergence
                 ? "bg-rose-500/15 text-rose-400 border-rose-500/40 animate-pulse"
                 : isModerateDivergence
@@ -110,109 +116,124 @@ export default function SpreadTracker({
           >
             {isHighDivergence ? (
               <>
-                <AlertTriangle className="w-2.5 h-2.5" />
+                <AlertTriangle className="w-3 h-3" />
                 <span>PRICE GAP RISK</span>
               </>
             ) : isModerateDivergence ? (
               <span>MODERATE GAP</span>
             ) : (
               <>
-                <CheckCircle2 className="w-2.5 h-2.5" />
-                <span>OPTIMAL BASIS</span>
+                <CheckCircle2 className="w-3 h-3" />
+                <span>OPTIMAL BASIS MATCH</span>
               </>
             )}
           </span>
 
-          <span className={`text-[10px] px-2 py-0.5 rounded border font-bold ${corridorBadge}`}>
+          <span className={`text-[10px] px-2.5 py-1 rounded-lg border font-bold ${corridorBadge}`}>
             {corridorStatus}
           </span>
         </div>
       </div>
 
       {/* 3-Column Rates, Mark Prices & Spread Basis */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 items-center">
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-3.5 items-center">
         {/* Exchange A: Binance */}
-        <div className="p-3.5 rounded-lg bg-surface-card border border-border hover:border-zinc-700 transition-colors">
+        <div className="p-4 rounded-xl bg-surface-card border border-border hover:border-zinc-700 transition-all shadow-md group">
           <div className="text-[10px] text-zinc-400 uppercase mb-1 flex items-center justify-between">
-            <span>Venue A (Binance Testnet)</span>
-            <span className="text-[9px] px-1 py-0.2 rounded bg-amber-500/10 text-accent-amber">USD-M</span>
+            <span className="font-semibold">VENUE A: BINANCE</span>
+            <span className="text-[9px] px-1.5 py-0.2 rounded bg-amber-500/10 text-accent-amber border border-amber-500/30 font-bold">
+              USD-M
+            </span>
           </div>
-          <div className="text-xl font-bold text-accent-amber">
+          <div className="text-2xl font-black text-accent-amber tracking-tight">
             {binancePct >= 0 ? "+" : ""}{binancePct.toFixed(4)}%
           </div>
-          <div className="flex items-center justify-between text-[10px] text-zinc-500 mt-1">
-            <span>Settlement: {(binancePct * 3 * 365).toFixed(1)}% APY</span>
-            <span className="text-zinc-400 font-bold">
-              Mark: ${bnPrice > 0 ? bnPrice.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 4 }) : "..."}
-            </span>
+          <div className="flex items-center justify-between text-[10px] text-zinc-500 mt-2 pt-2 border-t border-border/60">
+            <span>Annual: {(binancePct * 3 * 365).toFixed(1)}%</span>
+            <button
+              onClick={() => handleCopyPrice(String(bnPrice), "BN")}
+              className="text-zinc-300 font-bold hover:text-white flex items-center space-x-1"
+              title="Click to copy price"
+            >
+              <span>${bnPrice > 0 ? bnPrice.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 4 }) : "..."}</span>
+              {copiedPrice === "BN" ? <Check className="w-2.5 h-2.5 text-emerald-400" /> : <Copy className="w-2.5 h-2.5 text-zinc-500" />}
+            </button>
           </div>
         </div>
 
         {/* Spread Nexus */}
-        <div className="p-3.5 rounded-lg bg-zinc-950 border border-zinc-800 text-center relative overflow-hidden group">
-          <div className="text-[10px] text-zinc-400 uppercase mb-1 flex items-center justify-center space-x-1">
-            <span>SPREAD BASIS</span>
+        <div className="p-4 rounded-xl bg-zinc-950 border border-zinc-800 text-center relative overflow-hidden group shadow-lg">
+          <div className="absolute inset-0 bg-gradient-to-b from-amber-500/5 to-transparent pointer-events-none" />
+          <div className="text-[10px] text-zinc-400 uppercase mb-1 flex items-center justify-center space-x-1.5 font-semibold">
+            <span>NET SPREAD BASIS</span>
             <ArrowRight className="w-3 h-3 text-accent-amber" />
           </div>
-          <div className="text-2xl font-bold text-accent-amber tracking-tight font-mono">
-            {(spreadBps || 0).toFixed(1)} <span className="text-xs text-zinc-400 font-normal">bps</span>
+          <div className="text-3xl font-black text-accent-amber tracking-tight font-mono">
+            {(spreadBps || 0).toFixed(1)} <span className="text-sm text-zinc-400 font-normal">bps</span>
           </div>
-          <div className="text-[10px] text-accent-emerald font-semibold mt-1 flex items-center justify-center space-x-1">
-            <Sparkles className="w-2.5 h-2.5" />
-            <span>Estimated Yield: {apy}% APY</span>
+          <div className="text-[11px] text-accent-emerald font-bold mt-1.5 flex items-center justify-center space-x-1.5">
+            <Sparkles className="w-3 h-3" />
+            <span>EST. ANNUAL YIELD: {apy}% APY</span>
           </div>
         </div>
 
         {/* Exchange B: Bitget */}
-        <div className="p-3.5 rounded-lg bg-surface-card border border-border hover:border-zinc-700 transition-colors">
+        <div className="p-4 rounded-xl bg-surface-card border border-border hover:border-zinc-700 transition-all shadow-md group">
           <div className="text-[10px] text-zinc-400 uppercase mb-1 flex items-center justify-between">
-            <span>Venue B (Bitget Demo)</span>
-            <span className="text-[9px] px-1 py-0.2 rounded bg-emerald-500/10 text-accent-emerald">V3 FUTURES</span>
+            <span className="font-semibold">VENUE B: BITGET</span>
+            <span className="text-[9px] px-1.5 py-0.2 rounded bg-cyan-500/10 text-cyan-400 border border-cyan-500/30 font-bold">
+              V3 PERPETUAL
+            </span>
           </div>
-          <div className="text-xl font-bold text-accent-emerald">
+          <div className="text-2xl font-black text-cyan-400 tracking-tight">
             {bitgetPct >= 0 ? "+" : ""}{bitgetPct.toFixed(4)}%
           </div>
-          <div className="flex items-center justify-between text-[10px] text-zinc-500 mt-1">
-            <span>Settlement: {(bitgetPct * 3 * 365).toFixed(1)}% APY</span>
-            <span className="text-zinc-400 font-bold">
-              Mark: ${bgPrice > 0 ? bgPrice.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 4 }) : "..."}
-            </span>
+          <div className="flex items-center justify-between text-[10px] text-zinc-500 mt-2 pt-2 border-t border-border/60">
+            <span>Annual: {(bitgetPct * 3 * 365).toFixed(1)}%</span>
+            <button
+              onClick={() => handleCopyPrice(String(bgPrice), "BG")}
+              className="text-zinc-300 font-bold hover:text-white flex items-center space-x-1"
+              title="Click to copy price"
+            >
+              <span>${bgPrice > 0 ? bgPrice.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 4 }) : "..."}</span>
+              {copiedPrice === "BG" ? <Check className="w-2.5 h-2.5 text-emerald-400" /> : <Copy className="w-2.5 h-2.5 text-zinc-500" />}
+            </button>
           </div>
         </div>
       </div>
 
       {/* High Price Divergence Warning Alert Banner (If Applicable) */}
       {isHighDivergence && bnPrice > 0 && bgPrice > 0 && (
-        <div className="p-2.5 rounded-lg bg-rose-500/10 border border-rose-500/30 text-rose-300 text-xs flex items-center space-x-2">
+        <div className="p-3 rounded-xl bg-rose-500/10 border border-rose-500/30 text-rose-300 text-xs flex items-center space-x-2.5">
           <ShieldAlert className="w-4 h-4 text-rose-400 flex-shrink-0 animate-bounce" />
-          <div>
+          <div className="leading-relaxed">
             <strong className="text-rose-200">Price Divergence Alert ({effectiveDivergencePct.toFixed(2)}%):</strong>{" "}
             Binance (${bnPrice.toFixed(2)}) and Bitget (${bgPrice.toFixed(2)}) have a ${effectivePriceDiff.toFixed(2)} disparity. Entering now risks basis convergence drag. Auto-Wait Sniper will hold order until the price gap narrows.
           </div>
         </div>
       )}
 
-      {/* Visual Arbitrage Opportunity Corridor Meter */}
-      <div className="pt-2 border-t border-border/80 space-y-1.5">
+      {/* Visual Arbitrage Opportunity Corridor Meter (Blueprint B from elite-web-ui-motion) */}
+      <div className="pt-3 border-t border-border/80 space-y-2">
         <div className="flex items-center justify-between text-[10px] text-zinc-400">
-          <span className="flex items-center space-x-1">
-            <Activity className="w-3 h-3 text-zinc-400" />
-            <span>ARBITRAGE OPPORTUNITY CORRIDOR</span>
+          <span className="flex items-center space-x-1.5 font-bold uppercase tracking-wider">
+            <Activity className="w-3.5 h-3.5 text-accent-cyan" />
+            <span>OPPORTUNITY CORRIDOR SPECTRUM</span>
           </span>
-          <span className="font-mono text-zinc-300">
-            {absSpread >= 12 ? "HIGH ALPHA OPPORTUNITY" : absSpread >= 4 ? "NORMAL SPREAD" : "SUB-OPTIMAL SPREAD"}
+          <span className="font-mono text-zinc-300 font-semibold">
+            {absSpread >= 12 ? "HIGH ALPHA CORRIDOR" : absSpread >= 4 ? "STANDARD CORRIDOR" : "COMPRESSED BASIS"}
           </span>
         </div>
 
         {/* Corridor Meter Bar with Glowing Needle */}
-        <div className="relative w-full bg-zinc-950 rounded-full h-3 border border-zinc-800 p-[1px] my-2">
+        <div className="relative w-full bg-zinc-950 rounded-full h-3.5 border border-zinc-800 p-[2px]">
           <div
             className={`h-full rounded-full bg-gradient-to-r ${barGradient} transition-all duration-500 ease-out`}
             style={{ width: `${corridorPercent}%` }}
           />
           {/* Glowing Needle Indicator */}
           <div
-            className="absolute top-1/2 -translate-y-1/2 w-3 h-3 rounded-full bg-white border-2 border-accent-amber shadow-md shadow-amber-500/60 transition-all duration-500 ease-out -ml-1.5"
+            className="absolute top-1/2 -translate-y-1/2 w-4 h-4 rounded-full bg-white border-2 border-accent-amber shadow-lg shadow-amber-500/80 transition-all duration-500 ease-out -ml-2"
             style={{ left: `${Math.min(99, Math.max(1, corridorPercent))}%` }}
             title={`Current Corridor Position: ${absSpread.toFixed(1)} bps`}
           />
@@ -220,24 +241,25 @@ export default function SpreadTracker({
 
         <div className="flex justify-between text-[9px] text-zinc-500 font-mono">
           <span>0 bps (Neutral)</span>
-          <span className="text-zinc-400">Target Threshold: &gt; 12.0 bps</span>
-          <span>25+ bps (Max Corridor)</span>
+          <span className="text-zinc-400 font-bold">Bot Sniper Trigger: &ge; 5.0 bps</span>
+          <span className="text-accent-amber font-bold">Prime Threshold: &ge; 12.0 bps</span>
+          <span>25+ bps (Extreme Alpha)</span>
         </div>
 
-        {/* Directional Mechanics Breakdown */}
-        <div className="mt-2.5 p-2.5 rounded-lg bg-zinc-950/60 border border-zinc-800/80 text-[10px] text-zinc-400 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2">
-          <div className="flex items-center space-x-1.5">
-            <span className="w-1.5 h-1.5 rounded-full bg-accent-amber animate-pulse" />
+        {/* Directional Cash Flow Engine */}
+        <div className="mt-2.5 p-3 rounded-xl bg-zinc-950/70 border border-zinc-800/80 text-[10px] text-zinc-400 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2">
+          <div className="flex items-center space-x-2">
+            <span className="w-2 h-2 rounded-full bg-accent-amber animate-pulse" />
             <span>
               Cash Flow Engine:{" "}
               <strong className="text-zinc-200">
                 {binanceFundingRate >= bitgetFundingRate
-                  ? `Binance shorts receive +${binancePct.toFixed(4)}% vs Bitget longs +${bitgetPct.toFixed(4)}%`
-                  : `Bitget shorts receive +${bitgetPct.toFixed(4)}% vs Binance longs +${binancePct.toFixed(4)}%`}
+                  ? `Binance shorts collect +${binancePct.toFixed(4)}% vs Bitget longs pay +${bitgetPct.toFixed(4)}%`
+                  : `Bitget shorts collect +${bitgetPct.toFixed(4)}% vs Binance longs pay +${binancePct.toFixed(4)}%`}
               </strong>
             </span>
           </div>
-          <span className="text-accent-emerald font-bold font-mono">
+          <span className="text-accent-emerald font-black font-mono tracking-wider">
             Net Basis: +{absSpread.toFixed(1)} bps / 8h (+{apy}% APY)
           </span>
         </div>

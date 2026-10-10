@@ -815,10 +815,10 @@ export default function ControlCockpit({
               <button
                 key={dollars}
                 onClick={() => handleNotionalSelect(dollars)}
-                className={`py-1.5 px-2 rounded text-xs font-bold transition-all ${
+                className={`py-1.5 px-2 rounded-lg text-xs font-bold active:scale-95 transition-all duration-150 ${
                   selectedNotional === dollars
                     ? "bg-accent-amber text-zinc-950 shadow-md font-black ring-1 ring-amber-400"
-                    : "bg-surface-card hover:bg-zinc-800 border border-border text-zinc-400 hover:text-zinc-200"
+                    : "bg-surface-card hover:bg-zinc-800 border border-border text-zinc-400 hover:text-zinc-200 hover:border-zinc-700"
                 }`}
               >
                 ${dollars}
@@ -844,10 +844,10 @@ export default function ControlCockpit({
                     setSelectedNotional(null);
                     setQuantity(qty);
                   }}
-                  className={`py-1 px-2 rounded text-xs font-mono font-bold transition-all border ${
+                  className={`py-1.5 px-2 rounded-lg text-xs font-mono font-bold active:scale-95 transition-all duration-150 border ${
                     quantity === qty && selectedNotional === null
-                      ? "bg-zinc-800 border-accent-amber text-accent-amber ring-1 ring-amber-400/50"
-                      : "bg-surface-card border-border text-zinc-400 hover:border-zinc-700"
+                      ? "bg-zinc-800 border-accent-amber text-accent-amber ring-1 ring-amber-400/50 shadow-sm"
+                      : "bg-surface-card border-border text-zinc-400 hover:border-zinc-700 hover:text-zinc-200"
                   }`}
                 >
                   {qty} {assetMeta.base}
