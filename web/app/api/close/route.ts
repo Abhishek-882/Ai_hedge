@@ -6,6 +6,7 @@ import { checkRateLimit } from "@/lib/rateLimiter";
 import { logServerEvent } from "@/lib/logger";
 import { resolveCallerCredentials } from "@/lib/authHelper";
 import { recordServerTrade } from "@/lib/serverTradeStore";
+import { lockFlattenedCoinForBot } from "@/lib/botEngine";
 
 export const dynamic = "force-dynamic";
 
@@ -282,6 +283,16 @@ export async function POST(req: NextRequest) {
         });
       } catch (logErr) {
         console.error("Failed to archive closed hedge into server trades history:", logErr);
+      }
+
+      // PER-BOT FLATTEN MEMORY LOCK: Lock coin so autonomous bots will never re-trade it until memory reset
+      try {
+        const symbolClosed = targetSymbol || binanceRes.orders?.[0]?.symbol || bitgetRes.orders?.[0]?.symbol;
+        if (symbolClosed) {
+          lockFlattenedCoinForBot(symbolClosed);
+        }
+      } catch (lockErr) {
+        console.error("Failed to engage flatten memory lock:", lockErr);
       }
     }
 

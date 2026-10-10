@@ -21,6 +21,7 @@ export interface BotConfig {
   leverageMode: "MAX_PER_COIN" | "CUSTOM";
   customLeverage: number;
   maxSimultaneousHedges: number;
+  maxMarginCapUsdt: number;
   postSettlementWaitSeconds: number;
   closeMaxPriceDivergencePct: number;
   scanIntervalSeconds: number;
@@ -59,17 +60,28 @@ export interface BotLog {
   level: "info" | "success" | "warn" | "error";
 }
 
-export interface BotEngineState {
-  isRunning: boolean;
-  runInBackgroundWhenClosed: boolean;
-  mode: string;
-  startedAt: number;
-  lastCycleAt: number;
-  cyclesCompleted: number;
+export interface BotSetFile {
+  id: string;
+  fileName: string;
+  name: string;
+  description: string;
   config: BotConfig;
+  contentText: string;
+  isBuiltIn: boolean;
+  createdAt: number;
+  updatedAt: number;
+}
+
+export interface BotInstance {
+  id: string;
+  name: string;
+  activeSetFileName: string;
+  enabled: boolean;
+  maxMarginCapUsdt: number;
+  config: BotConfig;
+  flattenedCoinsBlacklist: string[];
   activeHedges: ActiveBotHedge[];
   completedHedges: ActiveBotHedge[];
-  logs: BotLog[];
   statusText: string;
   lastEvaluatedCandidate?: {
     symbol: string;
@@ -79,9 +91,31 @@ export interface BotEngineState {
     qualified: boolean;
     reason: string;
   } | null;
+  createdAt: number;
+  updatedAt: number;
+}
+
+export interface BotEngineState {
+  isRunning: boolean;
+  runInBackgroundWhenClosed: boolean;
+  mode: string;
+  startedAt: number;
+  lastCycleAt: number;
+  cyclesCompleted: number;
+  activeBotId: string;
+  bots: BotInstance[];
+  setFiles: BotSetFile[];
+  logs: BotLog[];
+  // Legacy backward compatibility properties
+  config?: BotConfig;
+  activeHedges?: ActiveBotHedge[];
+  completedHedges?: ActiveBotHedge[];
+  statusText?: string;
+  lastEvaluatedCandidate?: any;
 }
 
 const STATE_FILE_PATH = path.join(process.cwd(), "bot_daemon_state.json");
+const SET_FILES_PATH = path.join(process.cwd(), "bot_set_files.json");
 const AUDIT_LOG_FILE_PATH = path.join(process.cwd(), "bot_audit_log.json");
 
 // System admin API credentials for 24/7 background worker
@@ -94,6 +128,220 @@ const ADMIN_BITGET_CREDS: BitgetCredentials = {
   passphrase: SYSTEM_DEFAULT_BITGET_PASSPHRASE,
   isDemo: true,
 };
+
+export const DEFAULT_CONFIG: BotConfig = {
+  enabled: true,
+  minSpreadBps: 5.0,
+  maxPriceDivergencePct: 0.03,
+  balanceAllocationPct: 20,
+  leverageMode: "MAX_PER_COIN",
+  customLeverage: 50,
+  maxSimultaneousHedges: 3,
+  maxMarginCapUsdt: 500,
+  postSettlementWaitSeconds: 15,
+  closeMaxPriceDivergencePct: 0.03,
+  scanIntervalSeconds: 5,
+  timingMode: "FUNDING_SNIPER_1M",
+};
+
+export function serializeConfigToSetText(config: BotConfig, name: string): string {
+  return [
+    `; ============================================================`,
+    `; AI-Hedge Delta-Neutral Quantitative Strategy Set File`,
+    `; Strategy Preset: ${name}`,
+    `; Exported: ${new Date().toISOString()}`,
+    `; Compatible with: MetaTrader 4/5 & AI-Hedge Daemon Engine`,
+    `; ============================================================`,
+    `Enabled=${config.enabled}`,
+    `MinSpreadBps=${config.minSpreadBps}`,
+    `MaxPriceDivergencePct=${config.maxPriceDivergencePct}`,
+    `BalanceAllocationPct=${config.balanceAllocationPct}`,
+    `LeverageMode=${config.leverageMode}`,
+    `CustomLeverage=${config.customLeverage}`,
+    `MaxSimultaneousHedges=${config.maxSimultaneousHedges}`,
+    `MaxMarginCapUsdt=${config.maxMarginCapUsdt || 500}`,
+    `PostSettlementWaitSeconds=${config.postSettlementWaitSeconds}`,
+    `CloseMaxPriceDivergencePct=${config.closeMaxPriceDivergencePct}`,
+    `ScanIntervalSeconds=${config.scanIntervalSeconds}`,
+    `TimingMode=${config.timingMode || "FUNDING_SNIPER_1M"}`,
+  ].join("\n");
+}
+
+export function parseSetTextToConfig(text: string, baseConfig?: BotConfig): BotConfig {
+  const cfg: BotConfig = { ...(baseConfig || DEFAULT_CONFIG) };
+  const lines = text.split(/\r?\n/);
+  for (const rawLine of lines) {
+    const line = rawLine.trim();
+    if (!line || line.startsWith(";") || line.startsWith("#")) continue;
+    const eqIdx = line.indexOf("=");
+    if (eqIdx === -1) continue;
+    const key = line.slice(0, eqIdx).trim().toLowerCase();
+    const val = line.slice(eqIdx + 1).trim();
+
+    switch (key) {
+      case "enabled":
+        cfg.enabled = val.toLowerCase() === "true" || val === "1";
+        break;
+      case "minspreadbps":
+        cfg.minSpreadBps = parseFloat(val) || cfg.minSpreadBps;
+        break;
+      case "maxpricedivergencepct":
+        cfg.maxPriceDivergencePct = parseFloat(val) || cfg.maxPriceDivergencePct;
+        break;
+      case "balanceallocationpct":
+        cfg.balanceAllocationPct = parseFloat(val) || cfg.balanceAllocationPct;
+        break;
+      case "leveragemode":
+        cfg.leverageMode = val === "CUSTOM" ? "CUSTOM" : "MAX_PER_COIN";
+        break;
+      case "customleverage":
+        cfg.customLeverage = parseInt(val, 10) || cfg.customLeverage;
+        break;
+      case "maxsimultaneoushedges":
+        cfg.maxSimultaneousHedges = parseInt(val, 10) || cfg.maxSimultaneousHedges;
+        break;
+      case "maxmargincapusdt":
+        cfg.maxMarginCapUsdt = parseFloat(val) || 500;
+        break;
+      case "postsettlementwaitseconds":
+        cfg.postSettlementWaitSeconds = parseInt(val, 10) || cfg.postSettlementWaitSeconds;
+        break;
+      case "closemaxpricedivergencepct":
+        cfg.closeMaxPriceDivergencePct = parseFloat(val) || cfg.closeMaxPriceDivergencePct;
+        break;
+      case "scanintervalseconds":
+        cfg.scanIntervalSeconds = parseInt(val, 10) || cfg.scanIntervalSeconds;
+        break;
+      case "timingmode":
+        cfg.timingMode = val === "CONTINUOUS_SPREAD" ? "CONTINUOUS_SPREAD" : "FUNDING_SNIPER_1M";
+        break;
+    }
+  }
+  return cfg;
+}
+
+export const BUILT_IN_SET_FILES: BotSetFile[] = [
+  {
+    id: "set-conservative",
+    fileName: "conservative_5bps_sniper.set",
+    name: "Conservative 5bps Sniper",
+    description: "Snipes within 60s of funding with strict 5 bps spread, 0.03% parity, $500 hard margin cap.",
+    config: {
+      enabled: true,
+      minSpreadBps: 5.0,
+      maxPriceDivergencePct: 0.03,
+      balanceAllocationPct: 20,
+      leverageMode: "MAX_PER_COIN",
+      customLeverage: 50,
+      maxSimultaneousHedges: 3,
+      maxMarginCapUsdt: 500,
+      postSettlementWaitSeconds: 15,
+      closeMaxPriceDivergencePct: 0.03,
+      scanIntervalSeconds: 5,
+      timingMode: "FUNDING_SNIPER_1M",
+    },
+    contentText: serializeConfigToSetText(
+      {
+        enabled: true,
+        minSpreadBps: 5.0,
+        maxPriceDivergencePct: 0.03,
+        balanceAllocationPct: 20,
+        leverageMode: "MAX_PER_COIN",
+        customLeverage: 50,
+        maxSimultaneousHedges: 3,
+        maxMarginCapUsdt: 500,
+        postSettlementWaitSeconds: 15,
+        closeMaxPriceDivergencePct: 0.03,
+        scanIntervalSeconds: 5,
+        timingMode: "FUNDING_SNIPER_1M",
+      },
+      "Conservative 5bps Sniper"
+    ),
+    isBuiltIn: true,
+    createdAt: 1775000000000,
+    updatedAt: 1775000000000,
+  },
+  {
+    id: "set-aggressive",
+    fileName: "aggressive_continuous_arbitrage.set",
+    name: "Aggressive Continuous Arbitrage",
+    description: "Continuous spread capture 24/7 without waiting for funding window. 3 bps spread, 0.05% parity, $1,000 cap.",
+    config: {
+      enabled: true,
+      minSpreadBps: 3.0,
+      maxPriceDivergencePct: 0.05,
+      balanceAllocationPct: 25,
+      leverageMode: "MAX_PER_COIN",
+      customLeverage: 50,
+      maxSimultaneousHedges: 5,
+      maxMarginCapUsdt: 1000,
+      postSettlementWaitSeconds: 15,
+      closeMaxPriceDivergencePct: 0.05,
+      scanIntervalSeconds: 5,
+      timingMode: "CONTINUOUS_SPREAD",
+    },
+    contentText: serializeConfigToSetText(
+      {
+        enabled: true,
+        minSpreadBps: 3.0,
+        maxPriceDivergencePct: 0.05,
+        balanceAllocationPct: 25,
+        leverageMode: "MAX_PER_COIN",
+        customLeverage: 50,
+        maxSimultaneousHedges: 5,
+        maxMarginCapUsdt: 1000,
+        postSettlementWaitSeconds: 15,
+        closeMaxPriceDivergencePct: 0.05,
+        scanIntervalSeconds: 5,
+        timingMode: "CONTINUOUS_SPREAD",
+      },
+      "Aggressive Continuous Arbitrage"
+    ),
+    isBuiltIn: true,
+    createdAt: 1775000000000,
+    updatedAt: 1775000000000,
+  },
+  {
+    id: "set-balanced",
+    fileName: "balanced_institutional_harvest.set",
+    name: "Balanced Institutional Harvest",
+    description: "Funding Sniper mode with 4 bps spread threshold, 0.03% parity, $750 hard cap.",
+    config: {
+      enabled: true,
+      minSpreadBps: 4.0,
+      maxPriceDivergencePct: 0.03,
+      balanceAllocationPct: 20,
+      leverageMode: "MAX_PER_COIN",
+      customLeverage: 50,
+      maxSimultaneousHedges: 4,
+      maxMarginCapUsdt: 750,
+      postSettlementWaitSeconds: 15,
+      closeMaxPriceDivergencePct: 0.03,
+      scanIntervalSeconds: 5,
+      timingMode: "FUNDING_SNIPER_1M",
+    },
+    contentText: serializeConfigToSetText(
+      {
+        enabled: true,
+        minSpreadBps: 4.0,
+        maxPriceDivergencePct: 0.03,
+        balanceAllocationPct: 20,
+        leverageMode: "MAX_PER_COIN",
+        customLeverage: 50,
+        maxSimultaneousHedges: 4,
+        maxMarginCapUsdt: 750,
+        postSettlementWaitSeconds: 15,
+        closeMaxPriceDivergencePct: 0.03,
+        scanIntervalSeconds: 5,
+        timingMode: "FUNDING_SNIPER_1M",
+      },
+      "Balanced Institutional Harvest"
+    ),
+    isBuiltIn: true,
+    createdAt: 1775000000000,
+    updatedAt: 1775000000000,
+  },
+];
 
 export function getCoinMaxLeverage(sym: string): { bn: number; bg: number } {
   const upper = sym.toUpperCase();
@@ -124,30 +372,92 @@ const globalForBot = global as unknown as {
   botIsExecutingCycle?: boolean;
 };
 
-const DEFAULT_CONFIG: BotConfig = {
-  enabled: true,
-  minSpreadBps: 5.0,
-  maxPriceDivergencePct: 0.03, // 0.03% allows institutional parity while avoiding micro-spread stalls
-  balanceAllocationPct: 20, // 20% of available account balance
-  leverageMode: "MAX_PER_COIN",
-  customLeverage: 50,
-  maxSimultaneousHedges: 3,
-  postSettlementWaitSeconds: 15, // Let funding fee credit apply
-  closeMaxPriceDivergencePct: 0.03, // Close only when price parity matches
-  scanIntervalSeconds: 5,
-  timingMode: "FUNDING_SNIPER_1M",
-};
+export function loadSetFiles(): BotSetFile[] {
+  let customFiles: BotSetFile[] = [];
+  try {
+    if (fs.existsSync(SET_FILES_PATH)) {
+      const raw = fs.readFileSync(SET_FILES_PATH, "utf-8");
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed)) {
+        customFiles = parsed;
+      }
+    }
+  } catch {}
+
+  const merged = [...BUILT_IN_SET_FILES];
+  for (const cf of customFiles) {
+    if (!merged.some((b) => b.fileName.toLowerCase() === cf.fileName.toLowerCase())) {
+      merged.push(cf);
+    }
+  }
+  return merged;
+}
+
+export function saveSetFiles(files: BotSetFile[]) {
+  try {
+    const customOnly = files.filter((f) => !f.isBuiltIn);
+    fs.writeFileSync(SET_FILES_PATH, JSON.stringify(customOnly, null, 2), "utf-8");
+  } catch (err: any) {
+    console.error("Failed to save set files:", err.message);
+  }
+}
 
 export function loadBotState(): BotEngineState {
   if (globalForBot.botEngineState) {
     return globalForBot.botEngineState;
   }
 
+  const allSetFiles = loadSetFiles();
+
   try {
     if (fs.existsSync(STATE_FILE_PATH)) {
       const raw = fs.readFileSync(STATE_FILE_PATH, "utf-8");
       const parsed = JSON.parse(raw);
-      // Merge with defaults to ensure complete schema
+
+      let bots: BotInstance[] = [];
+      if (Array.isArray(parsed.bots) && parsed.bots.length > 0) {
+        bots = parsed.bots.map((b: any, idx: number) => ({
+          id: b.id || `bot-${idx + 1}`,
+          name: b.name || `Bot ${idx + 1}`,
+          activeSetFileName: b.activeSetFileName || "conservative_5bps_sniper.set",
+          enabled: b.enabled !== undefined ? b.enabled : true,
+          maxMarginCapUsdt: b.maxMarginCapUsdt || b.config?.maxMarginCapUsdt || 500,
+          config: { ...DEFAULT_CONFIG, ...(b.config || {}) },
+          flattenedCoinsBlacklist: Array.isArray(b.flattenedCoinsBlacklist) ? b.flattenedCoinsBlacklist : [],
+          activeHedges: Array.isArray(b.activeHedges) ? b.activeHedges : [],
+          completedHedges: Array.isArray(b.completedHedges) ? b.completedHedges : [],
+          statusText: b.statusText || "RUNNING_24_7",
+          lastEvaluatedCandidate: b.lastEvaluatedCandidate || null,
+          createdAt: b.createdAt || Date.now(),
+          updatedAt: b.updatedAt || Date.now(),
+        }));
+      } else {
+        // Upgrade legacy single-bot schema to multi-bot roster
+        bots = [
+          {
+            id: "bot-1",
+            name: "Conservative Funding Sniper",
+            activeSetFileName: "conservative_5bps_sniper.set",
+            enabled: parsed.config?.enabled !== undefined ? parsed.config.enabled : true,
+            maxMarginCapUsdt: parsed.config?.maxMarginCapUsdt || 500,
+            config: { ...DEFAULT_CONFIG, ...(parsed.config || {}) },
+            flattenedCoinsBlacklist: [],
+            activeHedges: Array.isArray(parsed.activeHedges) ? parsed.activeHedges : [],
+            completedHedges: Array.isArray(parsed.completedHedges) ? parsed.completedHedges : [],
+            statusText: parsed.statusText || "RUNNING_24_7",
+            lastEvaluatedCandidate: parsed.lastEvaluatedCandidate || null,
+            createdAt: parsed.startedAt || Date.now(),
+            updatedAt: Date.now(),
+          },
+        ];
+      }
+
+      const activeBotId = parsed.activeBotId && bots.some((b) => b.id === parsed.activeBotId)
+        ? parsed.activeBotId
+        : bots[0].id;
+
+      const activeBot = bots.find((b) => b.id === activeBotId) || bots[0];
+
       const state: BotEngineState = {
         isRunning: parsed.isRunning !== undefined ? parsed.isRunning : true,
         runInBackgroundWhenClosed: true,
@@ -155,17 +465,39 @@ export function loadBotState(): BotEngineState {
         startedAt: parsed.startedAt || Date.now(),
         lastCycleAt: parsed.lastCycleAt || Date.now(),
         cyclesCompleted: parsed.cyclesCompleted || 0,
-        config: { ...DEFAULT_CONFIG, ...(parsed.config || {}) },
-        activeHedges: Array.isArray(parsed.activeHedges) ? parsed.activeHedges : [],
-        completedHedges: Array.isArray(parsed.completedHedges) ? parsed.completedHedges : [],
+        activeBotId,
+        bots,
+        setFiles: allSetFiles,
         logs: Array.isArray(parsed.logs) ? parsed.logs : [],
-        statusText: parsed.statusText || "RUNNING_24_7",
-        lastEvaluatedCandidate: parsed.lastEvaluatedCandidate || null,
+        // Legacy props mirrored from active bot
+        config: activeBot.config,
+        activeHedges: activeBot.activeHedges,
+        completedHedges: activeBot.completedHedges,
+        statusText: activeBot.statusText,
+        lastEvaluatedCandidate: activeBot.lastEvaluatedCandidate,
       };
+
       globalForBot.botEngineState = state;
       return state;
     }
   } catch {}
+
+  // Initial fresh state
+  const initialBot: BotInstance = {
+    id: "bot-1",
+    name: "Conservative Funding Sniper",
+    activeSetFileName: "conservative_5bps_sniper.set",
+    enabled: true,
+    maxMarginCapUsdt: 500,
+    config: { ...DEFAULT_CONFIG },
+    flattenedCoinsBlacklist: [],
+    activeHedges: [],
+    completedHedges: [],
+    statusText: "RUNNING_24_7",
+    lastEvaluatedCandidate: null,
+    createdAt: Date.now(),
+    updatedAt: Date.now(),
+  };
 
   const defaultState: BotEngineState = {
     isRunning: true,
@@ -174,17 +506,20 @@ export function loadBotState(): BotEngineState {
     startedAt: Date.now(),
     lastCycleAt: Date.now(),
     cyclesCompleted: 0,
-    config: DEFAULT_CONFIG,
-    activeHedges: [],
-    completedHedges: [],
+    activeBotId: initialBot.id,
+    bots: [initialBot],
+    setFiles: allSetFiles,
     logs: [
       {
         timestamp: new Date().toISOString(),
-        message: "24/7 Autonomous Arbitrage Bot Engine initialized. Ready to execute delta-neutral hedges.",
+        message: "24/7 Autonomous Multi-Bot Arbitrage Engine initialized. Ready to execute delta-neutral hedges.",
         level: "info",
       },
     ],
-    statusText: "RUNNING_24_7",
+    config: initialBot.config,
+    activeHedges: initialBot.activeHedges,
+    completedHedges: initialBot.completedHedges,
+    statusText: initialBot.statusText,
     lastEvaluatedCandidate: null,
   };
 
@@ -194,10 +529,22 @@ export function loadBotState(): BotEngineState {
 }
 
 export function saveBotState(state: BotEngineState) {
+  // Mirror active bot onto legacy properties for seamless backward compatibility
+  const activeBot = state.bots.find((b) => b.id === state.activeBotId) || state.bots[0];
+  if (activeBot) {
+    state.config = activeBot.config;
+    state.activeHedges = activeBot.activeHedges;
+    state.completedHedges = activeBot.completedHedges;
+    state.statusText = activeBot.statusText;
+    state.lastEvaluatedCandidate = activeBot.lastEvaluatedCandidate;
+  }
+
   globalForBot.botEngineState = state;
   try {
     fs.writeFileSync(STATE_FILE_PATH, JSON.stringify(state, null, 2), "utf-8");
-  } catch {}
+  } catch (err: any) {
+    console.error("Failed to save bot daemon state:", err.message);
+  }
 }
 
 export function appendBotLog(
@@ -215,7 +562,7 @@ export function appendBotLog(
     state.logs = state.logs.slice(0, 100);
   }
 
-  // AUTO-SAVE AUDIT STREAM: Immediately persist to disk for diagnosis
+  // AUTO-SAVE AUDIT STREAM: Immediately persist to disk for 24/7 diagnostics
   try {
     saveBotState(state);
 
@@ -228,7 +575,6 @@ export function appendBotLog(
       } catch {}
     }
     auditHistory.unshift(log);
-    // Keep up to 500 audit events persisted for comprehensive diagnosis
     if (auditHistory.length > 500) {
       auditHistory = auditHistory.slice(0, 500);
     }
@@ -236,6 +582,272 @@ export function appendBotLog(
   } catch (err: any) {
     console.error("Auto-save audit log error:", err.message);
   }
+}
+
+// ─────────────────────────────────────────────────────────────
+// PER-BOT FLATTEN MEMORY LOCK HELPERS
+// ─────────────────────────────────────────────────────────────
+export function lockFlattenedCoinForBot(symbol: string, botId?: string) {
+  const state = loadBotState();
+  const upper = symbol.toUpperCase();
+  let changed = false;
+
+  for (const bot of state.bots) {
+    if (!botId || bot.id === botId) {
+      if (!bot.flattenedCoinsBlacklist.includes(upper)) {
+        bot.flattenedCoinsBlacklist.push(upper);
+        changed = true;
+        appendBotLog(
+          state,
+          `[MEMORY LOCK ENGAGED] ${upper} was flattened. Locked in bot "${bot.name}" memory to prevent churn until manual reset.`,
+          "warn"
+        );
+      }
+    }
+  }
+
+  if (changed) {
+    saveBotState(state);
+  }
+}
+
+export function resetBotMemory(botId?: string) {
+  const state = loadBotState();
+  let changed = false;
+
+  for (const bot of state.bots) {
+    if (!botId || bot.id === botId) {
+      const count = bot.flattenedCoinsBlacklist.length;
+      bot.flattenedCoinsBlacklist = [];
+      changed = true;
+      appendBotLog(
+        state,
+        `[MEMORY RESET] Cleared ${count} locked coin(s) from bot "${bot.name}". All universe coins now eligible for trading.`,
+        "info"
+      );
+    }
+  }
+
+  if (changed) {
+    saveBotState(state);
+  }
+}
+
+export function unlockSingleCoin(symbol: string, botId?: string) {
+  const state = loadBotState();
+  const upper = symbol.toUpperCase();
+  let changed = false;
+
+  for (const bot of state.bots) {
+    if (!botId || bot.id === botId) {
+      const idx = bot.flattenedCoinsBlacklist.indexOf(upper);
+      if (idx !== -1) {
+        bot.flattenedCoinsBlacklist.splice(idx, 1);
+        changed = true;
+        appendBotLog(
+          state,
+          `[MEMORY UNLOCKED] ${upper} unblocked from bot "${bot.name}". Now eligible for scanning.`,
+          "info"
+        );
+      }
+    }
+  }
+
+  if (changed) {
+    saveBotState(state);
+  }
+}
+
+// ─────────────────────────────────────────────────────────────
+// MULTI-BOT CRUD & SET FILE MANAGER HELPERS
+// ─────────────────────────────────────────────────────────────
+export function createBot(name: string, setFileName?: string, maxMarginCapUsdt?: number): BotInstance {
+  const state = loadBotState();
+  const setFiles = loadSetFiles();
+
+  const chosenSet = setFileName
+    ? setFiles.find((s) => s.fileName.toLowerCase() === setFileName.toLowerCase())
+    : setFiles[0];
+
+  const configToUse = chosenSet ? { ...chosenSet.config } : { ...DEFAULT_CONFIG };
+  if (maxMarginCapUsdt && maxMarginCapUsdt > 0) {
+    configToUse.maxMarginCapUsdt = maxMarginCapUsdt;
+  }
+
+  const newBot: BotInstance = {
+    id: `bot-${Date.now().toString().slice(-6)}`,
+    name: name.trim() || `Bot ${state.bots.length + 1}`,
+    activeSetFileName: chosenSet?.fileName || "conservative_5bps_sniper.set",
+    enabled: true,
+    maxMarginCapUsdt: configToUse.maxMarginCapUsdt || 500,
+    config: configToUse,
+    flattenedCoinsBlacklist: [],
+    activeHedges: [],
+    completedHedges: [],
+    statusText: "READY",
+    lastEvaluatedCandidate: null,
+    createdAt: Date.now(),
+    updatedAt: Date.now(),
+  };
+
+  state.bots.push(newBot);
+  state.activeBotId = newBot.id;
+  appendBotLog(state, `[BOT CREATED] New bot "${newBot.name}" added with preset "${newBot.activeSetFileName}".`, "success");
+  saveBotState(state);
+  return newBot;
+}
+
+export function editBot(
+  botId: string,
+  updates: {
+    name?: string;
+    activeSetFileName?: string;
+    maxMarginCapUsdt?: number;
+    enabled?: boolean;
+    config?: Partial<BotConfig>;
+  }
+): BotInstance | null {
+  const state = loadBotState();
+  const bot = state.bots.find((b) => b.id === botId);
+  if (!bot) return null;
+
+  if (updates.name && updates.name.trim()) {
+    bot.name = updates.name.trim();
+  }
+  if (updates.activeSetFileName) {
+    bot.activeSetFileName = updates.activeSetFileName;
+  }
+  if (updates.enabled !== undefined) {
+    bot.enabled = updates.enabled;
+    bot.config.enabled = updates.enabled;
+  }
+  if (updates.maxMarginCapUsdt !== undefined && updates.maxMarginCapUsdt > 0) {
+    bot.maxMarginCapUsdt = updates.maxMarginCapUsdt;
+    bot.config.maxMarginCapUsdt = updates.maxMarginCapUsdt;
+  }
+  if (updates.config) {
+    bot.config = {
+      ...bot.config,
+      ...updates.config,
+    };
+  }
+
+  bot.updatedAt = Date.now();
+  appendBotLog(state, `[BOT UPDATED] Configuration for "${bot.name}" saved to disk.`, "info");
+  saveBotState(state);
+  return bot;
+}
+
+export function deleteBot(botId: string): boolean {
+  const state = loadBotState();
+  if (state.bots.length <= 1) {
+    return false; // Cannot delete the last active bot
+  }
+
+  const idx = state.bots.findIndex((b) => b.id === botId);
+  if (idx === -1) return false;
+
+  const deleted = state.bots.splice(idx, 1)[0];
+  if (state.activeBotId === botId) {
+    state.activeBotId = state.bots[0].id;
+  }
+
+  appendBotLog(state, `[BOT DELETED] Bot "${deleted.name}" removed from server roster.`, "warn");
+  saveBotState(state);
+  return true;
+}
+
+export function saveSetFile(
+  fileName: string,
+  name: string,
+  description: string,
+  config: BotConfig
+): BotSetFile {
+  let cleanFileName = fileName.trim();
+  if (!cleanFileName.toLowerCase().endsWith(".set")) {
+    cleanFileName += ".set";
+  }
+
+  const state = loadBotState();
+  let setFiles = loadSetFiles();
+
+  const contentText = serializeConfigToSetText(config, name);
+  const existingIdx = setFiles.findIndex((s) => s.fileName.toLowerCase() === cleanFileName.toLowerCase());
+
+  let setFileObj: BotSetFile;
+
+  if (existingIdx !== -1) {
+    setFileObj = {
+      ...setFiles[existingIdx],
+      name: name.trim() || setFiles[existingIdx].name,
+      description: description.trim() || setFiles[existingIdx].description,
+      config: { ...config },
+      contentText,
+      updatedAt: Date.now(),
+    };
+    setFiles[existingIdx] = setFileObj;
+  } else {
+    setFileObj = {
+      id: `set-${Date.now().toString().slice(-6)}`,
+      fileName: cleanFileName,
+      name: name.trim() || cleanFileName,
+      description: description.trim() || "Custom user-saved quantitative parameters.",
+      config: { ...config },
+      contentText,
+      isBuiltIn: false,
+      createdAt: Date.now(),
+      updatedAt: Date.now(),
+    };
+    setFiles.push(setFileObj);
+  }
+
+  saveSetFiles(setFiles);
+  state.setFiles = setFiles;
+  appendBotLog(state, `[SET FILE SAVED] Strategy preset "${cleanFileName}" saved to disk.`, "success");
+  saveBotState(state);
+  return setFileObj;
+}
+
+export function applySetFileToBot(botId: string, fileName: string): boolean {
+  const state = loadBotState();
+  const bot = state.bots.find((b) => b.id === botId);
+  if (!bot) return false;
+
+  const setFiles = loadSetFiles();
+  const setObj = setFiles.find((s) => s.fileName.toLowerCase() === fileName.toLowerCase());
+  if (!setObj) return false;
+
+  bot.config = { ...bot.config, ...setObj.config };
+  bot.activeSetFileName = setObj.fileName;
+  if (setObj.config.maxMarginCapUsdt) {
+    bot.maxMarginCapUsdt = setObj.config.maxMarginCapUsdt;
+  }
+  bot.updatedAt = Date.now();
+
+  appendBotLog(
+    state,
+    `[SET APPLIED] Preset "${setObj.name}" (${setObj.fileName}) loaded into bot "${bot.name}".`,
+    "success"
+  );
+  saveBotState(state);
+  return true;
+}
+
+export function deleteSetFile(fileName: string): boolean {
+  const setFiles = loadSetFiles();
+  const target = setFiles.find((s) => s.fileName.toLowerCase() === fileName.toLowerCase());
+  if (!target || target.isBuiltIn) {
+    return false; // Cannot delete built-in presets
+  }
+
+  const filtered = setFiles.filter((s) => s.fileName.toLowerCase() !== fileName.toLowerCase());
+  saveSetFiles(filtered);
+
+  const state = loadBotState();
+  state.setFiles = filtered;
+  appendBotLog(state, `[SET FILE DELETED] Preset "${fileName}" removed.`, "warn");
+  saveBotState(state);
+  return true;
 }
 
 /**
@@ -260,12 +872,11 @@ async function fetchAvailableBalances(): Promise<{ binanceBal: number; bitgetBal
   } catch {}
 
   try {
-    // Check Bitget account asset balance
     const path = "/api/v3/account/assets?category=USDT-FUTURES";
     const res = await fetch(`https://api.bitget.com${path}`, {
       headers: {
-        "papertrading": "1",
-        "paptrading": "1",
+        papertrading: "1",
+        paptrading: "1",
       },
       cache: "no-store",
     });
@@ -288,9 +899,9 @@ let cachedTradableSymbols: Set<string> | null = null;
 let lastTradableSymbolsFetch = 0;
 
 const FALLBACK_DUAL_SYMBOLS = new Set([
-  "BTCUSDT", "ETHUSDT", "SOLUSDT", "ADAUSDT", "DOGEUSDT", 
-  "LTCUSDT", "BNBUSDT", "XRPUSDT", "LINKUSDT", "AVAXUSDT", 
-  "DOTUSDT", "NEARUSDT", "TRXUSDT", "UNIUSDT", "PEPEUSDT", 
+  "BTCUSDT", "ETHUSDT", "SOLUSDT", "ADAUSDT", "DOGEUSDT",
+  "LTCUSDT", "BNBUSDT", "XRPUSDT", "LINKUSDT", "AVAXUSDT",
+  "DOTUSDT", "NEARUSDT", "TRXUSDT", "UNIUSDT", "PEPEUSDT",
   "SHIBUSDT", "BCHUSDT", "USDCUSDT"
 ]);
 
@@ -381,7 +992,6 @@ async function fetchOpportunityCoins(): Promise<any[]> {
       const sym = bn.symbol;
       if (!sym || !sym.endsWith("USDT")) continue;
 
-      // CRITICAL TRADABILITY GATE: Only consider symbols supported by BOTH testnet/demo matching engines
       if (!tradableSet.has(sym)) continue;
 
       const bg = bgMap.get(sym);
@@ -418,7 +1028,6 @@ async function fetchOpportunityCoins(): Promise<any[]> {
       });
     }
 
-    // Sort by highest spreadBps descending
     results.sort((a, b) => b.spreadBps - a.spreadBps);
     return results;
   } catch (err: any) {
@@ -487,7 +1096,6 @@ async function executeDualHedgeEntry(
   const bitgetLeverage = config.leverageMode === "CUSTOM" ? config.customLeverage : maxLev.bg;
 
   const refPrice = coin.binanceMarkPrice || 100;
-  // Calculate quantity using allocated margin and leverage
   const effectiveLeverage = Math.min(binanceLeverage, bitgetLeverage);
   const targetNotional = Math.max(15, allocatedMargin * effectiveLeverage);
   let rawQty = targetNotional / refPrice;
@@ -507,7 +1115,6 @@ async function executeDualHedgeEntry(
   const leg1Side: "BUY" | "SELL" = coin.direction === "SHORT_BINANCE_LONG_BITGET" ? "SELL" : "BUY";
   const leg2Side: "buy" | "sell" = leg1Side === "SELL" ? "buy" : "sell";
 
-  // Calibrate leverage on both venues
   await Promise.allSettled([
     setBinanceLeverage(ADMIN_BINANCE_KEY, ADMIN_BINANCE_SECRET, symbol, binanceLeverage, ADMIN_BINANCE_ENDPOINT),
     setBitgetLeverage(ADMIN_BITGET_CREDS, symbol, bitgetLeverage),
@@ -563,7 +1170,6 @@ async function executeDualHedgeEntry(
       ADMIN_BITGET_CREDS
     );
 
-    // Fill chase retry up to 2 times
     let attempts = 0;
     while (!res.success && attempts < 2) {
       attempts++;
@@ -594,7 +1200,7 @@ async function executeDualHedgeEntry(
   const [leg1Res, leg2Res] = await Promise.all([leg1Promise, leg2Promise]);
   const interLegDelta = Math.abs(leg1AckTime - leg2AckTime);
 
-  // CIRCUIT BREAKER: Atomic IOC Unwind if one leg failed
+  // Circuit breaker unwind if one leg failed
   if (leg1Res.success && !leg2Res.success) {
     const unwindSide = leg1Side === "BUY" ? "SELL" : "BUY";
     try {
@@ -651,7 +1257,6 @@ async function executeDualHedgeEntry(
     };
   }
 
-  // Both legs filled successfully!
   recordExecutionRTT(leg1OrderDurationMs, leg2OrderDurationMs, interLegDelta, leadStaggerAppliedMs, staggerVenue);
 
   const hedge: ActiveBotHedge = {
@@ -751,7 +1356,6 @@ async function executeDualHedgeClose(
   const bnExitPrice = closeBnRes.status === "fulfilled" && closeBnRes.value.success ? closeBnRes.value.price : freshPrices.bnPrice;
   const bgExitPrice = closeBgRes.status === "fulfilled" && closeBgRes.value.success ? closeBgRes.value.price : freshPrices.bgPrice;
 
-  // Calculate net realized PnL
   const bnDir = hedge.direction === "SHORT_BINANCE_LONG_BITGET" ? -1 : 1;
   const bgDir = hedge.direction === "SHORT_BINANCE_LONG_BITGET" ? 1 : -1;
 
@@ -779,12 +1383,15 @@ async function executeDualHedgeClose(
 }
 
 /**
- * Main Autonomous Bot Cycle
- * Evaluates exits first (basis convergence check), then evaluates entries (<1m to funding, spread >= 5bps, divergence <= 0.01%)
+ * Main Autonomous Multi-Bot Cycle
+ * Iterates across all enabled bots in the roster:
+ * 1. Evaluates exits on active hedges
+ * 2. Evaluates margin cap and capacity
+ * 3. Scans candidates honoring the bot's Flatten Memory Lock and Set parameters
  */
 export async function runAutonomousBotCycle(): Promise<void> {
   const state = loadBotState();
-  if (!state.isRunning || !state.config.enabled) {
+  if (!state.isRunning) {
     return;
   }
 
@@ -798,202 +1405,237 @@ export async function runAutonomousBotCycle(): Promise<void> {
 
   try {
     const now = Date.now();
-    const config = state.config;
 
-    // ─────────────────────────────────────────────────────────────
-    // PHASE 1: EXIT MONITOR FOR ACTIVE HEDGES
-    // ─────────────────────────────────────────────────────────────
-    const survivingHedges: ActiveBotHedge[] = [];
+    // Fetch shared balances & candidates once for all bots in this cycle
+    const [balances, opportunities] = await Promise.all([
+      fetchAvailableBalances(),
+      fetchOpportunityCoins(),
+    ]);
 
-    for (const hedge of state.activeHedges) {
-      const waitThreshold = hedge.fundingSettlementTime + config.postSettlementWaitSeconds * 1000;
-      const settlementHasPassed = now >= waitThreshold;
+    const effectiveBal = Math.min(balances.binanceBal, balances.bitgetBal);
 
-      if (!settlementHasPassed) {
-        // Still waiting for funding settlement timestamp
-        survivingHedges.push(hedge);
+    for (const bot of state.bots) {
+      if (!bot.enabled) {
+        bot.statusText = "PAUSED_BY_USER";
         continue;
       }
 
-      // Settlement has passed! Check live cross-exchange price divergence
-      const freshPrices = await fetchFreshPrices(hedge.symbol);
-      const isParitySatisfied = freshPrices.divergencePct <= config.closeMaxPriceDivergencePct;
+      const config = bot.config;
 
-      if (!isParitySatisfied) {
-        // Hold and wait for price divergence to compress to <= closeMaxPriceDivergencePct
-        hedge.status = "WAITING_PRICE_PARITY";
-        survivingHedges.push(hedge);
+      // ─────────────────────────────────────────────────────────────
+      // PHASE 1: EXIT MONITOR FOR THIS BOT'S ACTIVE HEDGES
+      // ─────────────────────────────────────────────────────────────
+      const survivingHedges: ActiveBotHedge[] = [];
 
-        if (state.cyclesCompleted % 4 === 0) {
+      for (const hedge of bot.activeHedges) {
+        const waitThreshold = hedge.fundingSettlementTime + (config.postSettlementWaitSeconds || 15) * 1000;
+        const settlementHasPassed = now >= waitThreshold;
+
+        if (!settlementHasPassed) {
+          survivingHedges.push(hedge);
+          continue;
+        }
+
+        const freshPrices = await fetchFreshPrices(hedge.symbol);
+        const isParitySatisfied = freshPrices.divergencePct <= (config.closeMaxPriceDivergencePct || 0.03);
+
+        if (!isParitySatisfied) {
+          hedge.status = "WAITING_PRICE_PARITY";
+          survivingHedges.push(hedge);
+
+          if (state.cyclesCompleted % 4 === 0) {
+            appendBotLog(
+              state,
+              `[BASIS HOLD] Bot "${bot.name}": ${hedge.symbol} settlement passed. Waiting for basis divergence (${freshPrices.divergencePct.toFixed(3)}%) to converge to <= ${config.closeMaxPriceDivergencePct}% before closing.`,
+              "warn"
+            );
+          }
+          continue;
+        }
+
+        appendBotLog(
+          state,
+          `[AUTO-CLOSE TRIGGERED] Bot "${bot.name}": ${hedge.symbol} funding fee credited & price divergence (${freshPrices.divergencePct.toFixed(3)}% <= ${config.closeMaxPriceDivergencePct}%). Executing dual close...`,
+          "info"
+        );
+
+        hedge.status = "CLOSING";
+        const closeRes = await executeDualHedgeClose(hedge, freshPrices);
+
+        if (closeRes.success) {
+          hedge.status = "CLOSED";
+          hedge.closeTime = Date.now();
+          hedge.closeBinancePrice = freshPrices.bnPrice;
+          hedge.closeBitgetPrice = freshPrices.bgPrice;
+          hedge.closeDivergencePct = freshPrices.divergencePct;
+          hedge.pnl = closeRes.pnl;
+
+          bot.completedHedges.unshift(hedge);
+          if (bot.completedHedges.length > 50) {
+            bot.completedHedges = bot.completedHedges.slice(0, 50);
+          }
+
           appendBotLog(
             state,
-            `[BASIS HOLD] ${hedge.symbol} settlement passed. Waiting for basis divergence (${freshPrices.divergencePct.toFixed(3)}%) to converge to <= ${config.closeMaxPriceDivergencePct}% before closing.`,
+            `[HEDGE CLOSED] Successfully unwound ${hedge.symbol} hedge by "${bot.name}". Net Realized PnL: $${closeRes.pnl} USDT.`,
+            "success"
+          );
+
+          // PER-BOT FLATTEN MEMORY LOCK: Lock coin so bot will NEVER re-trade until memory is force-reset
+          if (!bot.flattenedCoinsBlacklist.includes(hedge.symbol)) {
+            bot.flattenedCoinsBlacklist.push(hedge.symbol);
+            appendBotLog(
+              state,
+              `[MEMORY LOCK ENGAGED] ${hedge.symbol} was flattened. Locked in bot "${bot.name}" memory to prevent churn until manual reset.`,
+              "warn"
+            );
+          }
+        } else {
+          hedge.status = "ACTIVE";
+          survivingHedges.push(hedge);
+          appendBotLog(
+            state,
+            `[CLOSE RETRY] Bot "${bot.name}": Error closing ${hedge.symbol}: ${closeRes.error}. Will retry on next cycle.`,
             "warn"
           );
         }
+      }
+
+      bot.activeHedges = survivingHedges;
+
+      // ─────────────────────────────────────────────────────────────
+      // PHASE 2: MARGIN CEILING & CAPACITY VERIFICATION
+      // ─────────────────────────────────────────────────────────────
+      const currentBotMargin = bot.activeHedges.reduce((sum, h) => {
+        const lev = h.binanceLeverage || 20;
+        return sum + (h.notionalUsdt / lev);
+      }, 0);
+
+      const marginCap = bot.maxMarginCapUsdt || config.maxMarginCapUsdt || 500;
+      if (currentBotMargin >= marginCap) {
+        bot.statusText = `MARGIN_CAP_REACHED ($${currentBotMargin.toFixed(0)}/$${marginCap} USDT)`;
         continue;
       }
 
-      // Both conditions met: Settlement passed AND price parity is satisfied!
+      const availableSlots = (config.maxSimultaneousHedges || 3) - bot.activeHedges.length;
+      if (availableSlots <= 0) {
+        bot.statusText = `AT_MAX_CAPACITY (${bot.activeHedges.length}/${config.maxSimultaneousHedges} ACTIVE)`;
+        continue;
+      }
+
+      if (opportunities.length === 0) {
+        bot.statusText = "SCANNING_OPPORTUNITIES";
+        continue;
+      }
+
+      // ─────────────────────────────────────────────────────────────
+      // PHASE 3: CANDIDATE FILTERING WITH FLATTEN MEMORY LOCK
+      // ─────────────────────────────────────────────────────────────
+      const activeSymbolsInBot = new Set(bot.activeHedges.map((h) => h.symbol));
+      let topCandidate: any = null;
+      let highestSpread = 0;
+
+      for (const coin of opportunities) {
+        if (activeSymbolsInBot.has(coin.symbol)) continue;
+
+        // FLATTEN MEMORY LOCK CHECK:
+        if (bot.flattenedCoinsBlacklist.includes(coin.symbol)) {
+          if (!bot.lastEvaluatedCandidate || bot.lastEvaluatedCandidate.symbol === coin.symbol) {
+            bot.lastEvaluatedCandidate = {
+              symbol: coin.symbol,
+              spreadBps: coin.spreadBps,
+              divergencePct: coin.divergencePct,
+              secondsToFunding: coin.secondsToFunding,
+              qualified: false,
+              reason: `[LOCKED IN MEMORY] ${coin.symbol} was flattened. Reset memory in settings to re-trade.`,
+            };
+          }
+          continue;
+        }
+
+        const secondsToFunding = coin.secondsToFunding;
+        const isContinuous = config.timingMode === "CONTINUOUS_SPREAD";
+        const isTimingQualified = isContinuous || (secondsToFunding > 0 && secondsToFunding <= 60);
+
+        if (!isTimingQualified) continue;
+
+        const isSpreadSufficient = coin.spreadBps >= (config.minSpreadBps || 5.0);
+        const isPriceParityStrict = coin.divergencePct <= (config.maxPriceDivergencePct || 0.03);
+
+        bot.lastEvaluatedCandidate = {
+          symbol: coin.symbol,
+          spreadBps: coin.spreadBps,
+          divergencePct: coin.divergencePct,
+          secondsToFunding,
+          qualified: isSpreadSufficient && isPriceParityStrict,
+          reason: !isSpreadSufficient
+            ? `Spread (${coin.spreadBps} bps) < Min (${config.minSpreadBps} bps)`
+            : !isPriceParityStrict
+            ? `Price Divergence (${coin.divergencePct}%) > Max (${config.maxPriceDivergencePct}%)`
+            : "QUALIFIED_FOR_ENTRY",
+        };
+
+        if (isSpreadSufficient && isPriceParityStrict) {
+          if (coin.spreadBps > highestSpread) {
+            highestSpread = coin.spreadBps;
+            topCandidate = coin;
+          }
+        }
+      }
+
+      if (!topCandidate) {
+        const topOpp = opportunities[0];
+        bot.statusText = `SCANNING (Top: ${topOpp?.symbol || "N/A"} - Spread: ${topOpp?.spreadBps || 0} bps - Countdown: ${topOpp?.secondsToFunding || 0}s)`;
+        continue;
+      }
+
+      // Fresh parity verification
+      const freshCheck = await fetchFreshPrices(topCandidate.symbol);
+      if (freshCheck.divergencePct > (config.maxPriceDivergencePct || 0.03)) {
+        appendBotLog(
+          state,
+          `[SNIPER PAUSE] Bot "${bot.name}": ${topCandidate.symbol} spread is ${topCandidate.spreadBps} bps, but fresh price divergence drifted to ${freshCheck.divergencePct.toFixed(3)}% (Limit: ${config.maxPriceDivergencePct}%). Waiting for parity.`,
+          "warn"
+        );
+        bot.statusText = `WAITING_PARITY (${topCandidate.symbol} ${freshCheck.divergencePct.toFixed(3)}%)`;
+        continue;
+      }
+
+      // Compute sizing bounded by available allocation & margin cap headroom
+      const rawAllocatedMargin = Math.max(10, effectiveBal * ((config.balanceAllocationPct || 20) / 100));
+      const remainingMarginCap = Math.max(10, marginCap - currentBotMargin);
+      const allocatedMargin = Math.min(rawAllocatedMargin, remainingMarginCap);
+
       appendBotLog(
         state,
-        `[AUTO-CLOSE TRIGGERED] ${hedge.symbol}: Funding fee credited & price divergence (${freshPrices.divergencePct.toFixed(3)}% <= ${config.closeMaxPriceDivergencePct}%). Executing dual close...`,
+        `[OPPORTUNITY QUALIFIED] Bot "${bot.name}" selected ${topCandidate.symbol} (Spread: ${topCandidate.spreadBps} bps, Div: ${freshCheck.divergencePct.toFixed(4)}%, Alloc: $${allocatedMargin.toFixed(0)} USDT). Executing dual hedge...`,
         "info"
       );
 
-      hedge.status = "CLOSING";
-      const closeRes = await executeDualHedgeClose(hedge, freshPrices);
+      bot.statusText = `EXECUTING_HEDGE (${topCandidate.symbol})`;
+      const entryRes = await executeDualHedgeEntry(topCandidate, config, allocatedMargin);
 
-      if (closeRes.success) {
-        hedge.status = "CLOSED";
-        hedge.closeTime = Date.now();
-        hedge.closeBinancePrice = freshPrices.bnPrice;
-        hedge.closeBitgetPrice = freshPrices.bgPrice;
-        hedge.closeDivergencePct = freshPrices.divergencePct;
-        hedge.pnl = closeRes.pnl;
-
-        state.completedHedges.unshift(hedge);
-        if (state.completedHedges.length > 50) {
-          state.completedHedges = state.completedHedges.slice(0, 50);
-        }
-
+      if (entryRes.success && entryRes.hedge) {
+        bot.activeHedges.push(entryRes.hedge);
         appendBotLog(
           state,
-          `[HEDGE CLOSED] Successfully unwound ${hedge.symbol} hedge. Net Realized PnL: $${closeRes.pnl} USDT (Exit Parity: ${freshPrices.divergencePct.toFixed(3)}%).`,
+          `[HEDGE PLACED] Bot "${bot.name}" opened dual hedge on ${topCandidate.symbol}! Size: ${entryRes.hedge.quantity} ($${entryRes.hedge.notionalUsdt} USDT). Active: ${bot.activeHedges.length}/${config.maxSimultaneousHedges}.`,
           "success"
         );
+        bot.statusText = `HEDGED (${topCandidate.symbol} ACTIVE)`;
       } else {
-        // Re-queue if close failed
-        hedge.status = "ACTIVE";
-        survivingHedges.push(hedge);
         appendBotLog(
           state,
-          `[CLOSE RETRY] Error closing ${hedge.symbol}: ${closeRes.error}. Will retry on next cycle.`,
-          "warn"
+          `[ENTRY ABORTED] Bot "${bot.name}": ${topCandidate.symbol} entry failed: ${entryRes.error}`,
+          "error"
         );
+        bot.statusText = `ENTRY_FAILED (${topCandidate.symbol})`;
       }
-    }
-
-    state.activeHedges = survivingHedges;
-
-    // ─────────────────────────────────────────────────────────────
-    // PHASE 2: ENTRY SCANNER FOR TOP-RANKED COIN
-    // ─────────────────────────────────────────────────────────────
-    const availableSlots = config.maxSimultaneousHedges - state.activeHedges.length;
-    if (availableSlots <= 0) {
-      state.statusText = `AT_MAX_CAPACITY (${state.activeHedges.length}/${config.maxSimultaneousHedges} HEDGES ACTIVE)`;
-      saveBotState(state);
-      return;
-    }
-
-    const opportunities = await fetchOpportunityCoins();
-    if (opportunities.length === 0) {
-      state.statusText = "SCANNING_OPPORTUNITIES";
-      saveBotState(state);
-      return;
-    }
-
-    // Filter candidate coins:
-    // 1. Time to funding must be between 1s and 60s (< 1 minute countdown!)
-    // 2. Spread must be >= minSpreadBps (default 5 bps)
-    // 3. Price divergence must be <= maxPriceDivergencePct (default 0.01%)
-    // 4. Symbol must not already be in activeHedges
-    const activeSymbols = new Set(state.activeHedges.map((h) => h.symbol));
-
-    let topCandidate: any = null;
-    let highestSpread = 0;
-
-    for (const coin of opportunities) {
-      if (activeSymbols.has(coin.symbol)) continue;
-
-      const secondsToFunding = coin.secondsToFunding;
-      const isContinuous = config.timingMode === "CONTINUOUS_SPREAD";
-      // Countdown condition: less than 1 minute (1s to 60s) OR Continuous Spread Mode
-      const isTimingQualified = isContinuous || (secondsToFunding > 0 && secondsToFunding <= 60);
-
-      if (!isTimingQualified) continue;
-
-      const isSpreadSufficient = coin.spreadBps >= config.minSpreadBps;
-      const isPriceParityStrict = coin.divergencePct <= config.maxPriceDivergencePct;
-
-      state.lastEvaluatedCandidate = {
-        symbol: coin.symbol,
-        spreadBps: coin.spreadBps,
-        divergencePct: coin.divergencePct,
-        secondsToFunding,
-        qualified: isSpreadSufficient && isPriceParityStrict,
-        reason: !isSpreadSufficient
-          ? `Spread (${coin.spreadBps} bps) < Min (${config.minSpreadBps} bps)`
-          : !isPriceParityStrict
-          ? `Price Divergence (${coin.divergencePct}%) > Max (${config.maxPriceDivergencePct}%)`
-          : "QUALIFIED_FOR_ENTRY",
-      };
-
-      if (isSpreadSufficient && isPriceParityStrict) {
-        if (coin.spreadBps > highestSpread) {
-          highestSpread = coin.spreadBps;
-          topCandidate = coin;
-        }
-      }
-    }
-
-    if (!topCandidate) {
-      const topOpp = opportunities[0];
-      state.statusText = `SCANNING (Top: ${topOpp?.symbol || "N/A"} - Spread: ${topOpp?.spreadBps || 0} bps - Countdown: ${topOpp?.secondsToFunding || 0}s)`;
-      saveBotState(state);
-      return;
-    }
-
-    // Double-check fresh price divergence right before placement
-    const freshCheck = await fetchFreshPrices(topCandidate.symbol);
-    if (freshCheck.divergencePct > config.maxPriceDivergencePct) {
-      appendBotLog(
-        state,
-        `[SNIPER PAUSE] ${topCandidate.symbol} spread is ${topCandidate.spreadBps} bps, but fresh price divergence drifted to ${freshCheck.divergencePct.toFixed(3)}% (Limit: ${config.maxPriceDivergencePct}%). Waiting for parity.`,
-        "warn"
-      );
-      state.statusText = `WAITING_PARITY (${topCandidate.symbol} ${freshCheck.divergencePct.toFixed(3)}%)`;
-      saveBotState(state);
-      return;
-    }
-
-    // ─────────────────────────────────────────────────────────────
-    // PHASE 3: EXECUTE DUAL HEDGE ENTRY FOR TOP CANDIDATE
-    // ─────────────────────────────────────────────────────────────
-    appendBotLog(
-      state,
-      `[OPPORTUNITY QUALIFIED] ${topCandidate.symbol} reached funding window (${topCandidate.secondsToFunding}s left). Spread: ${topCandidate.spreadBps} bps (>= ${config.minSpreadBps} bps). Divergence: ${freshCheck.divergencePct.toFixed(4)}% (<= ${config.maxPriceDivergencePct}%). Executing dual hedge...`,
-      "info"
-    );
-
-    // Compute sizing: 20% of available balance
-    const { binanceBal, bitgetBal } = await fetchAvailableBalances();
-    const effectiveBal = Math.min(binanceBal, bitgetBal);
-    const allocatedMargin = Math.max(10, effectiveBal * (config.balanceAllocationPct / 100));
-
-    state.statusText = `EXECUTING_HEDGE (${topCandidate.symbol})`;
-    const entryRes = await executeDualHedgeEntry(topCandidate, config, allocatedMargin);
-
-    if (entryRes.success && entryRes.hedge) {
-      state.activeHedges.push(entryRes.hedge);
-      appendBotLog(
-        state,
-        `[HEDGE PLACED] Successfully opened dual hedge on ${topCandidate.symbol}! Size: ${entryRes.hedge.quantity} ($${entryRes.hedge.notionalUsdt} USDT). Active hedges: ${state.activeHedges.length}/${config.maxSimultaneousHedges}.`,
-        "success"
-      );
-      state.statusText = `HEDGED (${topCandidate.symbol} ACTIVE)`;
-    } else {
-      appendBotLog(
-        state,
-        `[ENTRY ABORTED] ${topCandidate.symbol} entry failed: ${entryRes.error}`,
-        "error"
-      );
-      state.statusText = `ENTRY_FAILED (${topCandidate.symbol})`;
     }
 
     saveBotState(state);
   } catch (err: any) {
-    console.error("Bot cycle unexpected error:", err);
+    console.error("Multi-bot cycle error:", err);
     appendBotLog(state, `Cycle error: ${err.message}`, "error");
     saveBotState(state);
   } finally {
@@ -1006,14 +1648,12 @@ export async function runAutonomousBotCycle(): Promise<void> {
  */
 export function ensureBotWorker(): void {
   const state = loadBotState();
-  if (state.isRunning && state.config.enabled && !globalForBot.botInterval) {
-    // Run an immediate initial cycle
+  if (state.isRunning && !globalForBot.botInterval) {
     runAutonomousBotCycle().catch(() => {});
 
-    // Set recurring 5-second interval
     globalForBot.botInterval = setInterval(() => {
       runAutonomousBotCycle().catch(() => {});
-    }, (state.config.scanIntervalSeconds || 5) * 1000);
+    }, 5000);
   }
 }
 

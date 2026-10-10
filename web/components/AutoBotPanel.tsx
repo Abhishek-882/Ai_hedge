@@ -29,6 +29,14 @@ import {
   TrendingUp,
   Download,
   Trash2,
+  Plus,
+  Edit2,
+  Lock,
+  Unlock,
+  FileText,
+  Save,
+  FolderOpen,
+  X,
 } from "lucide-react";
 import { formatCountdown } from "@/lib/settlementTime";
 
@@ -40,6 +48,7 @@ interface BotConfig {
   leverageMode: "MAX_PER_COIN" | "CUSTOM";
   customLeverage: number;
   maxSimultaneousHedges: number;
+  maxMarginCapUsdt?: number;
   postSettlementWaitSeconds: number;
   closeMaxPriceDivergencePct: number;
   scanIntervalSeconds: number;
@@ -70,18 +79,29 @@ interface BotLog {
   level: "info" | "success" | "warn" | "error";
 }
 
-interface BotDaemonState {
-  isRunning: boolean;
-  runInBackgroundWhenClosed: boolean;
-  startedAt: number;
-  lastCycleAt: number;
-  cyclesCompleted: number;
-  uptimeSeconds: number;
-  statusText: string;
+interface BotSetFile {
+  id: string;
+  fileName: string;
+  name: string;
+  description: string;
   config: BotConfig;
+  contentText: string;
+  isBuiltIn: boolean;
+  createdAt: number;
+  updatedAt: number;
+}
+
+interface BotInstance {
+  id: string;
+  name: string;
+  activeSetFileName: string;
+  enabled: boolean;
+  maxMarginCapUsdt: number;
+  config: BotConfig;
+  flattenedCoinsBlacklist: string[];
   activeHedges: ActiveBotHedge[];
   completedHedges: ActiveBotHedge[];
-  logs: BotLog[];
+  statusText: string;
   lastEvaluatedCandidate?: {
     symbol: string;
     spreadBps: number;
@@ -90,6 +110,24 @@ interface BotDaemonState {
     qualified: boolean;
     reason: string;
   } | null;
+  createdAt: number;
+  updatedAt: number;
+}
+
+interface BotDaemonState {
+  isRunning: boolean;
+  runInBackgroundWhenClosed: boolean;
+  startedAt: number;
+  lastCycleAt: number;
+  cyclesCompleted: number;
+  uptimeSeconds: number;
+  statusText: string;
+  activeBotId: string;
+  bots: BotInstance[];
+  setFiles: BotSetFile[];
+  logs: BotLog[];
+  config?: BotConfig;
+  activeHedges?: ActiveBotHedge[];
 }
 
 export default function AutoBotPanel() {
@@ -98,18 +136,43 @@ export default function AutoBotPanel() {
   const [isConfigOpen, setIsConfigOpen] = useState(false);
   const [isLogsOpen, setIsLogsOpen] = useState(true);
 
-  // Form Config State
+  // Modals & Panels
+  const [isCreateBotModalOpen, setIsCreateBotModalOpen] = useState(false);
+  const [isRenameBotModalOpen, setIsRenameBotModalOpen] = useState(false);
+  const [isSaveSetModalOpen, setIsSaveSetModalOpen] = useState(false);
+  const [isSetManagerOpen, setIsSetManagerOpen] = useState(false);
+
+  // New Bot Form
+  const [newBotName, setNewBotName] = useState("");
+  const [newBotSetPreset, setNewBotSetPreset] = useState("conservative_5bps_sniper.set");
+  const [newBotMarginCap, setNewBotMarginCap] = useState<number>(500);
+
+  // Rename Bot Form
+  const [renameBotName, setRenameBotName] = useState("");
+
+  // Save Set File Form
+  const [saveSetFileName, setSaveSetFileName] = useState("");
+  const [saveSetName, setSaveSetName] = useState("");
+  const [saveSetDescription, setSaveSetDescription] = useState("");
+
+  // Active Bot Form Config State
   const [minSpreadBps, setMinSpreadBps] = useState<number>(5.0);
-  const [maxPriceDivergencePct, setMaxPriceDivergencePct] = useState<number>(0.01);
+  const [maxPriceDivergencePct, setMaxPriceDivergencePct] = useState<number>(0.03);
   const [balanceAllocationPct, setBalanceAllocationPct] = useState<number>(20);
   const [leverageMode, setLeverageMode] = useState<"MAX_PER_COIN" | "CUSTOM">("MAX_PER_COIN");
   const [customLeverage, setCustomLeverage] = useState<number>(50);
   const [maxSimultaneousHedges, setMaxSimultaneousHedges] = useState<number>(3);
-  const [closeMaxPriceDivergencePct, setCloseMaxPriceDivergencePct] = useState<number>(0.01);
+  const [maxMarginCapUsdt, setMaxMarginCapUsdt] = useState<number>(500);
+  const [closeMaxPriceDivergencePct, setCloseMaxPriceDivergencePct] = useState<number>(0.03);
   const [timingMode, setTimingMode] = useState<"FUNDING_SNIPER_1M" | "CONTINUOUS_SPREAD">("FUNDING_SNIPER_1M");
   const [isSavingConfig, setIsSavingConfig] = useState(false);
-  const [saveSuccess, setSaveSuccess] = useState(false);
+  const [hudNotice, setHudNotice] = useState<string | null>(null);
   const [nowMs, setNowMs] = useState(Date.now());
+
+  const showToast = (msg: string) => {
+    setHudNotice(msg);
+    setTimeout(() => setHudNotice(null), 3500);
+  };
 
   // Keep live countdown timer ticking
   useEffect(() => {
@@ -117,21 +180,31 @@ export default function AutoBotPanel() {
     return () => clearInterval(timer);
   }, []);
 
+  const activeBot =
+    daemon?.bots?.find((b) => b.id === daemon.activeBotId) ||
+    daemon?.bots?.[0] ||
+    null;
+
   const fetchStatus = useCallback(async () => {
     try {
       const res = await fetch("/api/bot/daemon", { cache: "no-store" });
       const data = await res.json();
       if (data.success && data.daemon) {
         setDaemon(data.daemon);
-        if (!isConfigOpen) {
-          setMinSpreadBps(data.daemon.config?.minSpreadBps ?? 5.0);
-          setMaxPriceDivergencePct(data.daemon.config?.maxPriceDivergencePct ?? 0.01);
-          setBalanceAllocationPct(data.daemon.config?.balanceAllocationPct ?? 20);
-          setLeverageMode(data.daemon.config?.leverageMode ?? "MAX_PER_COIN");
-          setCustomLeverage(data.daemon.config?.customLeverage ?? 50);
-          setMaxSimultaneousHedges(data.daemon.config?.maxSimultaneousHedges ?? 3);
-          setCloseMaxPriceDivergencePct(data.daemon.config?.closeMaxPriceDivergencePct ?? 0.01);
-          setTimingMode(data.daemon.config?.timingMode ?? "FUNDING_SNIPER_1M");
+        const curBot =
+          data.daemon.bots?.find((b: any) => b.id === data.daemon.activeBotId) ||
+          data.daemon.bots?.[0];
+
+        if (curBot && !isConfigOpen) {
+          setMinSpreadBps(curBot.config?.minSpreadBps ?? 5.0);
+          setMaxPriceDivergencePct(curBot.config?.maxPriceDivergencePct ?? 0.03);
+          setBalanceAllocationPct(curBot.config?.balanceAllocationPct ?? 20);
+          setLeverageMode(curBot.config?.leverageMode ?? "MAX_PER_COIN");
+          setCustomLeverage(curBot.config?.customLeverage ?? 50);
+          setMaxSimultaneousHedges(curBot.config?.maxSimultaneousHedges ?? 3);
+          setMaxMarginCapUsdt(curBot.maxMarginCapUsdt ?? curBot.config?.maxMarginCapUsdt ?? 500);
+          setCloseMaxPriceDivergencePct(curBot.config?.closeMaxPriceDivergencePct ?? 0.03);
+          setTimingMode(curBot.config?.timingMode ?? "FUNDING_SNIPER_1M");
         }
       }
     } catch {}
@@ -143,19 +216,20 @@ export default function AutoBotPanel() {
     return () => clearInterval(interval);
   }, [fetchStatus]);
 
-  const toggleBot = async () => {
+  // Master Daemon Toggle
+  const toggleMasterDaemon = async () => {
     if (!daemon) return;
     setLoading(true);
-    const action = daemon.isRunning && daemon.config.enabled ? "stop" : "start";
     try {
       const res = await fetch("/api/bot/daemon", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action }),
+        body: JSON.stringify({ action: "toggle_daemon" }),
       });
       const data = await res.json();
       if (data.success && data.daemon) {
         setDaemon(data.daemon);
+        showToast(data.daemon.isRunning ? "Master Daemon Running 24/7" : "Master Daemon Paused");
       }
     } catch {
     } finally {
@@ -163,15 +237,143 @@ export default function AutoBotPanel() {
     }
   };
 
-  const handleSaveConfig = async () => {
-    setIsSavingConfig(true);
-    setSaveSuccess(false);
+  // Toggle specific bot
+  const toggleActiveBot = async () => {
+    if (!activeBot) return;
+    setLoading(true);
     try {
       const res = await fetch("/api/bot/daemon", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          action: "update_config",
+          action: "toggle_bot",
+          botId: activeBot.id,
+          enabled: !activeBot.enabled,
+        }),
+      });
+      const data = await res.json();
+      if (data.success && data.daemon) {
+        setDaemon(data.daemon);
+        showToast(`Bot "${activeBot.name}" is now ${!activeBot.enabled ? "ACTIVE" : "PAUSED"}`);
+      }
+    } catch {
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleSelectBot = async (botId: string) => {
+    try {
+      const res = await fetch("/api/bot/daemon", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "select_active_bot", botId }),
+      });
+      const data = await res.json();
+      if (data.success && data.daemon) {
+        setDaemon(data.daemon);
+      }
+    } catch {}
+  };
+
+  const handleCreateBot = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newBotName.trim()) return;
+    try {
+      const res = await fetch("/api/bot/daemon", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "create_bot",
+          name: newBotName.trim(),
+          setFileName: newBotSetPreset,
+          maxMarginCapUsdt: newBotMarginCap,
+        }),
+      });
+      const data = await res.json();
+      if (data.success && data.daemon) {
+        setDaemon(data.daemon);
+        setIsCreateBotModalOpen(false);
+        setNewBotName("");
+        showToast(`Created bot "${newBotName.trim()}" successfully!`);
+      }
+    } catch {}
+  };
+
+  const handleRenameBot = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!activeBot || !renameBotName.trim()) return;
+    try {
+      const res = await fetch("/api/bot/daemon", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "edit_bot",
+          botId: activeBot.id,
+          updates: { name: renameBotName.trim() },
+        }),
+      });
+      const data = await res.json();
+      if (data.success && data.daemon) {
+        setDaemon(data.daemon);
+        setIsRenameBotModalOpen(false);
+        showToast(`Bot renamed to "${renameBotName.trim()}"`);
+      }
+    } catch {}
+  };
+
+  const handleDeleteBot = async (botId: string, botName: string) => {
+    if ((daemon?.bots?.length ?? 0) <= 1) {
+      showToast("Cannot delete the only bot instance.");
+      return;
+    }
+    try {
+      const res = await fetch("/api/bot/daemon", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "delete_bot", botId }),
+      });
+      const data = await res.json();
+      if (data.success && data.daemon) {
+        setDaemon(data.daemon);
+        showToast(`Deleted bot "${botName}"`);
+      }
+    } catch {}
+  };
+
+  const handleApplySetFile = async (fileName: string) => {
+    if (!activeBot || !fileName) return;
+    try {
+      const res = await fetch("/api/bot/daemon", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "apply_set_file",
+          botId: activeBot.id,
+          fileName,
+        }),
+      });
+      const data = await res.json();
+      if (data.success && data.daemon) {
+        setDaemon(data.daemon);
+        showToast(`Loaded preset "${fileName}" into "${activeBot.name}"`);
+      }
+    } catch {}
+  };
+
+  const handleSaveSetFile = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!activeBot || !saveSetFileName.trim()) return;
+    try {
+      const res = await fetch("/api/bot/daemon", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "save_set_file",
+          botId: activeBot.id,
+          fileName: saveSetFileName.trim(),
+          name: saveSetName.trim() || saveSetFileName.trim(),
+          description: saveSetDescription.trim() || "Custom user quantitative preset",
           config: {
             minSpreadBps,
             maxPriceDivergencePct,
@@ -179,6 +381,7 @@ export default function AutoBotPanel() {
             leverageMode,
             customLeverage,
             maxSimultaneousHedges,
+            maxMarginCapUsdt,
             closeMaxPriceDivergencePct,
             timingMode,
           },
@@ -187,8 +390,93 @@ export default function AutoBotPanel() {
       const data = await res.json();
       if (data.success && data.daemon) {
         setDaemon(data.daemon);
-        setSaveSuccess(true);
-        setTimeout(() => setSaveSuccess(false), 3000);
+        setIsSaveSetModalOpen(false);
+        setSaveSetFileName("");
+        setSaveSetName("");
+        setSaveSetDescription("");
+        showToast(`Saved Strategy Preset to disk!`);
+      }
+    } catch {}
+  };
+
+  const handleDeleteSetFile = async (fileName: string) => {
+    try {
+      const res = await fetch("/api/bot/daemon", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "delete_set_file", fileName }),
+      });
+      const data = await res.json();
+      if (data.success && data.daemon) {
+        setDaemon(data.daemon);
+        showToast(`Deleted preset file "${fileName}"`);
+      }
+    } catch {}
+  };
+
+  const handleDownloadSetFile = (fileName: string) => {
+    window.open(`/api/bot/daemon?action=download_set_file&fileName=${encodeURIComponent(fileName)}`, "_blank");
+  };
+
+  const handleResetBotMemory = async () => {
+    if (!activeBot) return;
+    try {
+      const res = await fetch("/api/bot/daemon", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "reset_bot_memory", botId: activeBot.id }),
+      });
+      const data = await res.json();
+      if (data.success && data.daemon) {
+        setDaemon(data.daemon);
+        showToast(`Cleared all flatten memory locks for "${activeBot.name}"!`);
+      }
+    } catch {}
+  };
+
+  const handleUnlockCoin = async (symbol: string) => {
+    if (!activeBot) return;
+    try {
+      const res = await fetch("/api/bot/daemon", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "unlock_coin", symbol, botId: activeBot.id }),
+      });
+      const data = await res.json();
+      if (data.success && data.daemon) {
+        setDaemon(data.daemon);
+        showToast(`Unlocked ${symbol} for bot "${activeBot.name}"`);
+      }
+    } catch {}
+  };
+
+  const handleSaveConfig = async () => {
+    if (!activeBot) return;
+    setIsSavingConfig(true);
+    try {
+      const res = await fetch("/api/bot/daemon", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "update_config",
+          botId: activeBot.id,
+          config: {
+            minSpreadBps,
+            maxPriceDivergencePct,
+            balanceAllocationPct,
+            leverageMode,
+            customLeverage,
+            maxSimultaneousHedges,
+            maxMarginCapUsdt,
+            closeMaxPriceDivergencePct,
+            timingMode,
+          },
+        }),
+      });
+      const data = await res.json();
+      if (data.success && data.daemon) {
+        setDaemon(data.daemon);
+        showToast("Bot settings saved & persisted to disk!");
       }
     } catch {
     } finally {
@@ -204,18 +492,20 @@ export default function AutoBotPanel() {
         body: JSON.stringify({ action: "force_scan" }),
       });
       fetchStatus();
+      showToast("Manual scan cycle triggered!");
     } catch {}
   };
 
   const handleForceCloseHedge = async (id: string, symbol: string) => {
-    if (!confirm(`Force close hedge on ${symbol}?`)) return;
+    if (!activeBot) return;
     try {
       await fetch("/api/bot/daemon", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action: "close_hedge", hedgeId: id, symbol }),
+        body: JSON.stringify({ action: "close_hedge", hedgeId: id, symbol, botId: activeBot.id }),
       });
       fetchStatus();
+      showToast(`Force closed ${symbol} in bot "${activeBot.name}"`);
     } catch {}
   };
 
@@ -227,14 +517,24 @@ export default function AutoBotPanel() {
         body: JSON.stringify({ action: "clear_logs" }),
       });
       fetchStatus();
+      showToast("Audit stream cleared");
     } catch {}
   };
 
-  const isBotActive = daemon?.isRunning && daemon?.config?.enabled;
-  const topCandidate = daemon?.lastEvaluatedCandidate;
+  const isMasterRunning = Boolean(daemon?.isRunning);
+  const isBotActive = Boolean(isMasterRunning && activeBot?.enabled);
+  const topCandidate = activeBot?.lastEvaluatedCandidate;
   const currentSpread = topCandidate?.spreadBps || 0;
-  const targetThreshold = daemon?.config?.minSpreadBps || 5.0;
+  const targetThreshold = activeBot?.config?.minSpreadBps || 5.0;
   const corridorPct = Math.min(100, Math.max(8, (currentSpread / 25) * 100));
+
+  // Compute Margin Usage for active bot
+  const currentBotMargin = (activeBot?.activeHedges || []).reduce((sum, h) => {
+    const lev = h.binanceLeverage || 20;
+    return sum + h.notionalUsdt / lev;
+  }, 0);
+  const botMarginCap = activeBot?.maxMarginCapUsdt || 500;
+  const marginUsagePct = Math.min(100, (currentBotMargin / botMarginCap) * 100);
 
   return (
     <div
@@ -244,7 +544,15 @@ export default function AutoBotPanel() {
           : "border-border bg-surface"
       }`}
     >
-      {/* Radiant Ambient Spotlight (Aceternity / Magic UI Inspired) */}
+      {/* Toast Notification Banner */}
+      {hudNotice && (
+        <div className="absolute top-3 right-4 z-50 bg-emerald-950/90 border border-emerald-500/60 text-emerald-200 text-xs px-3.5 py-1.5 rounded-lg shadow-xl shadow-emerald-950/50 flex items-center space-x-2 animate-bounce">
+          <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
+          <span className="font-semibold">{hudNotice}</span>
+        </div>
+      )}
+
+      {/* Radiant Ambient Spotlight */}
       <div
         className={`absolute -top-32 -right-32 w-96 h-96 rounded-full blur-[110px] pointer-events-none transition-opacity duration-700 ${
           isBotActive ? "bg-emerald-500/15 opacity-100" : "bg-zinc-700/10 opacity-40"
@@ -256,26 +564,120 @@ export default function AutoBotPanel() {
         }`}
       />
 
-      {/* Header section: Master Bot Switch & Telemetry */}
-      <div className="flex flex-col lg:flex-row items-start lg:items-center justify-between gap-4 pb-5 border-b border-border/80 relative z-10">
+      {/* ─────────────────────────────────────────────────────────────
+          1. MULTI-BOT TABBED ROSTER BAR
+          ───────────────────────────────────────────────────────────── */}
+      <div className="flex flex-wrap items-center justify-between gap-2 pb-3 mb-4 border-b border-border/70 relative z-10">
+        <div className="flex flex-wrap items-center gap-1.5 overflow-x-auto max-w-full py-1">
+          {(daemon?.bots || []).map((bot) => {
+            const isSelected = bot.id === (activeBot?.id || daemon?.activeBotId);
+            const isRunning = isMasterRunning && bot.enabled;
+
+            return (
+              <div
+                key={bot.id}
+                className={`group flex items-center space-x-2 px-3 py-1.5 rounded-xl text-xs font-semibold border transition-all cursor-pointer ${
+                  isSelected
+                    ? "bg-zinc-800 text-zinc-100 border-emerald-500/60 shadow-md shadow-emerald-500/10 ring-1 ring-emerald-500/30"
+                    : "bg-surface-card hover:bg-zinc-800/60 text-zinc-400 border-border"
+                }`}
+                onClick={() => handleSelectBot(bot.id)}
+              >
+                <span
+                  className={`w-2 h-2 rounded-full ${
+                    isRunning ? "bg-emerald-400 animate-pulse" : "bg-zinc-500"
+                  }`}
+                />
+                <span className="font-bold tracking-tight">{bot.name}</span>
+                <span className="text-[10px] px-1.5 py-0.2 rounded bg-zinc-900 text-zinc-400 border border-zinc-800 font-mono">
+                  {bot.activeHedges?.length || 0}/{bot.config?.maxSimultaneousHedges || 3}
+                </span>
+
+                {(daemon?.bots?.length ?? 0) > 1 && (
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleDeleteBot(bot.id, bot.name);
+                    }}
+                    className="opacity-0 group-hover:opacity-100 text-zinc-500 hover:text-rose-400 transition-opacity p-0.5"
+                    title={`Delete ${bot.name}`}
+                  >
+                    <X className="w-3 h-3" />
+                  </button>
+                )}
+              </div>
+            );
+          })}
+
+          <button
+            onClick={() => {
+              setNewBotName(`Bot ${(daemon?.bots?.length ?? 0) + 1}`);
+              setIsCreateBotModalOpen(true);
+            }}
+            className="flex items-center space-x-1.5 px-3 py-1.5 rounded-xl border border-dashed border-zinc-700 hover:border-emerald-500/60 text-zinc-400 hover:text-emerald-400 text-xs font-bold transition-all bg-zinc-900/40"
+          >
+            <Plus className="w-3.5 h-3.5" />
+            <span>NEW BOT</span>
+          </button>
+        </div>
+
+        {/* Global Master Daemon Switch */}
+        <div className="flex items-center space-x-2">
+          <span className="text-[11px] font-semibold text-zinc-400 hidden sm:inline">
+            MASTER DAEMON 24/7:
+          </span>
+          <button
+            onClick={toggleMasterDaemon}
+            className={`px-3 py-1.5 rounded-xl text-xs font-bold flex items-center space-x-1.5 border transition-all ${
+              isMasterRunning
+                ? "bg-emerald-950/80 text-emerald-300 border-emerald-600/80 shadow-sm shadow-emerald-500/20"
+                : "bg-zinc-900 text-zinc-500 border-zinc-800 hover:text-zinc-300"
+            }`}
+          >
+            <Power className="w-3.5 h-3.5" />
+            <span>{isMasterRunning ? "SERVER ON" : "SERVER PAUSED"}</span>
+          </button>
+        </div>
+      </div>
+
+      {/* ─────────────────────────────────────────────────────────────
+          2. ACTIVE BOT COCKPIT HEADER & SET FILE CONTROLS
+          ───────────────────────────────────────────────────────────── */}
+      <div className="flex flex-col lg:flex-row items-start lg:items-center justify-between gap-4 pb-4 border-b border-border/80 relative z-10">
         <div className="space-y-1.5">
           <div className="flex flex-wrap items-center gap-2.5">
-            <span className="relative flex h-3 w-3">
-              {isBotActive && (
-                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
-              )}
-              <span
-                className={`relative inline-flex rounded-full h-3 w-3 ${
-                  isBotActive ? "bg-emerald-500" : "bg-zinc-600"
-                }`}
-              ></span>
-            </span>
-
             <div className="flex items-center space-x-2">
               <Bot className={`w-5 h-5 ${isBotActive ? "text-emerald-400" : "text-zinc-500"}`} />
-              <h2 className="text-base sm:text-lg font-black uppercase tracking-tight text-zinc-100">
-                24/7 AUTONOMOUS ARBITRAGE BOT // ENGINE
+              <h2 className="text-base sm:text-lg font-black uppercase tracking-tight text-zinc-100 flex items-center gap-2">
+                <span>BOT: {activeBot?.name || "PRIMARY BOT"}</span>
+                <button
+                  onClick={() => {
+                    setRenameBotName(activeBot?.name || "");
+                    setIsRenameBotModalOpen(true);
+                  }}
+                  className="text-zinc-500 hover:text-accent-amber p-1 transition-colors"
+                  title="Rename this bot"
+                >
+                  <Edit2 className="w-3.5 h-3.5" />
+                </button>
               </h2>
+            </div>
+
+            {/* Set File Badge & Quick Selector */}
+            <div className="flex items-center space-x-1 px-2.5 py-0.5 rounded-lg bg-zinc-900 border border-zinc-800 text-[11px] text-zinc-300">
+              <FileText className="w-3.5 h-3.5 text-accent-cyan" />
+              <span className="text-zinc-500 font-semibold text-[10px]">SET:</span>
+              <select
+                value={activeBot?.activeSetFileName || "conservative_5bps_sniper.set"}
+                onChange={(e) => handleApplySetFile(e.target.value)}
+                className="bg-transparent text-accent-cyan font-bold outline-none cursor-pointer pr-1"
+              >
+                {(daemon?.setFiles || []).map((sf) => (
+                  <option key={sf.fileName} value={sf.fileName} className="bg-zinc-900 text-zinc-200">
+                    {sf.name} ({sf.fileName})
+                  </option>
+                ))}
+              </select>
             </div>
 
             <span
@@ -285,33 +687,60 @@ export default function AutoBotPanel() {
                   : "bg-zinc-900 text-zinc-500 border-zinc-800"
               }`}
             >
-              {isBotActive ? "RUNNING 24/7 (SERVER PERSISTENT)" : "STANDBY"}
+              {isBotActive ? "ACTIVE (SCANNING)" : "PAUSED"}
             </span>
           </div>
 
           <p className="text-xs text-zinc-400 max-w-3xl leading-relaxed">
-            Autonomous dual-venue funding rate harvester. Enforces under 1-minute (&lt;1m) countdown settlement sniper, &ge;{targetThreshold} bps spread, and zero-basis parity (&le;{daemon?.config?.maxPriceDivergencePct ?? 0.01}% divergence). Operates 24/7 on backend even when logged out.
+            Running preset <strong className="text-zinc-200">{activeBot?.activeSetFileName}</strong>.
+            Target spread &ge;{targetThreshold} bps, parity tolerance &le;
+            {activeBot?.config?.maxPriceDivergencePct ?? 0.03}%, mode:{" "}
+            <span className="text-accent-amber font-semibold">
+              {activeBot?.config?.timingMode === "CONTINUOUS_SPREAD" ? "Continuous Spread" : "Funding Sniper (<1m)"}
+            </span>
+            . Margin Cap: ${botMarginCap} USDT.
           </p>
         </div>
 
-        {/* Master ON/OFF Button & Action Bar */}
-        <div className="flex flex-wrap items-center gap-2.5 w-full lg:w-auto">
+        {/* Set File Quick Buttons & Power Toggle */}
+        <div className="flex flex-wrap items-center gap-2 w-full lg:w-auto">
           <button
-            onClick={handleForceScan}
-            disabled={!isBotActive}
-            className="px-3.5 py-2.5 rounded-xl bg-surface-card hover:bg-zinc-800 border border-border text-xs text-zinc-300 font-semibold flex items-center space-x-2 active:scale-95 transition-all disabled:opacity-40 hover:border-zinc-700"
-            title="Trigger immediate scan cycle across all pairs"
+            onClick={() => {
+              setSaveSetFileName(`${activeBot?.name?.toLowerCase().replace(/\s+/g, "_") || "strategy"}.set`);
+              setSaveSetName(activeBot?.name || "Custom Preset");
+              setIsSaveSetModalOpen(true);
+            }}
+            className="px-2.5 py-2 rounded-xl bg-surface-card hover:bg-zinc-800 border border-border text-xs text-zinc-300 font-semibold flex items-center space-x-1.5 transition-all"
+            title="Save current bot parameters as a .set preset file"
           >
-            <RefreshCw className="w-3.5 h-3.5" />
-            <span className="hidden sm:inline">Force Scan</span>
+            <Save className="w-3.5 h-3.5 text-accent-amber" />
+            <span className="hidden sm:inline">Save .set</span>
+          </button>
+
+          <button
+            onClick={() => handleDownloadSetFile(activeBot?.activeSetFileName || "conservative_5bps_sniper.set")}
+            className="px-2.5 py-2 rounded-xl bg-surface-card hover:bg-zinc-800 border border-border text-xs text-zinc-300 font-semibold flex items-center space-x-1.5 transition-all"
+            title="Download MetaTrader-style key-value .set file"
+          >
+            <Download className="w-3.5 h-3.5 text-accent-cyan" />
+            <span className="hidden sm:inline">Download .set</span>
+          </button>
+
+          <button
+            onClick={() => setIsSetManagerOpen(true)}
+            className="px-2.5 py-2 rounded-xl bg-surface-card hover:bg-zinc-800 border border-border text-xs text-zinc-300 font-semibold flex items-center space-x-1.5 transition-all"
+            title="Manage all .set presets"
+          >
+            <FolderOpen className="w-3.5 h-3.5 text-zinc-400" />
+            <span className="hidden sm:inline">Presets</span>
           </button>
 
           <button
             onClick={() => setIsConfigOpen(!isConfigOpen)}
-            className={`px-3.5 py-2.5 rounded-xl border text-xs font-semibold flex items-center space-x-2 active:scale-95 transition-all ${
+            className={`px-3 py-2 rounded-xl border text-xs font-semibold flex items-center space-x-1.5 transition-all ${
               isConfigOpen
-                ? "bg-amber-500/20 text-accent-amber border-amber-500/60 shadow-md shadow-amber-500/10"
-                : "bg-surface-card hover:bg-zinc-800 border-border text-zinc-300 hover:border-zinc-700"
+                ? "bg-amber-500/20 text-accent-amber border-amber-500/60"
+                : "bg-surface-card hover:bg-zinc-800 border-border text-zinc-300"
             }`}
           >
             <Settings className="w-3.5 h-3.5" />
@@ -320,27 +749,127 @@ export default function AutoBotPanel() {
           </button>
 
           <button
-            onClick={toggleBot}
+            onClick={toggleActiveBot}
             disabled={loading}
-            className={`flex-1 sm:flex-none px-5 py-2.5 rounded-xl text-xs font-bold flex items-center justify-center space-x-2.5 transition-all shadow-xl active:scale-95 ${
+            className={`flex-1 sm:flex-none px-4 py-2 rounded-xl text-xs font-bold flex items-center justify-center space-x-2 transition-all shadow-xl active:scale-95 ${
               isBotActive
                 ? "bg-rose-600 hover:bg-rose-500 text-white shadow-rose-950/60 ring-2 ring-rose-400/50"
-                : "bg-emerald-600 hover:bg-emerald-500 text-white shadow-emerald-950/60 ring-2 ring-emerald-400/60 animate-pulse"
+                : "bg-emerald-600 hover:bg-emerald-500 text-white shadow-emerald-950/60 ring-2 ring-emerald-400/60"
             }`}
           >
             <Power className="w-4 h-4" />
-            <span>{isBotActive ? "PAUSE AUTONOMOUS BOT" : "ACTIVATE 24/7 AUTO-BOT"}</span>
+            <span>{isBotActive ? "PAUSE THIS BOT" : "START THIS BOT"}</span>
           </button>
         </div>
       </div>
 
-      {/* Dynamic Opportunity Corridor Radar Bar (Blueprint B from elite-web-ui-motion) */}
+      {/* ─────────────────────────────────────────────────────────────
+          3. HARD MARGIN CAP ALLOCATION BAR
+          ───────────────────────────────────────────────────────────── */}
+      <div className="mt-3 p-3 rounded-xl bg-zinc-950/60 border border-border/70 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs">
+        <div className="flex items-center space-x-2.5">
+          <DollarSign className="w-4 h-4 text-emerald-400" />
+          <div>
+            <span className="text-zinc-400 font-semibold text-[11px]">HARD USDT MARGIN CAP:</span>
+            <div className="font-bold text-zinc-200">
+              ${currentBotMargin.toFixed(1)} / ${botMarginCap} USDT
+              <span className="text-[10px] text-zinc-500 font-normal ml-1.5">
+                ({marginUsagePct.toFixed(1)}% allocated across {activeBot?.activeHedges?.length || 0} hedges)
+              </span>
+            </div>
+          </div>
+        </div>
+
+        <div className="flex-1 max-w-xs">
+          <div className="w-full bg-zinc-900 rounded-full h-2 overflow-hidden border border-zinc-800">
+            <div
+              className={`h-full transition-all duration-500 ${
+                marginUsagePct > 90
+                  ? "bg-rose-500"
+                  : marginUsagePct > 60
+                  ? "bg-amber-400"
+                  : "bg-emerald-400"
+              }`}
+              style={{ width: `${marginUsagePct}%` }}
+            />
+          </div>
+        </div>
+
+        <button
+          onClick={handleForceScan}
+          disabled={!isBotActive}
+          className="px-3 py-1.5 rounded-lg bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 text-[11px] text-zinc-300 font-semibold flex items-center space-x-1.5 self-start sm:self-auto disabled:opacity-40"
+        >
+          <RefreshCw className="w-3 h-3" />
+          <span>FORCE SCAN</span>
+        </button>
+      </div>
+
+      {/* ─────────────────────────────────────────────────────────────
+          4. PER-BOT FLATTEN MEMORY LOCK INSPECTOR
+          ───────────────────────────────────────────────────────────── */}
+      <div className="mt-3 p-3.5 rounded-xl bg-zinc-950/80 border border-border/80 relative">
+        <div className="flex flex-wrap items-center justify-between gap-2 mb-2">
+          <div className="flex items-center space-x-2">
+            <Lock className="w-3.5 h-3.5 text-accent-amber" />
+            <span className="text-[11px] font-bold text-zinc-200 uppercase tracking-wide">
+              FLATTEN MEMORY LOCK // COIN BLACKLIST
+            </span>
+            <span className="text-[10px] px-2 py-0.2 rounded-full bg-amber-500/10 text-accent-amber border border-amber-500/30 font-semibold">
+              {activeBot?.flattenedCoinsBlacklist?.length || 0} LOCKED
+            </span>
+          </div>
+
+          <button
+            onClick={handleResetBotMemory}
+            disabled={!activeBot?.flattenedCoinsBlacklist || activeBot.flattenedCoinsBlacklist.length === 0}
+            className="px-2.5 py-1 rounded-lg bg-rose-950/40 hover:bg-rose-900/60 border border-rose-800/60 text-rose-300 text-[10px] font-bold flex items-center space-x-1 transition-all disabled:opacity-40"
+            title="Clear all memory locks for this bot"
+          >
+            <RefreshCw className="w-3 h-3" />
+            <span>FORCE RESET BOT MEMORY</span>
+          </button>
+        </div>
+
+        <p className="text-[11px] text-zinc-400 leading-relaxed mb-2.5">
+          Coins flattened by this bot are permanently locked from autonomous re-entry to prevent repetitive churn, until unlocked individually or memory is force reset.
+        </p>
+
+        {(!activeBot?.flattenedCoinsBlacklist || activeBot.flattenedCoinsBlacklist.length === 0) ? (
+          <div className="py-1 px-2.5 rounded-lg bg-zinc-900/60 border border-dashed border-zinc-800 text-[11px] text-emerald-400/90 flex items-center space-x-2 font-mono">
+            <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+            <span>All dual-exchange universe coins eligible. No memory locks active for &quot;{activeBot?.name}&quot;.</span>
+          </div>
+        ) : (
+          <div className="flex flex-wrap items-center gap-1.5 pt-1">
+            {activeBot.flattenedCoinsBlacklist.map((coin) => (
+              <span
+                key={coin}
+                className="inline-flex items-center space-x-1.5 px-2.5 py-1 rounded-lg bg-rose-950/30 border border-rose-800/50 text-rose-300 text-[11px] font-bold font-mono"
+              >
+                <span>{coin}</span>
+                <button
+                  onClick={() => handleUnlockCoin(coin)}
+                  className="hover:text-rose-100 p-0.5"
+                  title={`Unlock ${coin}`}
+                >
+                  <X className="w-3 h-3" />
+                </button>
+              </span>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* ─────────────────────────────────────────────────────────────
+          5. OPPORTUNITY CORRIDOR RADAR
+          ───────────────────────────────────────────────────────────── */}
       <div className="mt-4 p-3.5 rounded-xl bg-zinc-950/70 border border-border/80 space-y-2 relative">
         <div className="flex items-center justify-between text-xs">
           <div className="flex items-center space-x-2">
             <Gauge className="w-3.5 h-3.5 text-accent-cyan" />
             <span className="text-[11px] font-bold text-zinc-300 uppercase">
-              LIVE OPPORTUNITY CORRIDOR RADAR
+              LIVE OPPORTUNITY CORRIDOR RADAR ({activeBot?.name})
             </span>
             {topCandidate?.symbol && (
               <span className="text-[10px] px-1.5 py-0.2 rounded bg-zinc-900 border border-zinc-800 text-accent-amber font-mono font-bold">
@@ -359,7 +888,6 @@ export default function AutoBotPanel() {
           </div>
         </div>
 
-        {/* Multi-stage Corridor Track */}
         <div className="w-full bg-zinc-900 rounded-full h-2.5 overflow-hidden border border-zinc-800 relative">
           <div
             className={`h-full transition-all duration-500 rounded-full ${
@@ -379,15 +907,17 @@ export default function AutoBotPanel() {
         </div>
       </div>
 
-      {/* Telemetry Stats Grid (Tremor & Modern FinTech Card Spec) */}
+      {/* ─────────────────────────────────────────────────────────────
+          6. TELEMETRY STATS GRID
+          ───────────────────────────────────────────────────────────── */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 pt-4 text-xs font-mono">
         <div className="bg-surface-card p-3 rounded-xl border border-border hover:border-zinc-700 transition-colors">
           <div className="flex items-center justify-between text-[10px] text-zinc-500 uppercase">
-            <span>DAEMON STATE</span>
+            <span>BOT STATUS</span>
             <Radio className={`w-3 h-3 ${isBotActive ? "text-emerald-400 animate-pulse" : "text-zinc-600"}`} />
           </div>
           <div className="font-bold text-zinc-200 truncate mt-1 text-[11px]">
-            {daemon?.statusText || "INITIALIZING..."}
+            {activeBot?.statusText || "INITIALIZING..."}
           </div>
         </div>
 
@@ -398,17 +928,17 @@ export default function AutoBotPanel() {
           </div>
           <div className="flex items-center space-x-1.5 mt-1">
             <span className="font-bold text-accent-amber text-base">
-              {daemon?.activeHedges?.length ?? 0}
+              {activeBot?.activeHedges?.length ?? 0}
             </span>
             <span className="text-zinc-500 text-[10px]">
-              / {daemon?.config?.maxSimultaneousHedges ?? 3} MAX SLOTS
+              / {activeBot?.config?.maxSimultaneousHedges ?? 3} MAX
             </span>
           </div>
         </div>
 
         <div className="bg-surface-card p-3 rounded-xl border border-border hover:border-zinc-700 transition-colors">
           <div className="flex items-center justify-between text-[10px] text-zinc-500 uppercase">
-            <span>CYCLES COMPLETED</span>
+            <span>TOTAL CYCLES</span>
             <Activity className="w-3 h-3 text-accent-cyan" />
           </div>
           <div className="font-bold text-zinc-200 mt-1">
@@ -421,285 +951,190 @@ export default function AutoBotPanel() {
 
         <div className="bg-surface-card p-3 rounded-xl border border-border hover:border-zinc-700 transition-colors">
           <div className="flex items-center justify-between text-[10px] text-zinc-500 uppercase">
-            <span>CANDIDATE RADAR</span>
+            <span>TOP CANDIDATE</span>
             <span className="text-[9px] px-1.5 py-0.5 rounded bg-zinc-800 text-accent-amber font-mono font-bold">
-              {daemon?.config?.timingMode === "CONTINUOUS_SPREAD" ? "⚡ CONTINUOUS" : "⏳ SNIPER"}
+              {activeBot?.config?.timingMode === "CONTINUOUS_SPREAD" ? "⚡ CONT" : "⏳ SNIPER"}
             </span>
           </div>
           <div className="font-bold text-zinc-200 mt-1 text-[11px] truncate">
-            {daemon?.lastEvaluatedCandidate?.symbol ? (
+            {topCandidate?.symbol ? (
               <div className="flex items-center space-x-1.5">
                 <span
                   className={
-                    daemon.lastEvaluatedCandidate.qualified
-                      ? "text-emerald-400 font-bold"
-                      : "text-zinc-300 font-bold"
+                    topCandidate.qualified ? "text-emerald-400 font-bold" : "text-zinc-300 font-bold"
                   }
                 >
-                  {daemon.lastEvaluatedCandidate.symbol}
+                  {topCandidate.symbol}
                 </span>
                 <span className="text-zinc-500 text-[10px]">
-                  ({daemon.lastEvaluatedCandidate.spreadBps}bps · {daemon.lastEvaluatedCandidate.divergencePct}% div)
+                  ({topCandidate.spreadBps}bps · {topCandidate.divergencePct}% div)
                 </span>
               </div>
             ) : (
               <span className="text-zinc-500">Scanning pairs...</span>
             )}
           </div>
-          {daemon?.lastEvaluatedCandidate && (
-            <div className="text-[9px] text-zinc-400 mt-1 truncate" title={daemon.lastEvaluatedCandidate.reason}>
-              Filter: <span className={daemon.lastEvaluatedCandidate.qualified ? "text-emerald-400" : "text-amber-400/90"}>{daemon.lastEvaluatedCandidate.reason}</span>
+          {topCandidate && (
+            <div
+              className={`text-[9px] mt-1 truncate ${
+                topCandidate.reason?.includes("[LOCKED IN MEMORY]")
+                  ? "text-rose-400 font-bold"
+                  : "text-zinc-400"
+              }`}
+              title={topCandidate.reason}
+            >
+              {topCandidate.reason}
             </div>
           )}
         </div>
       </div>
 
-      {/* Collapsible Admin Settings Drawer with Tactile Micro-Interactions */}
+      {/* ─────────────────────────────────────────────────────────────
+          7. CONFIGURATION DRAWER (PER-BOT)
+          ───────────────────────────────────────────────────────────── */}
       {isConfigOpen && (
-        <div className="mt-4 p-5 rounded-2xl bg-zinc-950/95 border border-accent-amber/40 space-y-4 text-xs animate-in fade-in slide-in-from-top-3 duration-200 shadow-2xl">
-          <div className="flex items-center justify-between pb-3 border-b border-zinc-800">
-            <div className="flex items-center space-x-2 text-accent-amber font-bold">
-              <Sliders className="w-4 h-4" />
-              <span>ADMIN ARBITRAGE BOT SETTINGS (CONFIGURABLE)</span>
+        <div className="mt-4 p-4 rounded-xl bg-surface-card border border-border/80 space-y-4">
+          <div className="flex items-center justify-between border-b border-border/60 pb-2">
+            <div className="flex items-center space-x-2">
+              <Sliders className="w-4 h-4 text-accent-amber" />
+              <span className="text-xs font-black uppercase text-zinc-200">
+                BOT PARAMETERS: {activeBot?.name}
+              </span>
             </div>
-            {saveSuccess && (
-              <div className="flex items-center space-x-1.5 text-emerald-400 text-xs font-bold animate-in fade-in">
-                <CheckCircle2 className="w-4 h-4" />
-                <span>SETTINGS SAVED TO DISK</span>
-              </div>
-            )}
+            <span className="text-[10px] text-zinc-400">
+              Active Strategy Set: <strong>{activeBot?.activeSetFileName}</strong>
+            </span>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
-            {/* Setting 0: Arbitrage Timing Strategy */}
-            <div className="space-y-2 bg-surface-card p-3 rounded-xl border border-border">
-              <label className="text-[11px] text-zinc-400 font-semibold flex items-center justify-between">
-                <span>ARBITRAGE TIMING MODE</span>
-                <span className="text-accent-amber font-bold">
-                  {timingMode === "CONTINUOUS_SPREAD" ? "CONTINUOUS" : "SNIPER (< 1m)"}
-                </span>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-xs font-mono">
+            {/* Timing Mode */}
+            <div className="space-y-1">
+              <label className="text-[10px] text-zinc-400 font-semibold block uppercase">
+                EXECUTION TIMING MODE
               </label>
-              <div className="grid grid-cols-2 gap-2">
+              <div className="grid grid-cols-2 gap-1.5">
                 <button
                   type="button"
                   onClick={() => setTimingMode("FUNDING_SNIPER_1M")}
-                  className={`py-2 px-2 rounded-lg text-xs font-bold border active:scale-95 transition-all text-center ${
+                  className={`px-2.5 py-1.5 rounded-lg border text-[11px] font-bold transition-all ${
                     timingMode === "FUNDING_SNIPER_1M"
-                      ? "bg-amber-500/20 border-accent-amber text-accent-amber shadow-sm ring-1 ring-amber-400/40"
-                      : "bg-surface border-border text-zinc-400 hover:border-zinc-700"
+                      ? "bg-amber-500/20 text-accent-amber border-amber-500/60 shadow-sm"
+                      : "bg-zinc-900 border-zinc-800 text-zinc-400 hover:text-zinc-200"
                   }`}
                 >
-                  ⏳ SNIPER (&lt; 1m)
+                  ⏳ Funding Sniper (&lt;1m)
                 </button>
                 <button
                   type="button"
                   onClick={() => setTimingMode("CONTINUOUS_SPREAD")}
-                  className={`py-2 px-2 rounded-lg text-xs font-bold border active:scale-95 transition-all text-center ${
+                  className={`px-2.5 py-1.5 rounded-lg border text-[11px] font-bold transition-all ${
                     timingMode === "CONTINUOUS_SPREAD"
-                      ? "bg-emerald-500/20 border-accent-emerald text-accent-emerald shadow-sm ring-1 ring-emerald-400/40"
-                      : "bg-surface border-border text-zinc-400 hover:border-zinc-700"
+                      ? "bg-cyan-500/20 text-accent-cyan border-cyan-500/60 shadow-sm"
+                      : "bg-zinc-900 border-zinc-800 text-zinc-400 hover:text-zinc-200"
                   }`}
                 >
-                  ⚡ CONTINUOUS
+                  ⚡ Continuous Spread
                 </button>
               </div>
-              <p className="text-[10px] text-zinc-500">
-                {timingMode === "CONTINUOUS_SPREAD"
-                  ? "Continuous: Executes immediately whenever spread ≥ min threshold and price parity matches."
-                  : "Sniper: Waits until the final 60s before settlement to capture payout and close."}
-              </p>
             </div>
 
-            {/* Setting 1: Min Spread Threshold */}
-            <div className="space-y-2 bg-surface-card p-3 rounded-xl border border-border">
-              <label className="text-[11px] text-zinc-400 font-semibold flex items-center justify-between">
-                <span>MIN SPREAD THRESHOLD (BPS)</span>
-                <span className="text-accent-amber font-bold">{minSpreadBps} bps</span>
+            {/* Min Spread */}
+            <div className="space-y-1">
+              <label className="text-[10px] text-zinc-400 font-semibold block uppercase">
+                MIN SPREAD THRESHOLD (BPS)
               </label>
-              <div className="flex items-center space-x-1.5">
-                {[3, 5, 8, 10, 15].map((val) => (
-                  <button
-                    key={val}
-                    type="button"
-                    onClick={() => setMinSpreadBps(val)}
-                    className={`px-2.5 py-1.5 rounded-lg text-xs font-bold border active:scale-95 transition-all ${
-                      minSpreadBps === val
-                        ? "bg-accent-amber text-zinc-950 border-accent-amber shadow-sm ring-1 ring-amber-400"
-                        : "bg-surface border-border text-zinc-400 hover:text-zinc-200 hover:border-zinc-700"
-                    }`}
-                  >
-                    {val}
-                  </button>
-                ))}
-                <input
-                  type="number"
-                  step="0.5"
-                  value={minSpreadBps}
-                  onChange={(e) => setMinSpreadBps(parseFloat(e.target.value) || 0)}
-                  className="w-16 px-2 py-1.5 rounded-lg bg-surface border border-border text-zinc-200 text-xs text-center font-bold"
-                />
-              </div>
-              <p className="text-[10px] text-zinc-500">
-                Default: 5 bps. Only coins with spread &ge; this value qualify.
-              </p>
+              <input
+                type="number"
+                step="0.5"
+                min="1"
+                max="50"
+                value={minSpreadBps}
+                onChange={(e) => setMinSpreadBps(parseFloat(e.target.value) || 5.0)}
+                className="w-full bg-zinc-900 border border-zinc-800 rounded-lg px-3 py-1.5 text-zinc-100 text-xs focus:border-amber-500 outline-none"
+              />
             </div>
 
-            {/* Setting 2: Entry Price Parity Tolerance */}
-            <div className="space-y-2 bg-surface-card p-3 rounded-xl border border-border">
-              <label className="text-[11px] text-zinc-400 font-semibold flex items-center justify-between">
-                <span>ENTRY PRICE PARITY TOLERANCE</span>
-                <span className="text-accent-cyan font-bold">{maxPriceDivergencePct}%</span>
-              </label>
-              <div className="flex items-center space-x-1.5">
-                {[0.01, 0.02, 0.03, 0.05, 0.1].map((val) => (
-                  <button
-                    key={val}
-                    type="button"
-                    onClick={() => setMaxPriceDivergencePct(val)}
-                    className={`px-2 py-1.5 rounded-lg text-xs font-bold border active:scale-95 transition-all ${
-                      maxPriceDivergencePct === val
-                        ? "bg-accent-cyan text-zinc-950 border-accent-cyan shadow-sm ring-1 ring-cyan-400"
-                        : "bg-surface border-border text-zinc-400 hover:text-zinc-200 hover:border-zinc-700"
-                    }`}
-                  >
-                    {val}%
-                  </button>
-                ))}
-                <input
-                  type="number"
-                  step="0.005"
-                  value={maxPriceDivergencePct}
-                  onChange={(e) => setMaxPriceDivergencePct(parseFloat(e.target.value) || 0)}
-                  className="w-16 px-2 py-1.5 rounded-lg bg-surface border border-border text-zinc-200 text-xs text-center font-bold"
-                />
-              </div>
-              <p className="text-[10px] text-zinc-500">
-                Default: 0.03% (balanced). Rejects entry if cross-exchange prices diverge more than this %.
-              </p>
-            </div>
-
-            {/* Setting 3: Capital Allocation % */}
-            <div className="space-y-2 bg-surface-card p-3 rounded-xl border border-border">
-              <label className="text-[11px] text-zinc-400 font-semibold flex items-center justify-between">
-                <span>CAPITAL ALLOCATION %</span>
-                <span className="text-accent-emerald font-bold">{balanceAllocationPct}%</span>
-              </label>
-              <div className="flex items-center space-x-1.5">
-                {[10, 20, 30, 50].map((val) => (
-                  <button
-                    key={val}
-                    type="button"
-                    onClick={() => setBalanceAllocationPct(val)}
-                    className={`px-2.5 py-1.5 rounded-lg text-xs font-bold border active:scale-95 transition-all ${
-                      balanceAllocationPct === val
-                        ? "bg-accent-emerald text-zinc-950 border-accent-emerald shadow-sm ring-1 ring-emerald-400"
-                        : "bg-surface border-border text-zinc-400 hover:text-zinc-200 hover:border-zinc-700"
-                    }`}
-                  >
-                    {val}%
-                  </button>
-                ))}
-                <input
-                  type="number"
-                  step="5"
-                  value={balanceAllocationPct}
-                  onChange={(e) => setBalanceAllocationPct(parseInt(e.target.value, 10) || 0)}
-                  className="w-16 px-2 py-1.5 rounded-lg bg-surface border border-border text-zinc-200 text-xs text-center font-bold"
-                />
-              </div>
-              <p className="text-[10px] text-zinc-500">
-                Percent of available margin utilized per hedge. Default: 20%.
-              </p>
-            </div>
-
-            {/* Setting 4: Leverage Mode */}
-            <div className="space-y-2 bg-surface-card p-3 rounded-xl border border-border">
-              <label className="text-[11px] text-zinc-400 font-semibold">
-                LEVERAGE STRATEGY
-              </label>
-              <div className="grid grid-cols-2 gap-2">
-                <button
-                  type="button"
-                  onClick={() => setLeverageMode("MAX_PER_COIN")}
-                  className={`py-2 px-2.5 rounded-lg text-xs font-bold border active:scale-95 transition-all ${
-                    leverageMode === "MAX_PER_COIN"
-                      ? "bg-amber-500/20 border-accent-amber text-accent-amber shadow-sm ring-1 ring-amber-400/40"
-                      : "bg-surface border-border text-zinc-400 hover:border-zinc-700"
-                  }`}
-                >
-                  ⚡ MAX PER COIN (50x/20x)
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setLeverageMode("CUSTOM")}
-                  className={`py-2 px-2.5 rounded-lg text-xs font-bold border active:scale-95 transition-all ${
-                    leverageMode === "CUSTOM"
-                      ? "bg-amber-500/20 border-accent-amber text-accent-amber shadow-sm ring-1 ring-amber-400/40"
-                      : "bg-surface border-border text-zinc-400 hover:border-zinc-700"
-                  }`}
-                >
-                  CUSTOM LEVERAGE
-                </button>
-              </div>
-              {leverageMode === "CUSTOM" && (
-                <div className="flex items-center space-x-2 pt-1">
-                  <input
-                    type="range"
-                    min="5"
-                    max="50"
-                    step="5"
-                    value={customLeverage}
-                    onChange={(e) => setCustomLeverage(parseInt(e.target.value, 10))}
-                    className="w-full accent-amber-500 cursor-pointer"
-                  />
-                  <span className="font-bold text-accent-amber w-10 text-right">{customLeverage}x</span>
-                </div>
-              )}
-            </div>
-
-            {/* Setting 5: Max Simultaneous Hedges */}
-            <div className="space-y-2 bg-surface-card p-3 rounded-xl border border-border">
-              <label className="text-[11px] text-zinc-400 font-semibold flex items-center justify-between">
-                <span>MAX SIMULTANEOUS HEDGES</span>
-                <span className="text-zinc-200 font-bold">{maxSimultaneousHedges}</span>
-              </label>
-              <div className="flex items-center space-x-1.5">
-                {[1, 2, 3, 5].map((val) => (
-                  <button
-                    key={val}
-                    type="button"
-                    onClick={() => setMaxSimultaneousHedges(val)}
-                    className={`flex-1 py-1.5 rounded-lg text-xs font-bold border active:scale-95 transition-all ${
-                      maxSimultaneousHedges === val
-                        ? "bg-zinc-200 text-zinc-950 border-zinc-200 shadow-sm"
-                        : "bg-surface border-border text-zinc-400 hover:text-zinc-200 hover:border-zinc-700"
-                    }`}
-                  >
-                    {val} {val === 1 ? "Pair" : "Pairs"}
-                  </button>
-                ))}
-              </div>
-              <p className="text-[10px] text-zinc-500">
-                Default: Up to 3 simultaneous hedges across different coins.
-              </p>
-            </div>
-
-            {/* Setting 6: Exit Price Parity Check */}
-            <div className="space-y-2 bg-surface-card p-3 rounded-xl border border-border">
-              <label className="text-[11px] text-zinc-400 font-semibold flex items-center justify-between">
-                <span>CLOSE PRICE PARITY TOLERANCE</span>
-                <span className="text-zinc-200 font-bold">{closeMaxPriceDivergencePct}%</span>
+            {/* Price Divergence Tolerance */}
+            <div className="space-y-1">
+              <label className="text-[10px] text-zinc-400 font-semibold block uppercase">
+                PRICE PARITY TOLERANCE (%)
               </label>
               <input
                 type="number"
                 step="0.005"
-                value={closeMaxPriceDivergencePct}
-                onChange={(e) => setCloseMaxPriceDivergencePct(parseFloat(e.target.value) || 0)}
-                className="w-full px-3 py-1.5 rounded-lg bg-surface border border-border text-zinc-200 text-xs font-bold"
+                min="0.005"
+                max="1.0"
+                value={maxPriceDivergencePct}
+                onChange={(e) => setMaxPriceDivergencePct(parseFloat(e.target.value) || 0.03)}
+                className="w-full bg-zinc-900 border border-zinc-800 rounded-lg px-3 py-1.5 text-zinc-100 text-xs focus:border-amber-500 outline-none"
               />
-              <p className="text-[10px] text-zinc-500">
-                After settlement, waits until prices converge to &le; this % before closing.
+              <div className="flex gap-1 pt-1">
+                {[0.01, 0.02, 0.03, 0.05, 0.1].map((pct) => (
+                  <button
+                    key={pct}
+                    type="button"
+                    onClick={() => setMaxPriceDivergencePct(pct)}
+                    className={`px-1.5 py-0.5 rounded text-[9px] font-mono border ${
+                      maxPriceDivergencePct === pct
+                        ? "bg-emerald-500/20 text-emerald-300 border-emerald-500/60"
+                        : "bg-zinc-900 border-zinc-800 text-zinc-400"
+                    }`}
+                  >
+                    {pct}%
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Hard Margin Cap */}
+            <div className="space-y-1">
+              <label className="text-[10px] text-zinc-400 font-semibold block uppercase">
+                HARD MARGIN CAP (USDT)
+              </label>
+              <input
+                type="number"
+                step="50"
+                min="50"
+                max="100000"
+                value={maxMarginCapUsdt}
+                onChange={(e) => setMaxMarginCapUsdt(parseFloat(e.target.value) || 500)}
+                className="w-full bg-zinc-900 border border-zinc-800 rounded-lg px-3 py-1.5 text-zinc-100 text-xs focus:border-amber-500 outline-none"
+              />
+              <p className="text-[9px] text-zinc-500">
+                Pauses new entries for this bot if margin reaches ceiling.
               </p>
+            </div>
+
+            {/* Balance Allocation */}
+            <div className="space-y-1">
+              <label className="text-[10px] text-zinc-400 font-semibold block uppercase">
+                BALANCE ALLOCATION (% PER HEDGE)
+              </label>
+              <input
+                type="number"
+                step="5"
+                min="5"
+                max="50"
+                value={balanceAllocationPct}
+                onChange={(e) => setBalanceAllocationPct(parseFloat(e.target.value) || 20)}
+                className="w-full bg-zinc-900 border border-zinc-800 rounded-lg px-3 py-1.5 text-zinc-100 text-xs focus:border-amber-500 outline-none"
+              />
+            </div>
+
+            {/* Max Concurrent Hedges */}
+            <div className="space-y-1">
+              <label className="text-[10px] text-zinc-400 font-semibold block uppercase">
+                MAX SIMULTANEOUS HEDGES
+              </label>
+              <input
+                type="number"
+                step="1"
+                min="1"
+                max="10"
+                value={maxSimultaneousHedges}
+                onChange={(e) => setMaxSimultaneousHedges(parseInt(e.target.value, 10) || 3)}
+                className="w-full bg-zinc-900 border border-zinc-800 rounded-lg px-3 py-1.5 text-zinc-100 text-xs focus:border-amber-500 outline-none"
+              />
             </div>
           </div>
 
@@ -710,39 +1145,41 @@ export default function AutoBotPanel() {
               className="px-6 py-2.5 rounded-xl bg-accent-amber hover:bg-amber-400 text-zinc-950 font-black text-xs flex items-center space-x-2 shadow-lg shadow-amber-500/20 active:scale-95 transition-all disabled:opacity-50"
             >
               <CheckCircle2 className="w-4 h-4" />
-              <span>{isSavingConfig ? "SAVING SETTINGS..." : "SAVE BOT CONFIGURATION"}</span>
+              <span>{isSavingConfig ? "SAVING..." : "SAVE BOT CONFIGURATION"}</span>
             </button>
           </div>
         </div>
       )}
 
-      {/* Active Autonomous Hedges Card Grid with Pulse Rings */}
+      {/* ─────────────────────────────────────────────────────────────
+          8. ACTIVE HEDGES (PER-BOT)
+          ───────────────────────────────────────────────────────────── */}
       <div className="mt-5 pt-4 border-t border-border/80">
         <div className="flex items-center justify-between mb-3">
           <div className="flex items-center space-x-2">
             <Layers className="w-4 h-4 text-accent-amber" />
             <span className="text-xs font-black uppercase tracking-wider text-zinc-200">
-              ACTIVE AUTONOMOUS HEDGES ({daemon?.activeHedges?.length ?? 0} /{" "}
-              {daemon?.config?.maxSimultaneousHedges ?? 3})
+              ACTIVE HEDGES: {activeBot?.name} ({activeBot?.activeHedges?.length ?? 0} /{" "}
+              {activeBot?.config?.maxSimultaneousHedges ?? 3})
             </span>
           </div>
           <span className="text-[10px] text-zinc-500">
-            Auto-harvests funding &amp; unwinds on basis convergence
+            Unwinds automatically on basis convergence
           </span>
         </div>
 
-        {(!daemon?.activeHedges || daemon.activeHedges.length === 0) ? (
+        {(!activeBot?.activeHedges || activeBot.activeHedges.length === 0) ? (
           <div className="p-5 rounded-xl bg-surface-card border border-border/80 text-center text-xs text-zinc-400 space-y-1.5">
-            <div className="font-bold text-zinc-300">NO ACTIVE HEDGES CURRENTLY RUNNING</div>
+            <div className="font-bold text-zinc-300">NO ACTIVE HEDGES IN THIS BOT</div>
             <p className="text-[11px] text-zinc-500 max-w-xl mx-auto">
               {isBotActive
-                ? "The engine is actively scanning all perpetual contracts. When a coin reaches under 1 minute to settlement with spread ≥ 5 bps and near-zero price difference, a hedge will be opened automatically."
-                : "Bot is currently paused. Activate the bot above to begin autonomous 24/7 arbitrage."}
+                ? `Bot "${activeBot?.name}" is actively scanning opportunities matching preset ${activeBot?.activeSetFileName}. Hedges will trigger automatically.`
+                : `Bot is currently paused. Click "START THIS BOT" above to begin autonomous execution.`}
             </p>
           </div>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3.5">
-            {daemon.activeHedges.map((hedge) => {
+            {activeBot.activeHedges.map((hedge) => {
               const diffMs = hedge.fundingSettlementTime - nowMs;
               const hasSettled = diffMs <= 0;
               const isWaitingParity = hedge.status === "WAITING_PRICE_PARITY";
@@ -830,7 +1267,9 @@ export default function AutoBotPanel() {
         )}
       </div>
 
-      {/* Live Audit Log Stream */}
+      {/* ─────────────────────────────────────────────────────────────
+          9. 24/7 AUDIT STREAM
+          ───────────────────────────────────────────────────────────── */}
       <div className="mt-5 pt-3.5 border-t border-border/80">
         <div className="w-full flex flex-wrap items-center justify-between text-xs text-zinc-400 py-1 gap-2">
           <button
@@ -896,6 +1335,290 @@ export default function AutoBotPanel() {
           </div>
         )}
       </div>
+
+      {/* ─────────────────────────────────────────────────────────────
+          10. MODALS: NEW BOT, RENAME BOT, SAVE SET, SET PRESET MANAGER
+          ───────────────────────────────────────────────────────────── */}
+
+      {/* Modal: New Bot */}
+      {isCreateBotModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4">
+          <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-5 max-w-md w-full space-y-4 shadow-2xl">
+            <div className="flex items-center justify-between border-b border-zinc-800 pb-3">
+              <div className="flex items-center space-x-2">
+                <Plus className="w-5 h-5 text-emerald-400" />
+                <h3 className="font-bold text-sm text-zinc-100">CREATE NEW TRADING BOT</h3>
+              </div>
+              <button onClick={() => setIsCreateBotModalOpen(false)} className="text-zinc-400 hover:text-zinc-200">
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <form onSubmit={handleCreateBot} className="space-y-3.5 text-xs">
+              <div>
+                <label className="text-zinc-400 block mb-1 font-semibold">BOT NAME</label>
+                <input
+                  type="text"
+                  required
+                  placeholder="e.g. Continuous High-Yield Hunter"
+                  value={newBotName}
+                  onChange={(e) => setNewBotName(e.target.value)}
+                  className="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-3 py-2 text-zinc-100 outline-none focus:border-emerald-500"
+                />
+              </div>
+
+              <div>
+                <label className="text-zinc-400 block mb-1 font-semibold">INITIAL STRATEGY PRESET (.SET)</label>
+                <select
+                  value={newBotSetPreset}
+                  onChange={(e) => setNewBotSetPreset(e.target.value)}
+                  className="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-3 py-2 text-zinc-100 outline-none focus:border-emerald-500"
+                >
+                  {(daemon?.setFiles || []).map((sf) => (
+                    <option key={sf.fileName} value={sf.fileName}>
+                      {sf.name} ({sf.fileName})
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="text-zinc-400 block mb-1 font-semibold">HARD MARGIN CAP (USDT)</label>
+                <input
+                  type="number"
+                  min="50"
+                  max="100000"
+                  step="50"
+                  value={newBotMarginCap}
+                  onChange={(e) => setNewBotMarginCap(parseFloat(e.target.value) || 500)}
+                  className="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-3 py-2 text-zinc-100 outline-none focus:border-emerald-500"
+                />
+              </div>
+
+              <div className="flex justify-end space-x-2 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setIsCreateBotModalOpen(false)}
+                  className="px-4 py-2 rounded-xl bg-zinc-800 text-zinc-300 font-semibold hover:bg-zinc-700"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="px-5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold shadow-lg shadow-emerald-900/50"
+                >
+                  Create Bot
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Modal: Rename Bot */}
+      {isRenameBotModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4">
+          <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-5 max-w-sm w-full space-y-4 shadow-2xl">
+            <div className="flex items-center justify-between border-b border-zinc-800 pb-3">
+              <h3 className="font-bold text-sm text-zinc-100">RENAME BOT</h3>
+              <button onClick={() => setIsRenameBotModalOpen(false)} className="text-zinc-400 hover:text-zinc-200">
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <form onSubmit={handleRenameBot} className="space-y-3.5 text-xs">
+              <div>
+                <label className="text-zinc-400 block mb-1 font-semibold">NEW BOT NAME</label>
+                <input
+                  type="text"
+                  required
+                  value={renameBotName}
+                  onChange={(e) => setRenameBotName(e.target.value)}
+                  className="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-3 py-2 text-zinc-100 outline-none focus:border-amber-500"
+                />
+              </div>
+
+              <div className="flex justify-end space-x-2 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setIsRenameBotModalOpen(false)}
+                  className="px-4 py-2 rounded-xl bg-zinc-800 text-zinc-300 font-semibold hover:bg-zinc-700"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="px-5 py-2 rounded-xl bg-accent-amber hover:bg-amber-400 text-zinc-950 font-bold"
+                >
+                  Save Name
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Modal: Save As .set File */}
+      {isSaveSetModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4">
+          <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-5 max-w-md w-full space-y-4 shadow-2xl">
+            <div className="flex items-center justify-between border-b border-zinc-800 pb-3">
+              <div className="flex items-center space-x-2">
+                <Save className="w-5 h-5 text-accent-cyan" />
+                <h3 className="font-bold text-sm text-zinc-100">SAVE STRATEGY SET FILE (.SET)</h3>
+              </div>
+              <button onClick={() => setIsSaveSetModalOpen(false)} className="text-zinc-400 hover:text-zinc-200">
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <form onSubmit={handleSaveSetFile} className="space-y-3 text-xs">
+              <div>
+                <label className="text-zinc-400 block mb-1 font-semibold">FILE NAME (.set)</label>
+                <input
+                  type="text"
+                  required
+                  placeholder="e.g. aggressive_scalper_5bps.set"
+                  value={saveSetFileName}
+                  onChange={(e) => setSaveSetFileName(e.target.value)}
+                  className="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-3 py-2 text-zinc-100 outline-none focus:border-cyan-500 font-mono"
+                />
+              </div>
+
+              <div>
+                <label className="text-zinc-400 block mb-1 font-semibold">DISPLAY NAME</label>
+                <input
+                  type="text"
+                  required
+                  placeholder="e.g. Aggressive Scalper 5bps"
+                  value={saveSetName}
+                  onChange={(e) => setSaveSetName(e.target.value)}
+                  className="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-3 py-2 text-zinc-100 outline-none focus:border-cyan-500"
+                />
+              </div>
+
+              <div>
+                <label className="text-zinc-400 block mb-1 font-semibold">DESCRIPTION</label>
+                <textarea
+                  rows={2}
+                  placeholder="Describe strategy setup or timing conditions"
+                  value={saveSetDescription}
+                  onChange={(e) => setSaveSetDescription(e.target.value)}
+                  className="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-3 py-2 text-zinc-100 outline-none focus:border-cyan-500"
+                />
+              </div>
+
+              <div className="flex justify-end space-x-2 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setIsSaveSetModalOpen(false)}
+                  className="px-4 py-2 rounded-xl bg-zinc-800 text-zinc-300 font-semibold hover:bg-zinc-700"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="px-5 py-2 rounded-xl bg-cyan-600 hover:bg-cyan-500 text-white font-bold shadow-lg shadow-cyan-900/50"
+                >
+                  Save Preset (.set)
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Modal: Presets Library Manager */}
+      {isSetManagerOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 backdrop-blur-sm p-4">
+          <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-5 max-w-2xl w-full space-y-4 shadow-2xl max-h-[85vh] flex flex-col">
+            <div className="flex items-center justify-between border-b border-zinc-800 pb-3">
+              <div className="flex items-center space-x-2">
+                <FolderOpen className="w-5 h-5 text-accent-amber" />
+                <h3 className="font-bold text-sm text-zinc-100">METATRADER STRATEGY SET FILES (.SET)</h3>
+              </div>
+              <button onClick={() => setIsSetManagerOpen(false)} className="text-zinc-400 hover:text-zinc-200">
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div className="overflow-y-auto flex-1 space-y-2.5 pr-1">
+              {(daemon?.setFiles || []).map((sf) => {
+                const isCurrentBotActive = activeBot?.activeSetFileName?.toLowerCase() === sf.fileName?.toLowerCase();
+
+                return (
+                  <div
+                    key={sf.fileName}
+                    className="p-3.5 rounded-xl bg-zinc-950 border border-zinc-800 hover:border-zinc-700 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs"
+                  >
+                    <div className="space-y-1">
+                      <div className="flex items-center space-x-2">
+                        <span className="font-bold text-zinc-100 text-sm">{sf.name}</span>
+                        <span className="text-[10px] px-2 py-0.2 rounded bg-zinc-900 text-accent-cyan border border-zinc-800 font-mono">
+                          {sf.fileName}
+                        </span>
+                        {sf.isBuiltIn && (
+                          <span className="text-[9px] px-1.5 py-0.2 rounded bg-emerald-950 text-emerald-400 border border-emerald-800">
+                            BUILT-IN
+                          </span>
+                        )}
+                        {isCurrentBotActive && (
+                          <span className="text-[9px] px-1.5 py-0.2 rounded bg-amber-950 text-amber-400 border border-amber-800 font-bold">
+                            CURRENT BOT ACTIVE
+                          </span>
+                        )}
+                      </div>
+                      <p className="text-[11px] text-zinc-400">{sf.description}</p>
+                      <div className="text-[10px] text-zinc-500 font-mono">
+                        Spread: &ge;{sf.config?.minSpreadBps} bps | Div: &le;{sf.config?.maxPriceDivergencePct}% | Cap: ${sf.config?.maxMarginCapUsdt || 500} | Mode: {sf.config?.timingMode || "FUNDING_SNIPER_1M"}
+                      </div>
+                    </div>
+
+                    <div className="flex items-center space-x-2 shrink-0">
+                      <button
+                        onClick={() => {
+                          handleApplySetFile(sf.fileName);
+                          setIsSetManagerOpen(false);
+                        }}
+                        className="px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-[11px] shadow-sm"
+                      >
+                        Apply to {activeBot?.name}
+                      </button>
+
+                      <button
+                        onClick={() => handleDownloadSetFile(sf.fileName)}
+                        className="p-1.5 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-zinc-300 border border-zinc-700"
+                        title="Download .set file"
+                      >
+                        <Download className="w-3.5 h-3.5" />
+                      </button>
+
+                      {!sf.isBuiltIn && (
+                        <button
+                          onClick={() => handleDeleteSetFile(sf.fileName)}
+                          className="p-1.5 rounded-lg bg-rose-950/60 hover:bg-rose-900 text-rose-300 border border-rose-800/60"
+                          title="Delete custom preset"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+
+            <div className="pt-2 border-t border-zinc-800 flex justify-end">
+              <button
+                onClick={() => setIsSetManagerOpen(false)}
+                className="px-4 py-2 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-zinc-200 font-semibold text-xs"
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
