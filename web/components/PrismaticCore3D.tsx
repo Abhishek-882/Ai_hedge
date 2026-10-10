@@ -34,9 +34,12 @@ export default function PrismaticCore3D({
 
   // References for live 60fps render loop
   const historyRef = useRef<{ time: number; val: number }[]>([]);
+  const initialSpreadRef = useRef<number>(spreadBps);
   const spreadBpsRef = useRef<number>(spreadBps);
   const markPriceBnRef = useRef<number>(binancePrice);
   const markPriceBgRef = useRef<number>(bitgetPrice);
+  const fundingRateBnRef = useRef<number>(binanceFundingRate);
+  const fundingRateBgRef = useRef<number>(bitgetFundingRate);
   const symbolRef = useRef<string>(symbol);
   const modeRef = useRef<VisualMode>(mode);
   const isPausedRef = useRef<boolean>(isPaused);
@@ -55,6 +58,14 @@ export default function PrismaticCore3D({
   }, [bitgetPrice]);
 
   useEffect(() => {
+    fundingRateBnRef.current = binanceFundingRate;
+  }, [binanceFundingRate]);
+
+  useEffect(() => {
+    fundingRateBgRef.current = bitgetFundingRate;
+  }, [bitgetFundingRate]);
+
+  useEffect(() => {
     symbolRef.current = symbol;
   }, [symbol]);
 
@@ -70,7 +81,7 @@ export default function PrismaticCore3D({
   useEffect(() => {
     const now = Date.now();
     const initial = [];
-    const base = spreadBps || 12;
+    const base = initialSpreadRef.current || 12;
     for (let i = 50; i >= 0; i--) {
       initial.push({
         time: now - i * 1000,
@@ -290,7 +301,7 @@ export default function PrismaticCore3D({
         ctx.fillText(bnPriceText, leftX, centerY + 4);
         ctx.fillStyle = "#10b981";
         ctx.font = "9px monospace";
-        ctx.fillText(`Rate: +${((binanceFundingRate || 0.0001) * 100).toFixed(4)}%`, leftX, centerY + 20);
+        ctx.fillText(`Rate: +${((fundingRateBnRef.current || 0.0001) * 100).toFixed(4)}%`, leftX, centerY + 20);
 
         // Exchange Node 2: Bitget (Emerald/Cyan)
         ctx.fillStyle = "rgba(16, 185, 129, 0.12)";
@@ -311,7 +322,7 @@ export default function PrismaticCore3D({
         ctx.fillText(bgPriceText, rightX, centerY + 4);
         ctx.fillStyle = "#06b6d4";
         ctx.font = "9px monospace";
-        ctx.fillText(`Rate: +${((bitgetFundingRate || 0.0002) * 100).toFixed(4)}%`, rightX, centerY + 20);
+        ctx.fillText(`Rate: +${((fundingRateBgRef.current || 0.0002) * 100).toFixed(4)}%`, rightX, centerY + 20);
 
         // Connecting Conduit Lines
         const lanesY = [centerY - 16, centerY, centerY + 16];

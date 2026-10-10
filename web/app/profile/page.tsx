@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
@@ -68,7 +68,7 @@ export default function ProfilePage() {
   });
 
   // 1. Fetch current authenticated user
-  const fetchAuthUser = async () => {
+  const fetchAuthUser = useCallback(async () => {
     try {
       const res = await fetch("/api/auth", { cache: "no-store" });
       const data = await res.json();
@@ -113,9 +113,9 @@ export default function ProfilePage() {
     } finally {
       setIsLoadingAuth(false);
     }
-  };
+  }, [router]);
 
-  const fetchDaemonState = async () => {
+  const fetchDaemonState = useCallback(async () => {
     try {
       const res = await fetch("/api/bot/daemon", { cache: "no-store" });
       const data = await res.json();
@@ -123,12 +123,12 @@ export default function ProfilePage() {
         setDaemon(data.daemon);
       }
     } catch {}
-  };
+  }, []);
 
   useEffect(() => {
     fetchAuthUser();
     fetchDaemonState();
-  }, []);
+  }, [fetchAuthUser, fetchDaemonState]);
 
   const handleSaveKeys = async (e: React.FormEvent) => {
     e.preventDefault();

@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import {
   ArrowDownRight,
   ArrowUpRight,
@@ -189,22 +189,6 @@ export default function ControlCockpit({
     }
   }, [selectedSymbol]);
 
-  // Auto-Wait Limit Sniper Loop with 1.2s Hysteresis Dwell Confirmation
-  useEffect(() => {
-    if (!sniperWaitingDirection || loadingAction) return;
-
-    if (effectiveDivergencePct <= maxPriceDivergencePct) {
-      // Basis gap is within tolerance - require it to hold steady for 1.2s before firing
-      const dwellTimer = setTimeout(() => {
-        const dir = sniperWaitingDirection;
-        setSniperWaitingDirection(null);
-        executeHedge(dir, true);
-      }, 1200);
-
-      return () => clearTimeout(dwellTimer);
-    }
-  }, [sniperWaitingDirection, effectiveDivergencePct, maxPriceDivergencePct, loadingAction]);
-
   const handleNotionalSelect = (dollars: number) => {
     setSelectedNotional(dollars);
     if (markPrice && markPrice > 0) {
@@ -314,6 +298,28 @@ export default function ControlCockpit({
       setLoadingAction(null);
     }
   };
+
+  // Stable ref for executeHedge to avoid resetting the sniper countdown timer on form changes
+  const executeHedgeRef = useRef(executeHedge);
+  useEffect(() => {
+    executeHedgeRef.current = executeHedge;
+  });
+
+  // Auto-Wait Limit Sniper Loop with 1.2s Hysteresis Dwell Confirmation
+  useEffect(() => {
+    if (!sniperWaitingDirection || loadingAction) return;
+
+    if (effectiveDivergencePct <= maxPriceDivergencePct) {
+      // Basis gap is within tolerance - require it to hold steady for 1.2s before firing
+      const dwellTimer = setTimeout(() => {
+        const dir = sniperWaitingDirection;
+        setSniperWaitingDirection(null);
+        executeHedgeRef.current(dir, true);
+      }, 1200);
+
+      return () => clearTimeout(dwellTimer);
+    }
+  }, [sniperWaitingDirection, effectiveDivergencePct, maxPriceDivergencePct, loadingAction]);
 
   const executeCloseAll = async () => {
     setLoadingAction("CLOSE");
