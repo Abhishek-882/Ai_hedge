@@ -3,23 +3,113 @@
   "runInBackgroundWhenClosed": true,
   "mode": "AUTONOMOUS_SERVER_24_7",
   "startedAt": 1791382174180,
-  "lastCycleAt": 1791622514059,
-  "cyclesCompleted": 94,
-  "config": {
-    "enabled": true,
-    "minSpreadBps": 5,
-    "maxPriceDivergencePct": 0.01,
-    "balanceAllocationPct": 20,
-    "leverageMode": "MAX_PER_COIN",
-    "customLeverage": 50,
-    "maxSimultaneousHedges": 3,
-    "postSettlementWaitSeconds": 15,
-    "closeMaxPriceDivergencePct": 0.01,
-    "scanIntervalSeconds": 5,
-    "timingMode": "FUNDING_SNIPER_1M"
-  },
-  "activeHedges": [],
-  "completedHedges": [],
+  "lastCycleAt": 1791628588106,
+  "cyclesCompleted": 98,
+  "activeBotId": "bot-1",
+  "bots": [
+    {
+      "id": "bot-1",
+      "name": "Conservative Funding Sniper",
+      "activeSetFileName": "conservative_5bps_sniper.set",
+      "enabled": true,
+      "maxMarginCapUsdt": 500,
+      "config": {
+        "enabled": true,
+        "minSpreadBps": 5,
+        "maxPriceDivergencePct": 0.01,
+        "balanceAllocationPct": 20,
+        "leverageMode": "MAX_PER_COIN",
+        "customLeverage": 50,
+        "maxSimultaneousHedges": 3,
+        "maxMarginCapUsdt": 500,
+        "postSettlementWaitSeconds": 15,
+        "closeMaxPriceDivergencePct": 0.01,
+        "scanIntervalSeconds": 5,
+        "timingMode": "FUNDING_SNIPER_1M"
+      },
+      "flattenedCoinsBlacklist": [],
+      "activeHedges": [],
+      "completedHedges": [],
+      "statusText": "SCANNING (Top: TRXUSDT - Spread: 1.5 bps - Countdown: 19411s)",
+      "lastEvaluatedCandidate": null,
+      "createdAt": 1791382174180,
+      "updatedAt": 1791627281948
+    }
+  ],
+  "setFiles": [
+    {
+      "id": "set-conservative",
+      "fileName": "conservative_5bps_sniper.set",
+      "name": "Conservative 5bps Sniper",
+      "description": "Snipes within 60s of funding with strict 5 bps spread, 0.03% parity, $500 hard margin cap.",
+      "config": {
+        "enabled": true,
+        "minSpreadBps": 5,
+        "maxPriceDivergencePct": 0.03,
+        "balanceAllocationPct": 20,
+        "leverageMode": "MAX_PER_COIN",
+        "customLeverage": 50,
+        "maxSimultaneousHedges": 3,
+        "maxMarginCapUsdt": 500,
+        "postSettlementWaitSeconds": 15,
+        "closeMaxPriceDivergencePct": 0.03,
+        "scanIntervalSeconds": 5,
+        "timingMode": "FUNDING_SNIPER_1M"
+      },
+      "contentText": "; ============================================================\n; AI-Hedge Delta-Neutral Quantitative Strategy Set File\n; Strategy Preset: Conservative 5bps Sniper\n; Exported: 2026-10-10T10:36:28.095Z\n; Compatible with: MetaTrader 4/5 & AI-Hedge Daemon Engine\n; ============================================================\nEnabled=true\nMinSpreadBps=5\nMaxPriceDivergencePct=0.03\nBalanceAllocationPct=20\nLeverageMode=MAX_PER_COIN\nCustomLeverage=50\nMaxSimultaneousHedges=3\nMaxMarginCapUsdt=500\nPostSettlementWaitSeconds=15\nCloseMaxPriceDivergencePct=0.03\nScanIntervalSeconds=5\nTimingMode=FUNDING_SNIPER_1M",
+      "isBuiltIn": true,
+      "createdAt": 1775000000000,
+      "updatedAt": 1775000000000
+    },
+    {
+      "id": "set-aggressive",
+      "fileName": "aggressive_continuous_arbitrage.set",
+      "name": "Aggressive Continuous Arbitrage",
+      "description": "Continuous spread capture 24/7 without waiting for funding window. 3 bps spread, 0.05% parity, $1,000 cap.",
+      "config": {
+        "enabled": true,
+        "minSpreadBps": 3,
+        "maxPriceDivergencePct": 0.05,
+        "balanceAllocationPct": 25,
+        "leverageMode": "MAX_PER_COIN",
+        "customLeverage": 50,
+        "maxSimultaneousHedges": 5,
+        "maxMarginCapUsdt": 1000,
+        "postSettlementWaitSeconds": 15,
+        "closeMaxPriceDivergencePct": 0.05,
+        "scanIntervalSeconds": 5,
+        "timingMode": "CONTINUOUS_SPREAD"
+      },
+      "contentText": "; ============================================================\n; AI-Hedge Delta-Neutral Quantitative Strategy Set File\n; Strategy Preset: Aggressive Continuous Arbitrage\n; Exported: 2026-10-10T10:36:28.097Z\n; Compatible with: MetaTrader 4/5 & AI-Hedge Daemon Engine\n; ============================================================\nEnabled=true\nMinSpreadBps=3\nMaxPriceDivergencePct=0.05\nBalanceAllocationPct=25\nLeverageMode=MAX_PER_COIN\nCustomLeverage=50\nMaxSimultaneousHedges=5\nMaxMarginCapUsdt=1000\nPostSettlementWaitSeconds=15\nCloseMaxPriceDivergencePct=0.05\nScanIntervalSeconds=5\nTimingMode=CONTINUOUS_SPREAD",
+      "isBuiltIn": true,
+      "createdAt": 1775000000000,
+      "updatedAt": 1775000000000
+    },
+    {
+      "id": "set-balanced",
+      "fileName": "balanced_institutional_harvest.set",
+      "name": "Balanced Institutional Harvest",
+      "description": "Funding Sniper mode with 4 bps spread threshold, 0.03% parity, $750 hard cap.",
+      "config": {
+        "enabled": true,
+        "minSpreadBps": 4,
+        "maxPriceDivergencePct": 0.03,
+        "balanceAllocationPct": 20,
+        "leverageMode": "MAX_PER_COIN",
+        "customLeverage": 50,
+        "maxSimultaneousHedges": 4,
+        "maxMarginCapUsdt": 750,
+        "postSettlementWaitSeconds": 15,
+        "closeMaxPriceDivergencePct": 0.03,
+        "scanIntervalSeconds": 5,
+        "timingMode": "FUNDING_SNIPER_1M"
+      },
+      "contentText": "; ============================================================\n; AI-Hedge Delta-Neutral Quantitative Strategy Set File\n; Strategy Preset: Balanced Institutional Harvest\n; Exported: 2026-10-10T10:36:28.097Z\n; Compatible with: MetaTrader 4/5 & AI-Hedge Daemon Engine\n; ============================================================\nEnabled=true\nMinSpreadBps=4\nMaxPriceDivergencePct=0.03\nBalanceAllocationPct=20\nLeverageMode=MAX_PER_COIN\nCustomLeverage=50\nMaxSimultaneousHedges=4\nMaxMarginCapUsdt=750\nPostSettlementWaitSeconds=15\nCloseMaxPriceDivergencePct=0.03\nScanIntervalSeconds=5\nTimingMode=FUNDING_SNIPER_1M",
+      "isBuiltIn": true,
+      "createdAt": 1775000000000,
+      "updatedAt": 1775000000000
+    }
+  ],
   "logs": [
     {
       "timestamp": "2026-10-08T12:31:39.982Z",
@@ -102,6 +192,22 @@
       "level": "info"
     }
   ],
-  "statusText": "SCANNING (Top: UAIUSDT - Spread: 7.01 bps - Countdown: 11086s)",
+  "config": {
+    "enabled": true,
+    "minSpreadBps": 5,
+    "maxPriceDivergencePct": 0.01,
+    "balanceAllocationPct": 20,
+    "leverageMode": "MAX_PER_COIN",
+    "customLeverage": 50,
+    "maxSimultaneousHedges": 3,
+    "maxMarginCapUsdt": 500,
+    "postSettlementWaitSeconds": 15,
+    "closeMaxPriceDivergencePct": 0.01,
+    "scanIntervalSeconds": 5,
+    "timingMode": "FUNDING_SNIPER_1M"
+  },
+  "activeHedges": [],
+  "completedHedges": [],
+  "statusText": "SCANNING (Top: TRXUSDT - Spread: 1.5 bps - Countdown: 19411s)",
   "lastEvaluatedCandidate": null
 }

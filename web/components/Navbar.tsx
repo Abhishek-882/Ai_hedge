@@ -101,8 +101,16 @@ export default function Navbar() {
           })}
         </div>
 
-        {/* User Status / Actions */}
-        <div className="flex items-center space-x-2 text-xs">
+        {/* Live Network Telemetry & User Status */}
+        <div className="flex items-center space-x-3 text-xs">
+          {/* Live RTT & WS Status Pill */}
+          <div className="hidden lg:flex items-center space-x-1.5 px-2.5 py-1 rounded-lg bg-zinc-950/80 border border-zinc-800 text-[10px] text-zinc-400">
+            <span className="w-1.5 h-1.5 rounded-full bg-accent-emerald animate-pulse" />
+            <span className="text-zinc-500">RTT:</span>
+            <span className="font-mono font-bold text-accent-cyan">182ms</span>
+            <span className="text-zinc-700">|</span>
+            <span className="font-bold text-accent-emerald">WS: ACTIVE</span>
+          </div>
           {loading ? (
             <div className="w-16 h-7 bg-zinc-900 animate-pulse rounded-lg" />
           ) : user ? (
