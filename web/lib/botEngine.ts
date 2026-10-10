@@ -24,6 +24,7 @@ export interface BotConfig {
   postSettlementWaitSeconds: number;
   closeMaxPriceDivergencePct: number;
   scanIntervalSeconds: number;
+  timingMode?: "FUNDING_SNIPER_1M" | "CONTINUOUS_SPREAD";
 }
 
 export interface ActiveBotHedge {
@@ -125,14 +126,15 @@ const globalForBot = global as unknown as {
 const DEFAULT_CONFIG: BotConfig = {
   enabled: true,
   minSpreadBps: 5.0,
-  maxPriceDivergencePct: 0.01, // 0.01% ultra-strict price parity
+  maxPriceDivergencePct: 0.03, // 0.03% allows institutional parity while avoiding micro-spread stalls
   balanceAllocationPct: 20, // 20% of available account balance
   leverageMode: "MAX_PER_COIN",
   customLeverage: 50,
   maxSimultaneousHedges: 3,
   postSettlementWaitSeconds: 15, // Let funding fee credit apply
-  closeMaxPriceDivergencePct: 0.01, // Close only when price parity matches
+  closeMaxPriceDivergencePct: 0.03, // Close only when price parity matches
   scanIntervalSeconds: 5,
+  timingMode: "FUNDING_SNIPER_1M",
 };
 
 export function loadBotState(): BotEngineState {
@@ -814,10 +816,11 @@ export async function runAutonomousBotCycle(): Promise<void> {
       if (activeSymbols.has(coin.symbol)) continue;
 
       const secondsToFunding = coin.secondsToFunding;
-      // Countdown condition: less than 1 minute (1s to 60s)
-      const isFundingImminent = secondsToFunding > 0 && secondsToFunding <= 60;
+      const isContinuous = config.timingMode === "CONTINUOUS_SPREAD";
+      // Countdown condition: less than 1 minute (1s to 60s) OR Continuous Spread Mode
+      const isTimingQualified = isContinuous || (secondsToFunding > 0 && secondsToFunding <= 60);
 
-      if (!isFundingImminent) continue;
+      if (!isTimingQualified) continue;
 
       const isSpreadSufficient = coin.spreadBps >= config.minSpreadBps;
       const isPriceParityStrict = coin.divergencePct <= config.maxPriceDivergencePct;

@@ -41,6 +41,7 @@ interface BotConfig {
   postSettlementWaitSeconds: number;
   closeMaxPriceDivergencePct: number;
   scanIntervalSeconds: number;
+  timingMode?: "FUNDING_SNIPER_1M" | "CONTINUOUS_SPREAD";
 }
 
 interface ActiveBotHedge {
@@ -103,6 +104,7 @@ export default function AutoBotPanel() {
   const [customLeverage, setCustomLeverage] = useState<number>(50);
   const [maxSimultaneousHedges, setMaxSimultaneousHedges] = useState<number>(3);
   const [closeMaxPriceDivergencePct, setCloseMaxPriceDivergencePct] = useState<number>(0.01);
+  const [timingMode, setTimingMode] = useState<"FUNDING_SNIPER_1M" | "CONTINUOUS_SPREAD">("FUNDING_SNIPER_1M");
   const [isSavingConfig, setIsSavingConfig] = useState(false);
   const [saveSuccess, setSaveSuccess] = useState(false);
   const [nowMs, setNowMs] = useState(Date.now());
@@ -127,6 +129,7 @@ export default function AutoBotPanel() {
           setCustomLeverage(data.daemon.config?.customLeverage ?? 50);
           setMaxSimultaneousHedges(data.daemon.config?.maxSimultaneousHedges ?? 3);
           setCloseMaxPriceDivergencePct(data.daemon.config?.closeMaxPriceDivergencePct ?? 0.01);
+          setTimingMode(data.daemon.config?.timingMode ?? "FUNDING_SNIPER_1M");
         }
       }
     } catch {}
@@ -175,6 +178,7 @@ export default function AutoBotPanel() {
             customLeverage,
             maxSimultaneousHedges,
             closeMaxPriceDivergencePct,
+            timingMode,
           },
         }),
       });
@@ -405,25 +409,35 @@ export default function AutoBotPanel() {
         <div className="bg-surface-card p-3 rounded-xl border border-border hover:border-zinc-700 transition-colors">
           <div className="flex items-center justify-between text-[10px] text-zinc-500 uppercase">
             <span>CANDIDATE RADAR</span>
-            <Sparkles className="w-3 h-3 text-accent-emerald" />
+            <span className="text-[9px] px-1.5 py-0.5 rounded bg-zinc-800 text-accent-amber font-mono font-bold">
+              {daemon?.config?.timingMode === "CONTINUOUS_SPREAD" ? "⚡ CONTINUOUS" : "⏳ SNIPER"}
+            </span>
           </div>
           <div className="font-bold text-zinc-200 mt-1 text-[11px] truncate">
             {daemon?.lastEvaluatedCandidate?.symbol ? (
-              <span
-                className={
-                  daemon.lastEvaluatedCandidate.qualified
-                    ? "text-emerald-400 font-bold"
-                    : "text-zinc-400"
-                }
-              >
-                {daemon.lastEvaluatedCandidate.symbol} (
-                {daemon.lastEvaluatedCandidate.spreadBps}bps /{" "}
-                {daemon.lastEvaluatedCandidate.secondsToFunding}s)
-              </span>
+              <div className="flex items-center space-x-1.5">
+                <span
+                  className={
+                    daemon.lastEvaluatedCandidate.qualified
+                      ? "text-emerald-400 font-bold"
+                      : "text-zinc-300 font-bold"
+                  }
+                >
+                  {daemon.lastEvaluatedCandidate.symbol}
+                </span>
+                <span className="text-zinc-500 text-[10px]">
+                  ({daemon.lastEvaluatedCandidate.spreadBps}bps · {daemon.lastEvaluatedCandidate.divergencePct}% div)
+                </span>
+              </div>
             ) : (
               <span className="text-zinc-500">Scanning pairs...</span>
             )}
           </div>
+          {daemon?.lastEvaluatedCandidate && (
+            <div className="text-[9px] text-zinc-400 mt-1 truncate" title={daemon.lastEvaluatedCandidate.reason}>
+              Filter: <span className={daemon.lastEvaluatedCandidate.qualified ? "text-emerald-400" : "text-amber-400/90"}>{daemon.lastEvaluatedCandidate.reason}</span>
+            </div>
+          )}
         </div>
       </div>
 
@@ -444,6 +458,45 @@ export default function AutoBotPanel() {
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
+            {/* Setting 0: Arbitrage Timing Strategy */}
+            <div className="space-y-2 bg-surface-card p-3 rounded-xl border border-border">
+              <label className="text-[11px] text-zinc-400 font-semibold flex items-center justify-between">
+                <span>ARBITRAGE TIMING MODE</span>
+                <span className="text-accent-amber font-bold">
+                  {timingMode === "CONTINUOUS_SPREAD" ? "CONTINUOUS" : "SNIPER (< 1m)"}
+                </span>
+              </label>
+              <div className="grid grid-cols-2 gap-2">
+                <button
+                  type="button"
+                  onClick={() => setTimingMode("FUNDING_SNIPER_1M")}
+                  className={`py-2 px-2 rounded-lg text-xs font-bold border active:scale-95 transition-all text-center ${
+                    timingMode === "FUNDING_SNIPER_1M"
+                      ? "bg-amber-500/20 border-accent-amber text-accent-amber shadow-sm ring-1 ring-amber-400/40"
+                      : "bg-surface border-border text-zinc-400 hover:border-zinc-700"
+                  }`}
+                >
+                  ⏳ SNIPER (&lt; 1m)
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setTimingMode("CONTINUOUS_SPREAD")}
+                  className={`py-2 px-2 rounded-lg text-xs font-bold border active:scale-95 transition-all text-center ${
+                    timingMode === "CONTINUOUS_SPREAD"
+                      ? "bg-emerald-500/20 border-accent-emerald text-accent-emerald shadow-sm ring-1 ring-emerald-400/40"
+                      : "bg-surface border-border text-zinc-400 hover:border-zinc-700"
+                  }`}
+                >
+                  ⚡ CONTINUOUS
+                </button>
+              </div>
+              <p className="text-[10px] text-zinc-500">
+                {timingMode === "CONTINUOUS_SPREAD"
+                  ? "Continuous: Executes immediately whenever spread ≥ min threshold and price parity matches."
+                  : "Sniper: Waits until the final 60s before settlement to capture payout and close."}
+              </p>
+            </div>
+
             {/* Setting 1: Min Spread Threshold */}
             <div className="space-y-2 bg-surface-card p-3 rounded-xl border border-border">
               <label className="text-[11px] text-zinc-400 font-semibold flex items-center justify-between">
@@ -485,7 +538,7 @@ export default function AutoBotPanel() {
                 <span className="text-accent-cyan font-bold">{maxPriceDivergencePct}%</span>
               </label>
               <div className="flex items-center space-x-1.5">
-                {[0.01, 0.02, 0.05, 0.1].map((val) => (
+                {[0.01, 0.02, 0.03, 0.05, 0.1].map((val) => (
                   <button
                     key={val}
                     type="button"
@@ -508,7 +561,7 @@ export default function AutoBotPanel() {
                 />
               </div>
               <p className="text-[10px] text-zinc-500">
-                Default: 0.01% (ultra-strict). Rejects entry if prices differ.
+                Default: 0.03% (balanced). Rejects entry if cross-exchange prices diverge more than this %.
               </p>
             </div>
 

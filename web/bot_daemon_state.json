@@ -2,11 +2,24 @@
   "isRunning": true,
   "runInBackgroundWhenClosed": true,
   "mode": "AUTONOMOUS_SERVER_24_7",
-  "targetSpreadBps": 2,
   "startedAt": 1791382174180,
-  "lastCycleAt": 1791462699982,
-  "cyclesCompleted": 90,
-  "activeHedges": 0,
+  "lastCycleAt": 1791622514059,
+  "cyclesCompleted": 94,
+  "config": {
+    "enabled": true,
+    "minSpreadBps": 5,
+    "maxPriceDivergencePct": 0.01,
+    "balanceAllocationPct": 20,
+    "leverageMode": "MAX_PER_COIN",
+    "customLeverage": 50,
+    "maxSimultaneousHedges": 3,
+    "postSettlementWaitSeconds": 15,
+    "closeMaxPriceDivergencePct": 0.01,
+    "scanIntervalSeconds": 5,
+    "timingMode": "FUNDING_SNIPER_1M"
+  },
+  "activeHedges": [],
+  "completedHedges": [],
   "logs": [
     {
       "timestamp": "2026-10-08T12:31:39.982Z",
@@ -88,5 +101,7 @@
       "message": "Server background daemon initialized. Configured to run 24/7 even when browser is closed.",
       "level": "info"
     }
-  ]
+  ],
+  "statusText": "SCANNING (Top: UAIUSDT - Spread: 7.01 bps - Countdown: 11086s)",
+  "lastEvaluatedCandidate": null
 }
