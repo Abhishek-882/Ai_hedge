@@ -136,7 +136,7 @@ export default function IntroPage() {
           </div>
           <span className="text-zinc-700">•</span>
           <div>
-            VENUE B: <strong className="text-accent-cyan font-mono">BITGET V3 PERP</strong>
+            VENUE B: <strong className="text-accent-cyan font-mono">BITGET FUTURES</strong>
           </div>
           <span className="text-zinc-700">•</span>
           <div>
@@ -173,7 +173,7 @@ export default function IntroPage() {
 
           <p className="text-sm md:text-base text-zinc-400 max-w-2xl mx-auto leading-relaxed">
             Automated funding rate arbitrage across <strong>Binance USD-M</strong> and{" "}
-            <strong>Bitget Perpetuals</strong>. Continuous multi-pair spread scanning, synchronized dual-order
+            <strong>Bitget Futures</strong>. Continuous multi-pair spread scanning, synchronized dual-order
             execution, and 24/7 autonomous server bot persistence.
           </p>
 

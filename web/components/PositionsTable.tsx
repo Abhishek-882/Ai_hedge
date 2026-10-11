@@ -119,7 +119,7 @@ export default function PositionsTable({
             <>
               <span className="px-2 py-0.5 rounded bg-emerald-950/40 border border-emerald-800/40 text-emerald-400 font-semibold flex items-center gap-1">
                 <ShieldCheck className="w-3 h-3" />
-                DELTA NEUTRAL
+                BALANCED HEDGE
               </span>
               <button
                 onClick={() => handleClose("ALL")}
@@ -178,7 +178,7 @@ export default function PositionsTable({
               <span>FUNDING YIELD HARVEST</span>
             </div>
             <div className="text-[10px] text-zinc-400 mt-0.5 leading-tight">
-              Delta-neutral hedge. Funding fees are credited directly into <strong className="text-zinc-200">Cash Wallet Balance</strong> at 00:00, 08:00, 16:00 UTC (not position unrealized PnL).
+              Cross-exchange hedge. Funding fees are credited directly into <strong className="text-zinc-200">Cash Wallet Balance</strong> at 00:00, 08:00, 16:00 UTC (not position unrealized PnL).
             </div>
           </div>
         </div>

@@ -95,7 +95,7 @@ export default function HedgeDetailModal({ trade, onClose }: HedgeDetailModalPro
                   <Coins className="w-3.5 h-3.5 text-accent-amber" />
                   <span>Coin / Asset Pair</span>
                 </span>
-                <span className="text-zinc-400 font-bold">PERPETUAL</span>
+                <span className="text-zinc-400 font-bold">FUTURES</span>
               </div>
               <div className="text-xl font-bold text-zinc-100 flex items-center justify-between">
                 <span>{trade.symbol}</span>
@@ -237,7 +237,7 @@ export default function HedgeDetailModal({ trade, onClose }: HedgeDetailModalPro
               {/* Leg 2: Bitget */}
               <div className="bg-zinc-900/60 p-4 rounded-xl border border-cyan-500/30 space-y-2">
                 <div className="flex items-center justify-between">
-                  <span className="text-xs font-bold text-cyan-400">LEG 2: BITGET V3 PERP</span>
+                  <span className="text-xs font-bold text-cyan-400">LEG 2: BITGET FUTURES</span>
                   <span className="text-[10px] px-1.5 py-0.5 rounded bg-cyan-500/10 text-cyan-300 border border-cyan-500/30">
                     {trade.leg2Side}
                   </span>
@@ -269,7 +269,7 @@ export default function HedgeDetailModal({ trade, onClose }: HedgeDetailModalPro
           <div className="p-3.5 rounded-xl bg-zinc-950 border border-zinc-800 flex items-start space-x-3 text-[11px] text-zinc-400">
             <ShieldCheck className="w-4 h-4 text-accent-emerald shrink-0 mt-0.5" />
             <div>
-              <span className="font-semibold text-zinc-200">Delta-Neutral Mathematical Verification:</span>
+              <span className="font-semibold text-zinc-200">Simultaneous Hedging Verification:</span>
               <p className="mt-0.5 text-zinc-400">
                 Both legs were executed with zero unhedged exposure window. Directional market risk was eliminated by holding inverse contracts on Binance and Bitget. Realized PnL reflects funding rate settlement and spread convergence.
               </p>

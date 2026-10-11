@@ -1,9 +1,10 @@
 import fs from "fs";
 import path from "path";
-import { readDataFile, saveDataFile } from "./storagePath";
+import { readDataFile, saveDataFile, readUserDataFile, saveUserDataFile } from "./storagePath";
 
 export interface ServerHedgeTrade {
   id: string;
+  userId?: string;
   timestamp: number; // Open timestamp
   closeTimestamp?: number; // Close timestamp
   durationMs?: number; // Latency / duration between hedge open and close
@@ -29,44 +30,63 @@ export interface ServerHedgeTrade {
 
 const TRADES_FILE_NAME = "hedge_trades_history.json";
 
-// Singleton memory cache across hot-reloads / serverless invocations
+// In-memory per-tenant trade cache
 const globalForTrades = global as unknown as {
-  serverTrades?: ServerHedgeTrade[];
+  tenantTrades?: Record<string, ServerHedgeTrade[]>;
 };
 
-// History starts clean now - NO dummy/pre-seeded trades
-function getInitialSeededTrades(): ServerHedgeTrade[] {
-  return [];
+if (!globalForTrades.tenantTrades) {
+  globalForTrades.tenantTrades = {};
 }
 
-export function loadTrades(): ServerHedgeTrade[] {
-  if (globalForTrades.serverTrades !== undefined) {
-    return globalForTrades.serverTrades;
+export function loadTrades(userId?: string): ServerHedgeTrade[] {
+  const cacheKey = userId || "global_default";
+
+  if (globalForTrades.tenantTrades?.[cacheKey] !== undefined) {
+    return globalForTrades.tenantTrades[cacheKey];
   }
 
-  const parsed = readDataFile<ServerHedgeTrade[]>(TRADES_FILE_NAME, []);
-  if (Array.isArray(parsed) && parsed.length > 0) {
-    globalForTrades.serverTrades = parsed;
-    return parsed;
+  let parsed: ServerHedgeTrade[] = [];
+  if (userId && userId !== "global_default") {
+    parsed = readUserDataFile<ServerHedgeTrade[]>(userId, TRADES_FILE_NAME, []);
+    // Fallback to global if user has no trades yet and is admin
+    if (parsed.length === 0 && (userId === "usr_admin_varsha" || userId.includes("admin"))) {
+      parsed = readDataFile<ServerHedgeTrade[]>(TRADES_FILE_NAME, []);
+    }
+  } else {
+    parsed = readDataFile<ServerHedgeTrade[]>(TRADES_FILE_NAME, []);
   }
 
-  const initial = getInitialSeededTrades();
-  globalForTrades.serverTrades = initial;
-  saveTrades(initial);
-  return initial;
+  if (!Array.isArray(parsed)) {
+    parsed = [];
+  }
+
+  globalForTrades.tenantTrades![cacheKey] = parsed;
+  return parsed;
 }
 
-export function saveTrades(trades: ServerHedgeTrade[]) {
-  globalForTrades.serverTrades = trades;
-  saveDataFile(TRADES_FILE_NAME, trades);
+export function saveTrades(trades: ServerHedgeTrade[], userId?: string) {
+  const cacheKey = userId || "global_default";
+  globalForTrades.tenantTrades![cacheKey] = trades;
+
+  if (userId && userId !== "global_default") {
+    saveUserDataFile(userId, TRADES_FILE_NAME, trades);
+    // Mirror to global if admin
+    if (userId === "usr_admin_varsha" || userId.includes("admin")) {
+      saveDataFile(TRADES_FILE_NAME, trades);
+    }
+  } else {
+    saveDataFile(TRADES_FILE_NAME, trades);
+  }
 }
 
-export function clearTrades(): void {
-  saveTrades([]);
+export function clearTrades(userId?: string): void {
+  saveTrades([], userId);
 }
 
-export function recordServerTrade(trade: Partial<ServerHedgeTrade>): ServerHedgeTrade {
-  const trades = loadTrades();
+export function recordServerTrade(trade: Partial<ServerHedgeTrade>, userId?: string): ServerHedgeTrade {
+  const targetUser = userId || trade.userId || "global_default";
+  const trades = loadTrades(targetUser);
   const now = Date.now();
   const openTime = trade.timestamp || now;
   const closeTime = trade.closeTimestamp || (trade.status === "CLOSED" || trade.status === "DELTA_NEUTRAL" ? now : undefined);
@@ -84,6 +104,7 @@ export function recordServerTrade(trade: Partial<ServerHedgeTrade>): ServerHedge
 
   const fullTrade: ServerHedgeTrade = {
     id: trade.id || `HDG-${Date.now().toString().slice(-6)}`,
+    userId: targetUser,
     timestamp: openTime,
     closeTimestamp: closeTime,
     durationMs,
@@ -121,6 +142,6 @@ export function recordServerTrade(trade: Partial<ServerHedgeTrade>): ServerHedge
     updated = [fullTrade, ...trades].slice(0, 200);
   }
 
-  saveTrades(updated);
+  saveTrades(updated, targetUser);
   return fullTrade;
 }

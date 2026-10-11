@@ -200,60 +200,7 @@ export default function AutoBotPanel() {
       if (data.success && data.daemon) {
         let serverDaemon = data.daemon;
 
-        // Auto-restore from Browser Vault if server was reset to default
-        if (!hasAttemptedVaultSyncRef.current && typeof window !== "undefined") {
-          hasAttemptedVaultSyncRef.current = true;
-          try {
-            const rawVault = localStorage.getItem(BROWSER_VAULT_KEY);
-            if (rawVault) {
-              const vault = JSON.parse(rawVault);
-              const isServerOnlyDefault =
-                serverDaemon.bots?.length === 1 &&
-                serverDaemon.bots[0].name === "Conservative Funding Sniper" &&
-                (serverDaemon.bots[0].activeHedges?.length || 0) === 0;
-
-              const clientHasCustom =
-                Array.isArray(vault.bots) &&
-                (vault.bots.length > 1 ||
-                  vault.bots[0]?.name !== "Conservative Funding Sniper" ||
-                  (Array.isArray(vault.setFiles) && vault.setFiles.length > 2));
-
-              if (isServerOnlyDefault && clientHasCustom) {
-                const restoreRes = await fetch("/api/bot/daemon", {
-                  method: "POST",
-                  headers: { "Content-Type": "application/json" },
-                  body: JSON.stringify({
-                    action: "sync_restore_vault",
-                    bots: vault.bots,
-                    setFiles: vault.setFiles,
-                    activeBotId: vault.activeBotId,
-                  }),
-                });
-                const restoreData = await restoreRes.json();
-                if (restoreData.success && restoreData.daemon) {
-                  serverDaemon = restoreData.daemon;
-                  showToast("🛡️ Browser Vault: Restored your saved bots & presets to server!");
-                }
-              }
-            }
-          } catch {}
-        }
-
-        // Always mirror current valid state into browser vault
-        if (typeof window !== "undefined" && serverDaemon.bots && serverDaemon.bots.length > 0) {
-          try {
-            localStorage.setItem(
-              BROWSER_VAULT_KEY,
-              JSON.stringify({
-                bots: serverDaemon.bots,
-                setFiles: serverDaemon.setFiles || [],
-                activeBotId: serverDaemon.activeBotId,
-                savedAt: Date.now(),
-              })
-            );
-          } catch {}
-        }
-
+        // Server state is the authoritative single source of truth
         setDaemon(serverDaemon);
         const curBot =
           serverDaemon.bots?.find((b: any) => b.id === serverDaemon.activeBotId) ||

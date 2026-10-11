@@ -75,36 +75,14 @@ export default function ProfilePage() {
       if (data.success && data.isLoggedIn && data.user) {
         setUser(data.user);
 
-        // Load keys from localStorage first, then fallback to user's saved keys
-        if (typeof window !== "undefined") {
-          const localBnKey = localStorage.getItem("BINANCE_KEY") || "";
-          const localBnSecret = localStorage.getItem("BINANCE_SECRET") || "";
-          const localBnEndpoint = localStorage.getItem("BINANCE_ENDPOINT") || "https://demo-fapi.binance.com";
-
-          const localBgKey = localStorage.getItem("BITGET_KEY") || "";
-          const localBgSecret = localStorage.getItem("BITGET_SECRET") || "";
-          const localBgPass = localStorage.getItem("BITGET_PASSPHRASE") || "";
-          const localBgEnv = localStorage.getItem("BITGET_ENV") || "demo";
-
-          if (data.user.role === "admin") {
-            setBinanceKey(localBnKey || data.user.apiKeys?.binanceKey || "");
-            setBinanceSecret(localBnSecret || data.user.apiKeys?.binanceSecret || "");
-            setBinanceEndpoint(localBnEndpoint);
-            setBitgetKey(localBgKey || data.user.apiKeys?.bitgetKey || "");
-            setBitgetSecret(localBgSecret || data.user.apiKeys?.bitgetSecret || "");
-            setBitgetPassphrase(localBgPass || data.user.apiKeys?.bitgetPassphrase || "");
-            setBitgetEnv(localBgEnv);
-          } else {
-            // Non-admin user keys start BLANK unless saved by the user
-            setBinanceKey(localBnKey || (data.user.apiKeys?.binanceKey || ""));
-            setBinanceSecret(localBnSecret || "");
-            setBinanceEndpoint(localBnEndpoint);
-            setBitgetKey(localBgKey || (data.user.apiKeys?.bitgetKey || ""));
-            setBitgetSecret(localBgSecret || "");
-            setBitgetPassphrase(localBgPass || "");
-            setBitgetEnv(localBgEnv);
-          }
-        }
+        // Load API keys securely from authenticated user record
+        setBinanceKey(data.user.apiKeys?.binanceKey || "");
+        setBinanceSecret(data.user.apiKeys?.binanceSecret || "");
+        setBinanceEndpoint(data.user.apiKeys?.binanceEndpoint || "https://demo-fapi.binance.com");
+        setBitgetKey(data.user.apiKeys?.bitgetKey || "");
+        setBitgetSecret(data.user.apiKeys?.bitgetSecret || "");
+        setBitgetPassphrase(data.user.apiKeys?.bitgetPassphrase || "");
+        setBitgetEnv(data.user.apiKeys?.bitgetEnv || "demo");
       } else {
         router.push("/login");
       }
@@ -138,17 +116,7 @@ export default function ProfilePage() {
     setSaveSuccessMsg(null);
     setTestResult(null);
 
-    // Save to localStorage
-    if (typeof window !== "undefined") {
-      localStorage.setItem("BINANCE_KEY", binanceKey.trim());
-      localStorage.setItem("BINANCE_SECRET", binanceSecret.trim());
-      localStorage.setItem("BINANCE_ENDPOINT", binanceEndpoint);
-
-      localStorage.setItem("BITGET_KEY", bitgetKey.trim());
-      localStorage.setItem("BITGET_SECRET", bitgetSecret.trim());
-      localStorage.setItem("BITGET_PASSPHRASE", bitgetPassphrase.trim());
-      localStorage.setItem("BITGET_ENV", bitgetEnv);
-    }
+    // Save securely to encrypted user store on server (AES-256-GCM vault)
 
     // Save to user store on server
     try {

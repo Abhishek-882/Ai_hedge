@@ -74,7 +74,7 @@ export default function Navbar() {
               <span className="text-zinc-500 font-normal">{"// QUANT"}</span>
             </span>
             <span className="text-[9px] text-zinc-500 font-normal">
-              Delta-Neutral Arbitrage
+              Funding Rate Arbitrage
             </span>
           </div>
         </Link>

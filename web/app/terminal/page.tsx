@@ -327,7 +327,7 @@ export default function TerminalPage() {
             </div>
 
             <p className="text-[11px] text-zinc-500 mt-1.5 hidden sm:block">
-              Delta-Neutral Basis Capture • Dual-Stream WebSockets • Binance USD-M & Bitget Perpetuals
+              Cross-Exchange Basis Capture • Dual-Stream WebSockets • Binance & Bitget Futures
             </p>
           </div>
 

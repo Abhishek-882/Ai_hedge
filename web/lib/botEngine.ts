@@ -12,8 +12,18 @@ import {
   SYSTEM_DEFAULT_BITGET_KEY,
   SYSTEM_DEFAULT_BITGET_SECRET,
   SYSTEM_DEFAULT_BITGET_PASSPHRASE,
+  getAllActiveUsers,
+  getDecryptedUserApiKeys,
+  UserAccount,
+  UserApiKeys,
 } from "./userStore";
-import { resolveDataFilePath, readDataFile, saveDataFile } from "./storagePath";
+import {
+  resolveDataFilePath,
+  readDataFile,
+  saveDataFile,
+  readUserDataFile,
+  saveUserDataFile,
+} from "./storagePath";
 
 export interface BotConfig {
   enabled: boolean;
@@ -119,10 +129,6 @@ export interface BotEngineState {
 const STATE_FILE_NAME = "bot_daemon_state.json";
 const SET_FILES_NAME = "bot_set_files.json";
 const AUDIT_LOG_FILE_NAME = "bot_audit_log.json";
-
-const STATE_FILE_PATH = resolveDataFilePath(STATE_FILE_NAME);
-const SET_FILES_PATH = resolveDataFilePath(SET_FILES_NAME);
-const AUDIT_LOG_FILE_PATH = resolveDataFilePath(AUDIT_LOG_FILE_NAME);
 
 // System admin API credentials for 24/7 background worker
 const ADMIN_BINANCE_KEY = SYSTEM_DEFAULT_BINANCE_KEY;
@@ -371,16 +377,34 @@ function formatSymbolQuantity(qty: number, symbol: string, refPrice: number = 0)
   return Math.max(10, Math.round(qty)).toString();
 }
 
-// Global Singleton to maintain worker interval across Next.js reloads
+// Global Singleton to maintain worker interval and per-tenant state across Next.js reloads
 const globalForBot = global as unknown as {
+  tenantStates?: Record<string, BotEngineState>;
+  tenantLocks?: Set<string>;
   botEngineState?: BotEngineState;
   botInterval?: NodeJS.Timeout | null;
   keepAliveInterval?: NodeJS.Timeout | null;
   botIsExecutingCycle?: boolean;
 };
 
-export function loadSetFiles(): BotSetFile[] {
-  const customFiles = readDataFile<BotSetFile[]>(SET_FILES_NAME, []);
+if (!globalForBot.tenantStates) {
+  globalForBot.tenantStates = {};
+}
+if (!globalForBot.tenantLocks) {
+  globalForBot.tenantLocks = new Set<string>();
+}
+
+export function loadSetFiles(userId?: string): BotSetFile[] {
+  let customFiles: BotSetFile[] = [];
+  if (userId && userId !== "global_default") {
+    customFiles = readUserDataFile<BotSetFile[]>(userId, SET_FILES_NAME, []);
+    if (customFiles.length === 0 && (userId === "usr_admin_varsha" || userId.includes("admin"))) {
+      customFiles = readDataFile<BotSetFile[]>(SET_FILES_NAME, []);
+    }
+  } else {
+    customFiles = readDataFile<BotSetFile[]>(SET_FILES_NAME, []);
+  }
+
   const merged = [...BUILT_IN_SET_FILES];
   for (const cf of customFiles) {
     if (!merged.some((b) => b.fileName.toLowerCase() === cf.fileName.toLowerCase())) {
@@ -390,22 +414,37 @@ export function loadSetFiles(): BotSetFile[] {
   return merged;
 }
 
-export function saveSetFiles(files: BotSetFile[]) {
+export function saveSetFiles(files: BotSetFile[], userId?: string) {
   const customOnly = files.filter((f) => !f.isBuiltIn);
-  saveDataFile(SET_FILES_NAME, customOnly);
+  if (userId && userId !== "global_default") {
+    saveUserDataFile(userId, SET_FILES_NAME, customOnly);
+    if (userId === "usr_admin_varsha" || userId.includes("admin")) {
+      saveDataFile(SET_FILES_NAME, customOnly);
+    }
+  } else {
+    saveDataFile(SET_FILES_NAME, customOnly);
+  }
 }
 
-export function loadBotState(): BotEngineState {
-  if (globalForBot.botEngineState) {
-    return globalForBot.botEngineState;
+export function loadBotState(userId?: string): BotEngineState {
+  const tenantKey = userId || "usr_admin_varsha";
+
+  if (globalForBot.tenantStates?.[tenantKey]) {
+    return globalForBot.tenantStates[tenantKey];
   }
 
-  const allSetFiles = loadSetFiles();
+  const allSetFiles = loadSetFiles(userId);
 
   try {
-    const parsed = readDataFile<any>(STATE_FILE_NAME, null);
-    if (parsed) {
+    let parsed: any = null;
+    if (userId && userId !== "usr_admin_varsha" && userId !== "global_default") {
+      parsed = readUserDataFile<any>(userId, STATE_FILE_NAME, null);
+    }
+    if (!parsed) {
+      parsed = readDataFile<any>(STATE_FILE_NAME, null);
+    }
 
+    if (parsed) {
       let bots: BotInstance[] = [];
       if (Array.isArray(parsed.bots) && parsed.bots.length > 0) {
         bots = parsed.bots.map((b: any, idx: number) => ({
@@ -469,7 +508,10 @@ export function loadBotState(): BotEngineState {
         lastEvaluatedCandidate: activeBot.lastEvaluatedCandidate,
       };
 
-      globalForBot.botEngineState = state;
+      globalForBot.tenantStates![tenantKey] = state;
+      if (!userId || userId === "usr_admin_varsha") {
+        globalForBot.botEngineState = state;
+      }
       return state;
     }
   } catch {}
@@ -515,12 +557,15 @@ export function loadBotState(): BotEngineState {
     lastEvaluatedCandidate: null,
   };
 
-  globalForBot.botEngineState = defaultState;
-  saveBotState(defaultState);
+  globalForBot.tenantStates![tenantKey] = defaultState;
+  if (!userId || userId === "usr_admin_varsha") {
+    globalForBot.botEngineState = defaultState;
+  }
+  saveBotState(defaultState, userId);
   return defaultState;
 }
 
-export function saveBotState(state: BotEngineState) {
+export function saveBotState(state: BotEngineState, userId?: string) {
   // Mirror active bot onto legacy properties for seamless backward compatibility
   const activeBot = state.bots.find((b) => b.id === state.activeBotId) || state.bots[0];
   if (activeBot) {
@@ -531,14 +576,22 @@ export function saveBotState(state: BotEngineState) {
     state.lastEvaluatedCandidate = activeBot.lastEvaluatedCandidate;
   }
 
-  globalForBot.botEngineState = state;
-  saveDataFile(STATE_FILE_NAME, state);
+  const tenantKey = userId || "usr_admin_varsha";
+  globalForBot.tenantStates![tenantKey] = state;
+
+  if (userId && userId !== "usr_admin_varsha" && userId !== "global_default") {
+    saveUserDataFile(userId, STATE_FILE_NAME, state);
+  } else {
+    globalForBot.botEngineState = state;
+    saveDataFile(STATE_FILE_NAME, state);
+  }
 }
 
 export function appendBotLog(
   state: BotEngineState,
   message: string,
-  level: "info" | "success" | "warn" | "error" = "info"
+  level: "info" | "success" | "warn" | "error" = "info",
+  userId?: string
 ) {
   const log: BotLog = {
     timestamp: new Date().toISOString(),
@@ -552,14 +605,22 @@ export function appendBotLog(
 
   // AUTO-SAVE AUDIT STREAM: Immediately persist to disk for 24/7 diagnostics
   try {
-    saveBotState(state);
+    saveBotState(state, userId);
 
-    let auditHistory = readDataFile<BotLog[]>(AUDIT_LOG_FILE_NAME, []);
+    let auditHistory = userId && userId !== "usr_admin_varsha" && userId !== "global_default"
+      ? readUserDataFile<BotLog[]>(userId, AUDIT_LOG_FILE_NAME, [])
+      : readDataFile<BotLog[]>(AUDIT_LOG_FILE_NAME, []);
+
     auditHistory.unshift(log);
     if (auditHistory.length > 500) {
       auditHistory = auditHistory.slice(0, 500);
     }
-    saveDataFile(AUDIT_LOG_FILE_NAME, auditHistory);
+
+    if (userId && userId !== "usr_admin_varsha" && userId !== "global_default") {
+      saveUserDataFile(userId, AUDIT_LOG_FILE_NAME, auditHistory);
+    } else {
+      saveDataFile(AUDIT_LOG_FILE_NAME, auditHistory);
+    }
   } catch (err: any) {
     console.error("Auto-save audit log error:", err.message);
   }
@@ -568,8 +629,8 @@ export function appendBotLog(
 // ─────────────────────────────────────────────────────────────
 // PER-BOT FLATTEN MEMORY LOCK HELPERS
 // ─────────────────────────────────────────────────────────────
-export function lockFlattenedCoinForBot(symbol: string, botId?: string) {
-  const state = loadBotState();
+export function lockFlattenedCoinForBot(symbol: string, botId?: string, userId?: string) {
+  const state = loadBotState(userId);
   const upper = symbol.toUpperCase();
   let changed = false;
 
@@ -581,19 +642,20 @@ export function lockFlattenedCoinForBot(symbol: string, botId?: string) {
         appendBotLog(
           state,
           `[MEMORY LOCK ENGAGED] ${upper} was flattened. Locked in bot "${bot.name}" memory to prevent churn until manual reset.`,
-          "warn"
+          "warn",
+          userId
         );
       }
     }
   }
 
   if (changed) {
-    saveBotState(state);
+    saveBotState(state, userId);
   }
 }
 
-export function resetBotMemory(botId?: string) {
-  const state = loadBotState();
+export function resetBotMemory(botId?: string, userId?: string) {
+  const state = loadBotState(userId);
   let changed = false;
 
   for (const bot of state.bots) {
@@ -604,18 +666,19 @@ export function resetBotMemory(botId?: string) {
       appendBotLog(
         state,
         `[MEMORY RESET] Cleared ${count} locked coin(s) from bot "${bot.name}". All universe coins now eligible for trading.`,
-        "info"
+        "info",
+        userId
       );
     }
   }
 
   if (changed) {
-    saveBotState(state);
+    saveBotState(state, userId);
   }
 }
 
-export function unlockSingleCoin(symbol: string, botId?: string) {
-  const state = loadBotState();
+export function unlockSingleCoin(symbol: string, botId?: string, userId?: string) {
+  const state = loadBotState(userId);
   const upper = symbol.toUpperCase();
   let changed = false;
 
@@ -628,23 +691,24 @@ export function unlockSingleCoin(symbol: string, botId?: string) {
         appendBotLog(
           state,
           `[MEMORY UNLOCKED] ${upper} unblocked from bot "${bot.name}". Now eligible for scanning.`,
-          "info"
+          "info",
+          userId
         );
       }
     }
   }
 
   if (changed) {
-    saveBotState(state);
+    saveBotState(state, userId);
   }
 }
 
 // ─────────────────────────────────────────────────────────────
 // MULTI-BOT CRUD & SET FILE MANAGER HELPERS
 // ─────────────────────────────────────────────────────────────
-export function createBot(name: string, setFileName?: string, maxMarginCapUsdt?: number): BotInstance {
-  const state = loadBotState();
-  const setFiles = loadSetFiles();
+export function createBot(name: string, setFileName?: string, maxMarginCapUsdt?: number, userId?: string): BotInstance {
+  const state = loadBotState(userId);
+  const setFiles = loadSetFiles(userId);
 
   const chosenSet = setFileName
     ? setFiles.find((s) => s.fileName.toLowerCase() === setFileName.toLowerCase())
@@ -673,8 +737,8 @@ export function createBot(name: string, setFileName?: string, maxMarginCapUsdt?:
 
   state.bots.push(newBot);
   state.activeBotId = newBot.id;
-  appendBotLog(state, `[BOT CREATED] New bot "${newBot.name}" added with preset "${newBot.activeSetFileName}".`, "success");
-  saveBotState(state);
+  appendBotLog(state, `[BOT CREATED] New bot "${newBot.name}" added with preset "${newBot.activeSetFileName}".`, "success", userId);
+  saveBotState(state, userId);
   return newBot;
 }
 
@@ -687,9 +751,10 @@ export function editBot(
     enabled?: boolean;
     config?: Partial<BotConfig>;
     flattenedCoinsBlacklist?: string[];
-  }
+  },
+  userId?: string
 ): BotInstance | null {
-  const state = loadBotState();
+  const state = loadBotState(userId);
   const bot = state.bots.find((b) => b.id === botId);
   if (!bot) return null;
 
@@ -718,13 +783,13 @@ export function editBot(
   }
 
   bot.updatedAt = Date.now();
-  appendBotLog(state, `[BOT UPDATED] Configuration for "${bot.name}" saved to disk.`, "info");
-  saveBotState(state);
+  appendBotLog(state, `[BOT UPDATED] Configuration for "${bot.name}" saved to disk.`, "info", userId);
+  saveBotState(state, userId);
   return bot;
 }
 
-export function deleteBot(botId: string): boolean {
-  const state = loadBotState();
+export function deleteBot(botId: string, userId?: string): boolean {
+  const state = loadBotState(userId);
   if (state.bots.length <= 1) {
     return false; // Cannot delete the last active bot
   }
@@ -737,8 +802,8 @@ export function deleteBot(botId: string): boolean {
     state.activeBotId = state.bots[0].id;
   }
 
-  appendBotLog(state, `[BOT DELETED] Bot "${deleted.name}" removed from server roster.`, "warn");
-  saveBotState(state);
+  appendBotLog(state, `[BOT DELETED] Bot "${deleted.name}" removed from server roster.`, "warn", userId);
+  saveBotState(state, userId);
   return true;
 }
 
@@ -746,15 +811,16 @@ export function saveSetFile(
   fileName: string,
   name: string,
   description: string,
-  config: BotConfig
+  config: BotConfig,
+  userId?: string
 ): BotSetFile {
   let cleanFileName = fileName.trim();
   if (!cleanFileName.toLowerCase().endsWith(".set")) {
     cleanFileName += ".set";
   }
 
-  const state = loadBotState();
-  let setFiles = loadSetFiles();
+  const state = loadBotState(userId);
+  let setFiles = loadSetFiles(userId);
 
   const contentText = serializeConfigToSetText(config, name);
   const existingIdx = setFiles.findIndex((s) => s.fileName.toLowerCase() === cleanFileName.toLowerCase());
@@ -786,19 +852,19 @@ export function saveSetFile(
     setFiles.push(setFileObj);
   }
 
-  saveSetFiles(setFiles);
+  saveSetFiles(setFiles, userId);
   state.setFiles = setFiles;
-  appendBotLog(state, `[SET FILE SAVED] Strategy preset "${cleanFileName}" saved to disk.`, "success");
-  saveBotState(state);
+  appendBotLog(state, `[SET FILE SAVED] Strategy preset "${cleanFileName}" saved to disk.`, "success", userId);
+  saveBotState(state, userId);
   return setFileObj;
 }
 
-export function applySetFileToBot(botId: string, fileName: string): boolean {
-  const state = loadBotState();
+export function applySetFileToBot(botId: string, fileName: string, userId?: string): boolean {
+  const state = loadBotState(userId);
   const bot = state.bots.find((b) => b.id === botId);
   if (!bot) return false;
 
-  const setFiles = loadSetFiles();
+  const setFiles = loadSetFiles(userId);
   const setObj = setFiles.find((s) => s.fileName.toLowerCase() === fileName.toLowerCase());
   if (!setObj) return false;
 
@@ -812,40 +878,42 @@ export function applySetFileToBot(botId: string, fileName: string): boolean {
   appendBotLog(
     state,
     `[SET APPLIED] Preset "${setObj.name}" (${setObj.fileName}) loaded into bot "${bot.name}".`,
-    "success"
+    "success",
+    userId
   );
-  saveBotState(state);
+  saveBotState(state, userId);
   return true;
 }
 
-export function deleteSetFile(fileName: string): boolean {
-  const setFiles = loadSetFiles();
+export function deleteSetFile(fileName: string, userId?: string): boolean {
+  const setFiles = loadSetFiles(userId);
   const target = setFiles.find((s) => s.fileName.toLowerCase() === fileName.toLowerCase());
   if (!target || target.isBuiltIn) {
     return false; // Cannot delete built-in presets
   }
 
   const filtered = setFiles.filter((s) => s.fileName.toLowerCase() !== fileName.toLowerCase());
-  saveSetFiles(filtered);
+  saveSetFiles(filtered, userId);
 
-  const state = loadBotState();
+  const state = loadBotState(userId);
   state.setFiles = filtered;
-  appendBotLog(state, `[SET FILE DELETED] Preset "${fileName}" removed.`, "warn");
-  saveBotState(state);
+  appendBotLog(state, `[SET FILE DELETED] Preset "${fileName}" removed.`, "warn", userId);
+  saveBotState(state, userId);
   return true;
 }
 
 export function restoreBotsAndSetFiles(
   clientBots: BotInstance[],
   clientSetFiles: BotSetFile[],
-  preferredActiveBotId?: string
+  preferredActiveBotId?: string,
+  userId?: string
 ): BotEngineState {
-  const state = loadBotState();
+  const state = loadBotState(userId);
   let stateChanged = false;
 
   // 1. Restore / Merge custom .set files
   if (Array.isArray(clientSetFiles) && clientSetFiles.length > 0) {
-    let currentSets = loadSetFiles();
+    let currentSets = loadSetFiles(userId);
     for (const csf of clientSetFiles) {
       if (!currentSets.some((s) => s.fileName.toLowerCase() === csf.fileName.toLowerCase())) {
         currentSets.push({
@@ -856,7 +924,7 @@ export function restoreBotsAndSetFiles(
         stateChanged = true;
       }
     }
-    saveSetFiles(currentSets);
+    saveSetFiles(currentSets, userId);
     state.setFiles = currentSets;
   }
 
@@ -894,9 +962,10 @@ export function restoreBotsAndSetFiles(
     appendBotLog(
       state,
       `[VAULT SYNC RESTORE] Restored ${state.bots.length} bot instance(s) and ${state.setFiles.length} strategy preset(s) from persistent browser vault.`,
-      "success"
+      "success",
+      userId
     );
-    saveBotState(state);
+    saveBotState(state, userId);
     ensureBotWorker();
   }
 
@@ -904,21 +973,32 @@ export function restoreBotsAndSetFiles(
 }
 
 /**
- * Fetch available margin across Binance and Bitget
+ * Fetch available margin across Binance and Bitget using tenant credentials
  */
-async function fetchAvailableBalances(): Promise<{ binanceBal: number; bitgetBal: number }> {
+export async function fetchAvailableBalances(creds?: UserApiKeys): Promise<{ binanceBal: number; bitgetBal: number }> {
   let binanceBal = 1000;
   let bitgetBal = 1000;
 
+  const bnKey = creds?.binanceKey || ADMIN_BINANCE_KEY;
+  const bnSec = creds?.binanceSecret || ADMIN_BINANCE_SECRET;
+  const bnEndpoint = creds?.binanceEndpoint || ADMIN_BINANCE_ENDPOINT;
+
+  const bgCreds: BitgetCredentials = {
+    apiKey: creds?.bitgetKey || SYSTEM_DEFAULT_BITGET_KEY,
+    apiSecret: creds?.bitgetSecret || SYSTEM_DEFAULT_BITGET_SECRET,
+    passphrase: creds?.bitgetPassphrase || SYSTEM_DEFAULT_BITGET_PASSPHRASE,
+    isDemo: creds?.bitgetEnv !== "live",
+  };
+
   try {
     const { data: bnAcc } = await signAndFetchBinance(
-      ADMIN_BINANCE_KEY,
-      ADMIN_BINANCE_SECRET,
+      bnKey,
+      bnSec,
       "GET",
       "/fapi/v2/account",
       {},
       true,
-      ADMIN_BINANCE_ENDPOINT
+      bnEndpoint
     );
     const avail = parseFloat(bnAcc?.availableBalance || "0");
     if (avail > 0) binanceBal = avail;
@@ -928,8 +1008,8 @@ async function fetchAvailableBalances(): Promise<{ binanceBal: number; bitgetBal
     const path = "/api/v3/account/assets?category=USDT-FUTURES";
     const res = await fetch(`https://api.bitget.com${path}`, {
       headers: {
-        papertrading: "1",
-        paptrading: "1",
+        papertrading: bgCreds.isDemo ? "1" : "0",
+        paptrading: bgCreds.isDemo ? "1" : "0",
       },
       cache: "no-store",
     });
@@ -1009,8 +1089,9 @@ async function getTradableSymbolsSet(): Promise<Set<string>> {
 
 /**
  * Fetch live tickers and candidates from exchanges
+ * Performed once globally per 5s cycle to protect VPS IP from rate-limits (HTTP 429)
  */
-async function fetchOpportunityCoins(): Promise<any[]> {
+export async function fetchOpportunityCoins(): Promise<any[]> {
   try {
     const tradableSet = await getTradableSymbolsSet();
     const [bnRes, bgRes, metaMap] = await Promise.all([
@@ -1118,7 +1199,7 @@ async function fetchOpportunityCoins(): Promise<any[]> {
 /**
  * Fetch fresh live prices for a specific symbol to compute accurate price divergence
  */
-async function fetchFreshPrices(symbol: string): Promise<{ bnPrice: number; bgPrice: number; divergencePct: number }> {
+export async function fetchFreshPrices(symbol: string): Promise<{ bnPrice: number; bgPrice: number; divergencePct: number }> {
   let bnPrice = 0;
   let bgPrice = 0;
 
@@ -1162,14 +1243,16 @@ async function fetchFreshPrices(symbol: string): Promise<{ bnPrice: number; bgPr
 }
 
 /**
- * Execute dual hedge entry for a qualified coin
+ * Execute dual hedge entry for a qualified coin using tenant credentials
  */
-async function executeDualHedgeEntry(
+export async function executeDualHedgeEntry(
   coin: any,
   config: BotConfig,
   allocatedMargin: number,
   botName: string,
-  state: BotEngineState
+  state: BotEngineState,
+  creds?: UserApiKeys,
+  userId?: string
 ): Promise<{ success: boolean; hedge?: ActiveBotHedge; error?: string }> {
   const symbol = coin.symbol;
   const maxLev = getCoinMaxLeverage(symbol);
@@ -1196,15 +1279,27 @@ async function executeDualHedgeEntry(
   const leg1Side: "BUY" | "SELL" = coin.direction === "SHORT_BINANCE_LONG_BITGET" ? "SELL" : "BUY";
   const leg2Side: "buy" | "sell" = leg1Side === "SELL" ? "buy" : "sell";
 
+  const bnKey = creds?.binanceKey || ADMIN_BINANCE_KEY;
+  const bnSec = creds?.binanceSecret || ADMIN_BINANCE_SECRET;
+  const bnEndpoint = creds?.binanceEndpoint || ADMIN_BINANCE_ENDPOINT;
+
+  const bgCreds: BitgetCredentials = {
+    apiKey: creds?.bitgetKey || SYSTEM_DEFAULT_BITGET_KEY,
+    apiSecret: creds?.bitgetSecret || SYSTEM_DEFAULT_BITGET_SECRET,
+    passphrase: creds?.bitgetPassphrase || SYSTEM_DEFAULT_BITGET_PASSPHRASE,
+    isDemo: creds?.bitgetEnv !== "live",
+  };
+
   appendBotLog(
     state,
     `[ORDER PREPARE] Bot "${botName}": Sizing calculated for ${symbol} | Notional: $${totalNotional.toFixed(2)} USDT (${formattedQty} units) | Lev: BN ${binanceLeverage}x / BG ${bitgetLeverage}x | Direction: ${coin.direction === "SHORT_BINANCE_LONG_BITGET" ? "Short BN + Long BG" : "Long BN + Short BG"}`,
-    "info"
+    "info",
+    userId
   );
 
   await Promise.allSettled([
-    setBinanceLeverage(ADMIN_BINANCE_KEY, ADMIN_BINANCE_SECRET, symbol, binanceLeverage, ADMIN_BINANCE_ENDPOINT),
-    setBitgetLeverage(ADMIN_BITGET_CREDS, symbol, bitgetLeverage),
+    setBinanceLeverage(bnKey, bnSec, symbol, binanceLeverage, bnEndpoint),
+    setBitgetLeverage(bgCreds, symbol, bitgetLeverage),
   ]);
 
   const { binanceDelayMs, bitgetDelayMs, leadStaggerAppliedMs, staggerVenue } = getLeadStaggerDelays();
@@ -1217,7 +1312,8 @@ async function executeDualHedgeEntry(
   appendBotLog(
     state,
     `[ORDER DISPATCH] Bot "${botName}": Firing parallel orders for ${symbol} (Leg 1: ${leg1Side} Binance, Leg 2: ${leg2Side.toUpperCase()} Bitget) with ${leadStaggerAppliedMs.toFixed(0)}ms lead-stagger...`,
-    "info"
+    "info",
+    userId
   );
 
   // Leg 1: Binance
@@ -1226,8 +1322,8 @@ async function executeDualHedgeEntry(
     const t0 = performance.now();
     try {
       const { data: res } = await signAndFetchBinance(
-        ADMIN_BINANCE_KEY,
-        ADMIN_BINANCE_SECRET,
+        bnKey,
+        bnSec,
         "POST",
         "/fapi/v1/order",
         {
@@ -1237,7 +1333,7 @@ async function executeDualHedgeEntry(
           quantity: formattedQty,
         },
         true,
-        ADMIN_BINANCE_ENDPOINT
+        bnEndpoint
       );
       leg1AckTime = performance.now();
       leg1OrderDurationMs = leg1AckTime - t0;
@@ -1245,14 +1341,16 @@ async function executeDualHedgeEntry(
       appendBotLog(
         state,
         `[LEG 1 FILLED] Bot "${botName}": Binance ${leg1Side} ${symbol} filled successfully! Order #${res.orderId} @ $${fillPrice} (${leg1OrderDurationMs.toFixed(0)}ms)`,
-        "info"
+        "info",
+        userId
       );
       return { success: true, orderId: res.orderId, price: fillPrice, venue: "Binance" };
     } catch (err: any) {
       appendBotLog(
         state,
         `[LEG 1 REJECTED] Bot "${botName}": Binance ${leg1Side} ${symbol} failed: ${err.message}`,
-        "error"
+        "error",
+        userId
       );
       return { success: false, error: err.message, venue: "Binance", price: refPrice };
     }
@@ -1270,7 +1368,7 @@ async function executeDualHedgeEntry(
         orderType: "market",
         tradeSide: "open",
       },
-      ADMIN_BITGET_CREDS
+      bgCreds
     );
 
     let attempts = 0;
@@ -1285,7 +1383,7 @@ async function executeDualHedgeEntry(
           orderType: "market",
           tradeSide: "open",
         },
-        ADMIN_BITGET_CREDS
+        bgCreds
       );
     }
 
@@ -1297,13 +1395,15 @@ async function executeDualHedgeEntry(
       appendBotLog(
         state,
         `[LEG 2 FILLED] Bot "${botName}": Bitget ${leg2Side.toUpperCase()} ${symbol} filled successfully! Order #${res.orderId} @ $${bitgetPrice} (${leg2OrderDurationMs.toFixed(0)}ms)`,
-        "info"
+        "info",
+        userId
       );
     } else {
       appendBotLog(
         state,
         `[LEG 2 REJECTED] Bot "${botName}": Bitget ${leg2Side.toUpperCase()} ${symbol} failed: ${res.error || "Order execution error"}`,
-        "error"
+        "error",
+        userId
       );
     }
 
@@ -1325,12 +1425,13 @@ async function executeDualHedgeEntry(
     appendBotLog(
       state,
       `[CIRCUIT BREAKER] Bot "${botName}": Bitget rejected (${leg2Res.error}). Triggering immediate emergency IOC unwind on Binance for ${symbol}...`,
-      "warn"
+      "warn",
+      userId
     );
     try {
       await signAndFetchBinance(
-        ADMIN_BINANCE_KEY,
-        ADMIN_BINANCE_SECRET,
+        bnKey,
+        bnSec,
         "POST",
         "/fapi/v1/order",
         {
@@ -1341,19 +1442,21 @@ async function executeDualHedgeEntry(
           reduceOnly: "true",
         },
         true,
-        ADMIN_BINANCE_ENDPOINT
+        bnEndpoint
       );
       appendBotLog(
         state,
         `[UNWIND SUCCESS] Bot "${botName}": Successfully unwound Binance leg for ${symbol}. Net exposure neutralized to $0.00.`,
-        "warn"
+        "warn",
+        userId
       );
     } catch (unwindErr: any) {
       console.error("Critical: Leg 1 emergency unwind failed:", unwindErr);
       appendBotLog(
         state,
         `[CRITICAL ALERT] Bot "${botName}": Binance emergency unwind failed for ${symbol}: ${unwindErr.message}`,
-        "error"
+        "error",
+        userId
       );
     }
     return {
@@ -1366,7 +1469,8 @@ async function executeDualHedgeEntry(
     appendBotLog(
       state,
       `[CIRCUIT BREAKER] Bot "${botName}": Binance rejected (${leg1Res.error}). Triggering immediate emergency IOC unwind on Bitget for ${symbol}...`,
-      "warn"
+      "warn",
+      userId
     );
     try {
       const unwindSide = leg2Side === "buy" ? "sell" : "buy";
@@ -1378,19 +1482,21 @@ async function executeDualHedgeEntry(
           orderType: "market",
           tradeSide: "close",
         },
-        ADMIN_BITGET_CREDS
+        bgCreds
       );
       appendBotLog(
         state,
         `[UNWIND SUCCESS] Bot "${botName}": Successfully unwound Bitget leg for ${symbol}. Net exposure neutralized to $0.00.`,
-        "warn"
+        "warn",
+        userId
       );
     } catch (unwindErr: any) {
       console.error("Critical: Leg 2 emergency unwind failed:", unwindErr);
       appendBotLog(
         state,
         `[CRITICAL ALERT] Bot "${botName}": Bitget emergency unwind failed for ${symbol}: ${unwindErr.message}`,
-        "error"
+        "error",
+        userId
       );
     }
     return {
@@ -1403,7 +1509,8 @@ async function executeDualHedgeEntry(
     appendBotLog(
       state,
       `[TRADE FAILED] Bot "${botName}": Both venue orders rejected for ${symbol}. Binance: ${leg1Res.error} | Bitget: ${leg2Res.error}`,
-      "error"
+      "error",
+      userId
     );
     return {
       success: false,
@@ -1433,43 +1540,49 @@ async function executeDualHedgeEntry(
     status: "ACTIVE",
   };
 
-  recordServerTrade({
-    id: hedge.id,
-    symbol,
-    type: "AUTONOMOUS_SERVER_HEDGE",
-    directionLabel: coin.direction === "SHORT_BINANCE_LONG_BITGET" ? "Short BN + Long BG" : "Long BN + Short BG",
-    quantity: formattedQty,
-    notionalUsdt: totalNotional,
-    leg1Venue: "Binance",
-    leg1Side: leg1Side,
-    leg1Price: leg1Res.price,
-    leg1OrderId: leg1Res.orderId,
-    leg2Venue: "Bitget",
-    leg2Side: leg2Side.toUpperCase(),
-    leg2Price: leg2Res.price,
-    leg2OrderId: leg2Res.orderId,
-    interLegDeltaMs: interLegDelta,
-    realizedPnl: 0,
-    status: "ACTIVE",
-  });
+  recordServerTrade(
+    {
+      id: hedge.id,
+      symbol,
+      type: "AUTONOMOUS_SERVER_HEDGE",
+      directionLabel: coin.direction === "SHORT_BINANCE_LONG_BITGET" ? "Short BN + Long BG" : "Long BN + Short BG",
+      quantity: formattedQty,
+      notionalUsdt: totalNotional,
+      leg1Venue: "Binance",
+      leg1Side: leg1Side,
+      leg1Price: leg1Res.price,
+      leg1OrderId: leg1Res.orderId,
+      leg2Venue: "Bitget",
+      leg2Side: leg2Side.toUpperCase(),
+      leg2Price: leg2Res.price,
+      leg2OrderId: leg2Res.orderId,
+      interLegDeltaMs: interLegDelta,
+      realizedPnl: 0,
+      status: "ACTIVE",
+    },
+    userId
+  );
 
   appendBotLog(
     state,
     `[HEDGE FILLED] Bot "${botName}": Successfully entered dual delta-neutral hedge on ${symbol}! Net Delta = 0.00. Inter-leg arrival delta: ${interLegDelta.toFixed(1)}ms. BN #${leg1Res.orderId} @ $${leg1Res.price} | BG #${leg2Res.orderId} @ $${leg2Res.price}.`,
-    "success"
+    "success",
+    userId
   );
 
   return { success: true, hedge };
 }
 
 /**
- * Execute dual close for an active hedge once price parity matches
+ * Execute dual close for an active hedge once price parity matches using tenant credentials
  */
-async function executeDualHedgeClose(
+export async function executeDualHedgeClose(
   hedge: ActiveBotHedge,
   freshPrices: { bnPrice: number; bgPrice: number; divergencePct: number },
   botName: string,
-  state: BotEngineState
+  state: BotEngineState,
+  creds?: UserApiKeys,
+  userId?: string
 ): Promise<{ success: boolean; pnl: number; error?: string }> {
   const symbol = hedge.symbol;
   const formattedQty = hedge.quantity;
@@ -1479,8 +1592,20 @@ async function executeDualHedgeClose(
   appendBotLog(
     state,
     `[CLOSE DISPATCH] Bot "${botName}": Submitting synchronized market close for ${symbol} (Binance ${leg1CloseSide} & Bitget ${leg2CloseSide.toUpperCase()})...`,
-    "info"
+    "info",
+    userId
   );
+
+  const bnKey = creds?.binanceKey || ADMIN_BINANCE_KEY;
+  const bnSec = creds?.binanceSecret || ADMIN_BINANCE_SECRET;
+  const bnEndpoint = creds?.binanceEndpoint || ADMIN_BINANCE_ENDPOINT;
+
+  const bgCreds: BitgetCredentials = {
+    apiKey: creds?.bitgetKey || SYSTEM_DEFAULT_BITGET_KEY,
+    apiSecret: creds?.bitgetSecret || SYSTEM_DEFAULT_BITGET_SECRET,
+    passphrase: creds?.bitgetPassphrase || SYSTEM_DEFAULT_BITGET_PASSPHRASE,
+    isDemo: creds?.bitgetEnv !== "live",
+  };
 
   const { binanceDelayMs, bitgetDelayMs } = getLeadStaggerDelays();
 
@@ -1488,8 +1613,8 @@ async function executeDualHedgeClose(
     (async () => {
       if (binanceDelayMs > 0) await new Promise((r) => setTimeout(r, binanceDelayMs));
       const { data: res } = await signAndFetchBinance(
-        ADMIN_BINANCE_KEY,
-        ADMIN_BINANCE_SECRET,
+        bnKey,
+        bnSec,
         "POST",
         "/fapi/v1/order",
         {
@@ -1500,13 +1625,14 @@ async function executeDualHedgeClose(
           reduceOnly: "true",
         },
         true,
-        ADMIN_BINANCE_ENDPOINT
+        bnEndpoint
       );
       const exitPrice = parseFloat(res.avgPrice || "0") || freshPrices.bnPrice;
       appendBotLog(
         state,
         `[CLOSE LEG 1] Bot "${botName}": Binance ${leg1CloseSide} ${symbol} close filled @ $${exitPrice}`,
-        "info"
+        "info",
+        userId
       );
       return { success: true, price: exitPrice };
     })(),
@@ -1520,20 +1646,22 @@ async function executeDualHedgeClose(
           orderType: "market",
           tradeSide: "close",
         },
-        ADMIN_BITGET_CREDS
+        bgCreds
       );
       const exitPrice = res.avgPrice || freshPrices.bgPrice;
       if (res.success) {
         appendBotLog(
           state,
           `[CLOSE LEG 2] Bot "${botName}": Bitget ${leg2CloseSide.toUpperCase()} ${symbol} close filled @ $${exitPrice}`,
-          "info"
+          "info",
+          userId
         );
       } else {
         appendBotLog(
           state,
           `[CLOSE LEG 2 REJECTED] Bot "${botName}": Bitget close failed for ${symbol}: ${res.error || "Close error"}`,
-          "error"
+          "error",
+          userId
         );
       }
       return { success: res.success, price: exitPrice };
@@ -1550,69 +1678,89 @@ async function executeDualHedgeClose(
   const bgPnl = bgDir * (bgExitPrice - hedge.entryBitgetPrice) * hedge.effectiveQty;
   const netPnl = parseFloat((bnPnl + bgPnl).toFixed(4));
 
-  recordServerTrade({
-    id: `CLS-${hedge.id}`,
-    symbol,
-    type: "AUTONOMOUS_SERVER_CLOSE",
-    directionLabel: "Unwind & Realize Harvest",
-    quantity: formattedQty,
-    leg1Venue: "Binance",
-    leg1Side: leg1CloseSide,
-    leg1Price: bnExitPrice,
-    leg2Venue: "Bitget",
-    leg2Side: leg2CloseSide.toUpperCase(),
-    leg2Price: bgExitPrice,
-    realizedPnl: netPnl,
-    status: "CLOSED",
-  });
+  recordServerTrade(
+    {
+      id: `CLS-${hedge.id}`,
+      symbol,
+      type: "AUTONOMOUS_SERVER_CLOSE",
+      directionLabel: "Unwind & Realize Harvest",
+      quantity: formattedQty,
+      leg1Venue: "Binance",
+      leg1Side: leg1CloseSide,
+      leg1Price: bnExitPrice,
+      leg2Venue: "Bitget",
+      leg2Side: leg2CloseSide.toUpperCase(),
+      leg2Price: bgExitPrice,
+      realizedPnl: netPnl,
+      status: "CLOSED",
+    },
+    userId
+  );
 
   appendBotLog(
     state,
     `[CLOSE COMPLETED] Bot "${botName}": Successfully unwound ${symbol} hedge. Binance PnL: $${bnPnl.toFixed(4)}, Bitget PnL: $${bgPnl.toFixed(4)}, Net Realized PnL: $${netPnl.toFixed(4)} USDT.`,
-    "success"
+    "success",
+    userId
   );
 
   return { success: true, pnl: netPnl };
 }
 
 /**
- * Main Autonomous Multi-Bot Cycle
- * Iterates across all enabled bots in the roster:
- * 1. Evaluates exits on active hedges
- * 2. Evaluates margin cap and capacity
- * 3. Scans candidates honoring the bot's Flatten Memory Lock and Set parameters
+ * Executes a single evaluation cycle for a specific tenant account.
+ * Honors user isolation, tenant margin cap, set parameters, and flatten memory lock.
  */
-export async function runAutonomousBotCycle(): Promise<void> {
-  const state = loadBotState();
-  if (!state.isRunning) {
-    return;
+export async function runTenantBotCycle(
+  user: UserAccount,
+  opportunities: any[],
+  now: number
+): Promise<void> {
+  if (globalForBot.tenantLocks!.has(user.id)) {
+    return; // User cycle already in flight
   }
 
-  if (globalForBot.botIsExecutingCycle) {
-    return; // Prevent overlapping executions
-  }
-
-  globalForBot.botIsExecutingCycle = true;
-  state.lastCycleAt = Date.now();
-  state.cyclesCompleted += 1;
+  globalForBot.tenantLocks!.add(user.id);
 
   try {
-    const now = Date.now();
+    const state = loadBotState(user.id);
+    if (!state.isRunning) {
+      return;
+    }
 
-    // Fetch shared balances & candidates once for all bots in this cycle
-    const [balances, opportunities] = await Promise.all([
-      fetchAvailableBalances(),
-      fetchOpportunityCoins(),
-    ]);
+    state.lastCycleAt = now;
+    state.cyclesCompleted += 1;
 
+    const enabledBots = state.bots.filter((b) => b.enabled);
+    if (enabledBots.length === 0) {
+      return;
+    }
+
+    const creds = getDecryptedUserApiKeys(user);
+
+    // If user is not admin and has no API keys configured, inform them
+    const hasKeys = Boolean(creds.binanceKey && creds.bitgetKey);
+    if (!hasKeys && user.role !== "admin") {
+      for (const bot of enabledBots) {
+        bot.statusText = "WAITING_API_KEYS (Configure in Profile/Settings)";
+      }
+      if (state.cyclesCompleted % 10 === 0) {
+        appendBotLog(
+          state,
+          `[KEYS REQUIRED] User account ${user.email} has no API keys configured. Please add Binance and Bitget keys in Profile/Settings to activate live trading.`,
+          "warn",
+          user.id
+        );
+      }
+      saveBotState(state, user.id);
+      return;
+    }
+
+    // Fetch user balances using decrypted credentials
+    const balances = await fetchAvailableBalances(creds);
     const effectiveBal = Math.min(balances.binanceBal, balances.bitgetBal);
 
-    for (const bot of state.bots) {
-      if (!bot.enabled) {
-        bot.statusText = "PAUSED_BY_USER";
-        continue;
-      }
-
+    for (const bot of enabledBots) {
       const config = bot.config;
 
       // ─────────────────────────────────────────────────────────────
@@ -1640,7 +1788,8 @@ export async function runAutonomousBotCycle(): Promise<void> {
             appendBotLog(
               state,
               `[BASIS HOLD] Bot "${bot.name}": ${hedge.symbol} settlement passed. Waiting for basis divergence (${freshPrices.divergencePct.toFixed(3)}%) to converge to <= ${config.closeMaxPriceDivergencePct}% before closing.`,
-              "warn"
+              "warn",
+              user.id
             );
           }
           continue;
@@ -1649,11 +1798,12 @@ export async function runAutonomousBotCycle(): Promise<void> {
         appendBotLog(
           state,
           `[AUTO-CLOSE TRIGGERED] Bot "${bot.name}": ${hedge.symbol} funding fee credited & price divergence (${freshPrices.divergencePct.toFixed(3)}% <= ${config.closeMaxPriceDivergencePct}%). Executing dual close...`,
-          "info"
+          "info",
+          user.id
         );
 
         hedge.status = "CLOSING";
-        const closeRes = await executeDualHedgeClose(hedge, freshPrices, bot.name, state);
+        const closeRes = await executeDualHedgeClose(hedge, freshPrices, bot.name, state, creds, user.id);
 
         if (closeRes.success) {
           hedge.status = "CLOSED";
@@ -1671,7 +1821,8 @@ export async function runAutonomousBotCycle(): Promise<void> {
           appendBotLog(
             state,
             `[HEDGE CLOSED] Successfully unwound ${hedge.symbol} hedge by "${bot.name}". Net Realized PnL: $${closeRes.pnl} USDT.`,
-            "success"
+            "success",
+            user.id
           );
 
           // PER-BOT FLATTEN MEMORY LOCK: Lock coin so bot will NEVER re-trade until memory is force-reset
@@ -1680,7 +1831,8 @@ export async function runAutonomousBotCycle(): Promise<void> {
             appendBotLog(
               state,
               `[MEMORY LOCK ENGAGED] ${hedge.symbol} was flattened. Locked in bot "${bot.name}" memory to prevent churn until manual reset.`,
-              "warn"
+              "warn",
+              user.id
             );
           }
         } else {
@@ -1689,7 +1841,8 @@ export async function runAutonomousBotCycle(): Promise<void> {
           appendBotLog(
             state,
             `[CLOSE RETRY] Bot "${bot.name}": Error closing ${hedge.symbol}: ${closeRes.error}. Will retry on next cycle.`,
-            "warn"
+            "warn",
+            user.id
           );
         }
       }
@@ -1711,7 +1864,8 @@ export async function runAutonomousBotCycle(): Promise<void> {
           appendBotLog(
             state,
             `[CAPACITY CHECK] Bot "${bot.name}": Margin cap reached ($${currentBotMargin.toFixed(2)}/$${marginCap} USDT). New entries paused until hedges unwind.`,
-            "warn"
+            "warn",
+            user.id
           );
         }
         continue;
@@ -1724,7 +1878,8 @@ export async function runAutonomousBotCycle(): Promise<void> {
           appendBotLog(
             state,
             `[CAPACITY CHECK] Bot "${bot.name}": Maximum simultaneous hedges active (${bot.activeHedges.length}/${config.maxSimultaneousHedges}). Capacity full.`,
-            "info"
+            "info",
+            user.id
           );
         }
         continue;
@@ -1733,7 +1888,7 @@ export async function runAutonomousBotCycle(): Promise<void> {
       if (opportunities.length === 0) {
         bot.statusText = "SCANNING_OPPORTUNITIES";
         if (state.cyclesCompleted % 6 === 0) {
-          appendBotLog(state, `[SCAN CHECK] Bot "${bot.name}": No market opportunities returned from exchanges. Retrying...`, "warn");
+          appendBotLog(state, `[SCAN CHECK] Bot "${bot.name}": No market opportunities returned from exchanges. Retrying...`, "warn", user.id);
         }
         continue;
       }
@@ -1803,7 +1958,8 @@ export async function runAutonomousBotCycle(): Promise<void> {
           appendBotLog(
             state,
             `[SCAN CHECK] Bot "${bot.name}": Inspected ${opportunities.length} pairs. Top: ${topOpp.symbol} (Spread: ${topOpp.spreadBps} bps, Cycle: ${topOpp.fundingIntervalHours || 8}h, Div: ${topOpp.divergencePct}%). ${timingInfo}. Standing by.`,
-            "info"
+            "info",
+            user.id
           );
         }
         continue;
@@ -1815,7 +1971,8 @@ export async function runAutonomousBotCycle(): Promise<void> {
         appendBotLog(
           state,
           `[PARITY DRIFT BLOCKED] Bot "${bot.name}": ${topCandidate.symbol} spread is ${topCandidate.spreadBps} bps, but fresh price divergence drifted to ${freshCheck.divergencePct.toFixed(3)}% (Limit: ${config.maxPriceDivergencePct}%). Waiting for parity.`,
-          "warn"
+          "warn",
+          user.id
         );
         bot.statusText = `WAITING_PARITY (${topCandidate.symbol} ${freshCheck.divergencePct.toFixed(3)}%)`;
         continue;
@@ -1829,35 +1986,90 @@ export async function runAutonomousBotCycle(): Promise<void> {
       appendBotLog(
         state,
         `[OPPORTUNITY QUALIFIED] Bot "${bot.name}" selected ${topCandidate.symbol} (Spread: ${topCandidate.spreadBps} bps, Cycle: ${topCandidate.fundingIntervalHours || 8}h, Div: ${freshCheck.divergencePct.toFixed(4)}%, Alloc: $${allocatedMargin.toFixed(0)} USDT). Executing dual hedge...`,
-        "info"
+        "info",
+        user.id
       );
 
       bot.statusText = `EXECUTING_HEDGE (${topCandidate.symbol})`;
-      const entryRes = await executeDualHedgeEntry(topCandidate, config, allocatedMargin, bot.name, state);
+      const entryRes = await executeDualHedgeEntry(topCandidate, config, allocatedMargin, bot.name, state, creds, user.id);
 
       if (entryRes.success && entryRes.hedge) {
         bot.activeHedges.push(entryRes.hedge);
         appendBotLog(
           state,
           `[HEDGE PLACED] Bot "${bot.name}" opened dual hedge on ${topCandidate.symbol}! Size: ${entryRes.hedge.quantity} ($${entryRes.hedge.notionalUsdt} USDT). Active: ${bot.activeHedges.length}/${config.maxSimultaneousHedges}.`,
-          "success"
+          "success",
+          user.id
         );
         bot.statusText = `HEDGED (${topCandidate.symbol} ACTIVE)`;
       } else {
         appendBotLog(
           state,
           `[ENTRY ABORTED] Bot "${bot.name}": ${topCandidate.symbol} entry failed: ${entryRes.error}`,
-          "error"
+          "error",
+          user.id
         );
         bot.statusText = `ENTRY_FAILED (${topCandidate.symbol})`;
       }
     }
 
-    saveBotState(state);
+    saveBotState(state, user.id);
   } catch (err: any) {
-    console.error("Multi-bot cycle error:", err);
-    appendBotLog(state, `Cycle error: ${err.message}`, "error");
-    saveBotState(state);
+    console.error(`Tenant ${user.email} cycle error:`, err);
+  } finally {
+    globalForBot.tenantLocks!.delete(user.id);
+  }
+}
+
+/**
+ * Master Autonomous Multi-Bot Cycle
+ * Iterates across all active tenant users:
+ * 1. Fetches public funding opportunities once globally
+ * 2. Dispatches isolated execution cycles for each user account
+ */
+export async function runAutonomousBotCycle(): Promise<void> {
+  if (globalForBot.botIsExecutingCycle) {
+    return; // Prevent overlapping master loops
+  }
+
+  globalForBot.botIsExecutingCycle = true;
+  const now = Date.now();
+
+  try {
+    // 1. Fetch shared candidate opportunities once across the entire VPS node
+    const opportunities = await fetchOpportunityCoins();
+
+    // 2. Fetch all registered users
+    const allUsers = getAllActiveUsers();
+
+    if (allUsers.length === 0) {
+      // Fallback single-tenant run
+      const dummyAdmin: UserAccount = {
+        id: "usr_admin_varsha",
+        email: "varsha633@gmailcom",
+        username: "Admin",
+        password: "",
+        role: "admin",
+        createdAt: new Date().toISOString(),
+        lastLogin: new Date().toISOString(),
+        apiKeys: {
+          binanceKey: SYSTEM_DEFAULT_BINANCE_KEY,
+          binanceSecret: SYSTEM_DEFAULT_BINANCE_SECRET,
+          bitgetKey: SYSTEM_DEFAULT_BITGET_KEY,
+          bitgetSecret: SYSTEM_DEFAULT_BITGET_SECRET,
+          bitgetPassphrase: SYSTEM_DEFAULT_BITGET_PASSPHRASE,
+        },
+      };
+      await runTenantBotCycle(dummyAdmin, opportunities, now);
+    } else {
+      for (const user of allUsers) {
+        await runTenantBotCycle(user, opportunities, now);
+        // Micro-sleep to stagger exchange load across tenants
+        await new Promise((r) => setTimeout(r, 50));
+      }
+    }
+  } catch (err: any) {
+    console.error("Master multi-tenant bot cycle error:", err);
   } finally {
     globalForBot.botIsExecutingCycle = false;
   }
@@ -1867,8 +2079,7 @@ export async function runAutonomousBotCycle(): Promise<void> {
  * Ensure background worker is active
  */
 export function ensureBotWorker(): void {
-  const state = loadBotState();
-  if (state.isRunning && !globalForBot.botInterval) {
+  if (!globalForBot.botInterval) {
     runAutonomousBotCycle().catch(() => {});
 
     globalForBot.botInterval = setInterval(() => {
@@ -1879,8 +2090,7 @@ export function ensureBotWorker(): void {
   // Self-keep-alive heartbeat interval: periodically triggers cycle to keep event loop active
   if (!globalForBot.keepAliveInterval) {
     globalForBot.keepAliveInterval = setInterval(() => {
-      const s = loadBotState();
-      if (s.isRunning && !globalForBot.botIsExecutingCycle) {
+      if (!globalForBot.botIsExecutingCycle) {
         runAutonomousBotCycle().catch(() => {});
       }
     }, 15000);

@@ -9,11 +9,11 @@
     "lastLogin": "2026-10-08T12:30:14.877Z",
     "apiKeys": {
       "binanceKey": "RkqI5SmWN3z6DxKcAirPx48BmHpkA21FHPaeWFPsiJ4NbIvMAt4yTM3TsoLbHVAU",
-      "binanceSecret": "dpMSrQ1GDCPhNPnRRsIC0rCjzlDK9VfbC9fKXwptUGtqn2WdTKLZWekZqXykY00h",
+      "binanceSecret": "enc:v1:7e94daea8d920abacde849c8:072e6303bc73472607a56dee12f7b357:f24051f9d4cbc8b043659d6d18bbe475234ca85c76ee09a1ef85713f0a04230d40e9f0e0965a1d8ce2c3e1f71434cf05b3792e4ff25e74b24e1fe8b2e93fa5d9",
       "binanceEndpoint": "https://demo-fapi.binance.com",
       "bitgetKey": "bg_2c493eb64032f2b0aea68c1c18d56e05",
-      "bitgetSecret": "c77d2baac5b1fb84e9d900e15dfcac783b962d1da1837b50ff05daf68ac2f5f6",
-      "bitgetPassphrase": "ArbitrageBot2027",
+      "bitgetSecret": "enc:v1:d1465b6141417b628cbfc04e:dcb6253266e727b9f34e24c9abb81fc5:a31b49da118c241c48f8a31cd9dc6ff2713c13d3c489145f34524ec583effdeaa760314e612be954cf98e4835d25aba914bb1b291fd29396377ed68858d5a083",
+      "bitgetPassphrase": "enc:v1:0416858fd0f9bc814102fe28:81e57aa1f73541ee12055aeaad95ee49:40006153f41060088145d02952f6964a",
       "bitgetEnv": "demo"
     }
   }

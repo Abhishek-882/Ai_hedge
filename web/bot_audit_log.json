@@ -1,0 +1,47 @@
+[
+  {
+    "timestamp": "2026-10-11T01:55:37.920Z",
+    "message": "[SCAN CHECK] Bot \"Conservative Funding Sniper\": Inspected 31 pairs. Top: TRXUSDT (Spread: 2.93 bps, Cycle: 8h, Div: 0.01211%). Countdown: 21863s (8h cycle, >60s sniper window). Standing by.",
+    "level": "info"
+  },
+  {
+    "timestamp": "2026-10-11T01:55:08.566Z",
+    "message": "[SCAN CHECK] Bot \"Conservative Funding Sniper\": Inspected 31 pairs. Top: TRXUSDT (Spread: 2.93 bps, Cycle: 8h, Div: 0.00606%). Countdown: 21892s (8h cycle, >60s sniper window). Standing by.",
+    "level": "info"
+  },
+  {
+    "timestamp": "2026-10-11T01:54:37.974Z",
+    "message": "[SCAN CHECK] Bot \"Conservative Funding Sniper\": Inspected 31 pairs. Top: TRXUSDT (Spread: 2.92 bps, Cycle: 8h, Div: 0.00606%). Countdown: 21923s (8h cycle, >60s sniper window). Standing by.",
+    "level": "info"
+  },
+  {
+    "timestamp": "2026-10-11T01:54:07.927Z",
+    "message": "[SCAN CHECK] Bot \"Conservative Funding Sniper\": Inspected 31 pairs. Top: TRXUSDT (Spread: 2.92 bps, Cycle: 8h, Div: 0.00606%). Countdown: 21953s (8h cycle, >60s sniper window). Standing by.",
+    "level": "info"
+  },
+  {
+    "timestamp": "2026-10-11T01:53:37.802Z",
+    "message": "[SCAN CHECK] Bot \"Conservative Funding Sniper\": Inspected 31 pairs. Top: TRXUSDT (Spread: 2.92 bps, Cycle: 8h, Div: 0.00606%). Countdown: 21983s (8h cycle, >60s sniper window). Standing by.",
+    "level": "info"
+  },
+  {
+    "timestamp": "2026-10-11T01:53:07.846Z",
+    "message": "[SCAN CHECK] Bot \"Conservative Funding Sniper\": Inspected 31 pairs. Top: TRXUSDT (Spread: 2.92 bps, Cycle: 8h, Div: 0.00908%). Countdown: 22013s (8h cycle, >60s sniper window). Standing by.",
+    "level": "info"
+  },
+  {
+    "timestamp": "2026-10-11T01:52:37.858Z",
+    "message": "[SCAN CHECK] Bot \"Conservative Funding Sniper\": Inspected 31 pairs. Top: TRXUSDT (Spread: 2.91 bps, Cycle: 8h, Div: 0.00908%). Countdown: 22043s (8h cycle, >60s sniper window). Standing by.",
+    "level": "info"
+  },
+  {
+    "timestamp": "2026-10-11T01:52:07.793Z",
+    "message": "[SCAN CHECK] Bot \"Conservative Funding Sniper\": Inspected 31 pairs. Top: TRXUSDT (Spread: 2.91 bps, Cycle: 8h, Div: 0.00908%). Countdown: 22073s (8h cycle, >60s sniper window). Standing by.",
+    "level": "info"
+  },
+  {
+    "timestamp": "2026-10-11T01:51:38.607Z",
+    "message": "[SCAN CHECK] Bot \"Conservative Funding Sniper\": Inspected 31 pairs. Top: TRXUSDT (Spread: 2.91 bps, Cycle: 8h, Div: 0.00606%). Countdown: 22102s (8h cycle, >60s sniper window). Standing by.",
+    "level": "info"
+  }
+]

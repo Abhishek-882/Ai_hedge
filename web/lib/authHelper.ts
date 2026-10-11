@@ -33,9 +33,6 @@ export function resolveCallerCredentials(req: NextRequest): ResolvedCredentials 
     .find((c) => c.startsWith("auth_session="));
   const rawSession = authCookie ? decodeURIComponent(authCookie.replace("auth_session=", "").trim()) : "";
 
-  const emailHeader = req.headers.get("x-user-email");
-  const idHeader = req.headers.get("x-user-id");
-
   let user: UserAccount | null = null;
   if (rawSession) {
     if (rawSession.startsWith("usr_")) {
@@ -44,11 +41,6 @@ export function resolveCallerCredentials(req: NextRequest): ResolvedCredentials 
     if (!user) {
       user = findUserByEmail(rawSession) || null;
     }
-  }
-
-  if (!user && (idHeader || emailHeader)) {
-    if (idHeader) user = findUserById(idHeader) || null;
-    if (!user && emailHeader) user = findUserByEmail(emailHeader) || null;
   }
 
   const isAdmin = user ? isUserAdminRole(user) : false;

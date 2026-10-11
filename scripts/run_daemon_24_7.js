@@ -22,7 +22,8 @@ function pingDaemon() {
       try {
         const json = JSON.parse(data);
         const uptime = json.uptimeSeconds ? `${Math.floor(json.uptimeSeconds / 60)}m` : "0m";
-        console.log(`[${new Date().toLocaleTimeString()}] Heartbeat OK | Running: ${json.isRunning} | Active Bots: ${json.activeBotsCount} | Uptime: ${uptime}`);
+        const users = json.activeUsersCount !== undefined ? `Active Users: ${json.activeUsersCount} | ` : "";
+        console.log(`[${new Date().toLocaleTimeString()}] Heartbeat OK | Running: ${json.isRunning} | ${users}Active Bots: ${json.activeBotsCount} | Uptime: ${uptime}`);
       } catch {
         console.log(`[${new Date().toLocaleTimeString()}] Heartbeat OK (raw response)`);
       }
