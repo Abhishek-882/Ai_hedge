@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useEffect, useCallback, useRef } from "react";
-import { KeyRound, RefreshCw, Wallet, ShieldCheck, ExternalLink, Activity, Radio, History, User, AlertCircle, ArrowRight, Flame } from "lucide-react";
+import { KeyRound, RefreshCw, Wallet, ShieldCheck, ExternalLink, Activity, Radio, History, User, AlertCircle, ArrowRight, Flame, Bot, ArrowUp } from "lucide-react";
 import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
 import TelemetryHUD from "@/components/TelemetryHUD";
@@ -12,7 +12,6 @@ import AllCoinsScanner from "@/components/AllCoinsScanner";
 import SettingsModal from "@/components/SettingsModal";
 import UserProfileModal from "@/components/UserProfileModal";
 import ServerDaemonIndicator from "@/components/ServerDaemonIndicator";
-import AutoBotPanel from "@/components/AutoBotPanel";
 import { useDualExchangeWebSockets } from "@/hooks/useDualExchangeWebSockets";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -382,6 +381,15 @@ export default function TerminalPage() {
               <ServerDaemonIndicator onOpenProfile={() => setIsProfileOpen(true)} />
 
               <Link
+                href="/bot"
+                className="flex items-center space-x-1.5 px-2.5 py-2 sm:px-3 rounded-lg bg-amber-500/10 hover:bg-amber-500/20 border border-amber-500/30 text-xs text-amber-400 font-semibold transition-all shadow-sm shadow-amber-500/5 active:scale-95"
+                title="Manage 24/7 Server Autonomous Arbitrage Bot"
+              >
+                <Bot className="w-3.5 h-3.5 text-accent-amber animate-pulse" />
+                <span>Auto-Bot</span>
+              </Link>
+
+              <Link
                 href="/history"
                 className="flex items-center space-x-1.5 px-2.5 py-2 sm:px-3 rounded-lg bg-surface hover:bg-zinc-800 border border-border text-xs text-zinc-300 transition-colors"
                 title="View Complete Trade History Log"
@@ -522,6 +530,15 @@ export default function TerminalPage() {
               </button>
             );
           })}
+
+          <a
+            href="#scanner-matrix-section"
+            className="ml-auto px-2.5 py-1.5 rounded-lg bg-surface hover:bg-zinc-800 text-zinc-400 hover:text-zinc-200 border border-border text-[11px] font-mono transition-colors shrink-0 flex items-center space-x-1"
+            title="Jump down to All Coins Scanner Matrix"
+          >
+            <span>Scanner Matrix</span>
+            <span className="text-accent-amber">↓</span>
+          </a>
         </div>
 
         {(() => {
@@ -563,8 +580,8 @@ export default function TerminalPage() {
 
               {/* Main Trading Cockpit & Live Spread Corridor Grid */}
               <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
-                {/* Left Column: Live Cross-Exchange Funding Spread Tracker & Corridor */}
-                <div className="lg:col-span-7">
+                {/* Left Column: Live Cross-Exchange Funding Spread Tracker & Docked Positions */}
+                <div className="lg:col-span-7 space-y-6">
                   <SpreadTracker
                     symbol={selectedSymbol}
                     binanceFundingRate={wsData.binanceFundingRate}
@@ -576,6 +593,15 @@ export default function TerminalPage() {
                     priceDiff={livePriceDiff}
                     priceDivergencePct={livePriceDivergencePct}
                     fundingIntervalHours={effectiveInterval}
+                  />
+
+                  {/* Docked Live Positions Table (Eliminates empty space and balances height with Execution Panel) */}
+                  <PositionsTable
+                    positions={positions}
+                    currentSymbol={selectedSymbol}
+                    liveBinancePrice={wsData.binancePrice}
+                    liveBitgetPrice={wsData.bitgetPrice}
+                    onClosePosition={handleClosePosition}
                   />
                 </div>
 
@@ -635,24 +661,8 @@ export default function TerminalPage() {
           </div>
         )}
 
-        {/* 24/7 Server Autonomous Arbitrage Bot Cockpit */}
-        <div id="auto-bot-panel-section">
-          <AutoBotPanel />
-        </div>
-
-        {/* Live Positions Table */}
-        <div>
-          <PositionsTable
-            positions={positions}
-            currentSymbol={selectedSymbol}
-            liveBinancePrice={wsData.binancePrice}
-            liveBitgetPrice={wsData.bitgetPrice}
-            onClosePosition={handleClosePosition}
-          />
-        </div>
-
         {/* All Coins Funding Arbitrage Scanner Matrix */}
-        <div>
+        <div id="scanner-matrix-section">
           <AllCoinsScanner
             onSelectCoin={handleSelectCoinFromScanner}
             selectedSymbol={selectedSymbol}

@@ -64,6 +64,9 @@ export default function Footer() {
             <Link href="/terminal" className="hover:text-zinc-300 transition-colors">
               Trading Terminal
             </Link>
+            <Link href="/bot" className="hover:text-zinc-300 transition-colors">
+              Auto-Bot
+            </Link>
             <Link href="/history" className="hover:text-zinc-300 transition-colors">
               Hedge History
             </Link>

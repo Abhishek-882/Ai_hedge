@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState } from "react";
-import { ArrowRight, TrendingUp, Sparkles, Activity, AlertTriangle, CheckCircle2, ShieldAlert, Copy, Check } from "lucide-react";
+import { ArrowRight, TrendingUp, Sparkles, Activity, AlertTriangle, CheckCircle2, ShieldAlert, Copy, Check, ChevronDown, ChevronUp } from "lucide-react";
 
 interface SpreadTrackerProps {
   symbol?: string;
@@ -29,6 +29,7 @@ export default function SpreadTracker({
   fundingIntervalHours = 8,
 }: SpreadTrackerProps) {
   const [copiedPrice, setCopiedPrice] = useState<string | null>(null);
+  const [isCollapsed, setIsCollapsed] = useState(false);
 
   const formatRatePct = (rate: number): number => {
     if (!rate || isNaN(rate)) return 0;
@@ -79,9 +80,9 @@ export default function SpreadTracker({
   };
 
   return (
-    <div className="bg-surface rounded-2xl border border-border p-4 sm:p-6 font-mono space-y-4 shadow-xl relative overflow-hidden">
+    <div className="bg-surface rounded-2xl border border-border p-4 sm:p-5 font-mono space-y-4 shadow-xl relative overflow-hidden transition-all duration-300">
       {/* Header with Live Mark Price & Cross-Exchange Price Divergence */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between border-b border-border/80 pb-3.5 gap-2.5">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between border-b border-border/80 pb-3 gap-2.5">
         <div className="flex items-center space-x-2">
           <TrendingUp className="w-4 h-4 text-accent-amber" />
           <h2 className="text-sm font-bold text-zinc-100 tracking-wider uppercase">
@@ -89,7 +90,7 @@ export default function SpreadTracker({
           </h2>
         </div>
 
-        {/* Live Cross-Exchange Price Divergence Badge */}
+        {/* Live Cross-Exchange Price Divergence Badge & Collapse Toggle */}
         <div className="flex flex-wrap items-center gap-2 text-xs">
           <div className="flex items-center space-x-1.5 px-2.5 py-1 rounded-lg bg-zinc-900 border border-zinc-800 text-[10px]">
             <span className="text-zinc-500">PRICE GAP:</span>
@@ -136,11 +137,21 @@ export default function SpreadTracker({
           <span className={`text-[10px] px-2.5 py-1 rounded-lg border font-bold ${corridorBadge}`}>
             {corridorStatus}
           </span>
+
+          <button
+            onClick={() => setIsCollapsed(!isCollapsed)}
+            className="p-1.5 rounded-lg bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 text-zinc-400 hover:text-zinc-200 transition-colors active:scale-95 ml-0.5"
+            title={isCollapsed ? "Expand Cross-Exchange Funding Spread" : "Collapse Cross-Exchange Funding Spread"}
+          >
+            {isCollapsed ? <ChevronDown className="w-3.5 h-3.5 text-accent-amber" /> : <ChevronUp className="w-3.5 h-3.5 text-zinc-400" />}
+          </button>
         </div>
       </div>
 
-      {/* 3-Column Rates, Mark Prices & Spread Basis */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-3.5 items-center">
+      {!isCollapsed && (
+        <>
+          {/* 3-Column Rates, Mark Prices & Spread Basis */}
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-3.5 items-center">
         {/* Exchange A: Binance */}
         <div className="p-4 rounded-xl bg-surface-card border border-border hover:border-zinc-700 transition-all shadow-md group">
           <div className="text-[10px] text-zinc-400 uppercase mb-1 flex items-center justify-between">
@@ -268,6 +279,8 @@ export default function SpreadTracker({
           </span>
         </div>
       </div>
+        </>
+      )}
     </div>
   );
 }

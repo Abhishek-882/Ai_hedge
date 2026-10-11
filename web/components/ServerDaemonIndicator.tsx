@@ -2,12 +2,14 @@
 
 import React, { useState, useEffect } from "react";
 import { Server, Activity } from "lucide-react";
+import { useRouter } from "next/navigation";
 
 interface ServerDaemonIndicatorProps {
-  onOpenProfile: () => void;
+  onOpenProfile?: () => void;
 }
 
 export default function ServerDaemonIndicator({ onOpenProfile }: ServerDaemonIndicatorProps) {
+  const router = useRouter();
   const [daemonState, setDaemonState] = useState<{
     isRunning: boolean;
     uptimeSeconds: number;
@@ -39,12 +41,7 @@ export default function ServerDaemonIndicator({ onOpenProfile }: ServerDaemonInd
   }, []);
 
   const handleClick = () => {
-    const el = document.getElementById("auto-bot-panel-section");
-    if (el) {
-      el.scrollIntoView({ behavior: "smooth" });
-    } else {
-      onOpenProfile();
-    }
+    router.push("/bot");
   };
 
   return (

@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useEffect, useMemo } from "react";
-import { Search, Flame, ArrowUpRight, ArrowDownRight, RefreshCw, Zap, Clock, ShieldAlert, Check } from "lucide-react";
+import { Search, Flame, ArrowUpRight, ArrowDownRight, RefreshCw, Zap, Clock, ShieldAlert, Check, ChevronDown, ChevronUp } from "lucide-react";
 import { getDeterministicNextFundingTime, formatCountdown } from "@/lib/settlementTime";
 
 export interface CoinOpportunity {
@@ -42,6 +42,7 @@ export default function AllCoinsScanner({ onSelectCoin, selectedSymbol, onTradeE
   const [sortBy, setSortBy] = useState<"spread" | "funding" | "apr" | "countdown" | "volume" | "symbol">("spread");
   const [lastUpdated, setLastUpdated] = useState<number>(Date.now());
   const [currentTime, setCurrentTime] = useState<number>(Date.now());
+  const [isCollapsed, setIsCollapsed] = useState<boolean>(false);
 
   // 1-Click Quick Hedge Execution State
   const [executingSymbol, setExecutingSymbol] = useState<string | null>(null);
@@ -442,9 +443,19 @@ export default function AllCoinsScanner({ onSelectCoin, selectedSymbol, onTradeE
           >
             <RefreshCw className={`w-3.5 h-3.5 ${isLoading ? "animate-spin text-accent-amber" : ""}`} />
           </button>
+
+          <button
+            onClick={() => setIsCollapsed(!isCollapsed)}
+            className="p-1.5 rounded-lg bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 text-zinc-400 hover:text-zinc-200 transition-colors active:scale-95 ml-1"
+            title={isCollapsed ? "Expand Scanner Matrix" : "Collapse Scanner Matrix"}
+          >
+            {isCollapsed ? <ChevronDown className="w-3.5 h-3.5 text-accent-amber" /> : <ChevronUp className="w-3.5 h-3.5 text-zinc-400" />}
+          </button>
         </div>
       </div>
 
+      {!isCollapsed && (
+        <>
       {/* Execution Alert Banner */}
       {errorFeedback && (
         <div className="my-3 px-3.5 py-2.5 rounded-lg bg-rose-950/80 border border-rose-800 text-rose-300 text-xs flex items-center justify-between shadow-lg shadow-rose-950/30 animate-fadeIn">
@@ -698,6 +709,8 @@ export default function AllCoinsScanner({ onSelectCoin, selectedSymbol, onTradeE
           <span>Click <strong>LOAD</strong> to configure in Execution Panel</span>
         </div>
       </div>
+        </>
+      )}
     </div>
   );
 }

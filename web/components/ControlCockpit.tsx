@@ -17,6 +17,8 @@ import {
   AlertTriangle,
   Lock,
   Unlock,
+  ChevronDown,
+  ChevronUp,
 } from "lucide-react";
 import { formatCountdown } from "@/lib/settlementTime";
 
@@ -131,6 +133,7 @@ export default function ControlCockpit({
   const [binanceLeverage, setBinanceLeverage] = useState<number>(coinLimits.binance);
   const [bitgetLeverage, setBitgetLeverage] = useState<number>(coinLimits.bitget);
   const [showCustomSplit, setShowCustomSplit] = useState<boolean>(false);
+  const [isCollapsed, setIsCollapsed] = useState(false);
 
   // Sync leverage when coin changes or preset changes
   useEffect(() => {
@@ -457,7 +460,7 @@ export default function ControlCockpit({
   const isCustomAsset = !DEFAULT_SYMBOLS.includes(normalizedCurrent);
 
   return (
-    <div className="bg-surface rounded-xl border border-border p-3.5 sm:p-5 flex flex-col justify-between font-mono">
+    <div className="bg-surface rounded-xl border border-border p-3.5 sm:p-5 flex flex-col justify-between font-mono transition-all duration-300">
       <div>
         <div className="flex items-center justify-between border-b border-border pb-3">
           <div className="flex items-center space-x-2">
@@ -470,8 +473,23 @@ export default function ControlCockpit({
             <span className="px-1.5 py-0.5 rounded text-[9px] bg-zinc-800 text-cyan-400 border border-cyan-800/40 font-mono">
               BINANCE + BITGET
             </span>
+            {isCollapsed && (
+              <span className="px-1.5 py-0.5 rounded text-[9px] bg-amber-500/10 text-accent-amber border border-amber-500/30 font-mono">
+                {normalizedCurrent} • {effectiveBinanceLeverage}x/{effectiveBitgetLeverage}x
+              </span>
+            )}
+            <button
+              onClick={() => setIsCollapsed(!isCollapsed)}
+              className="p-1 rounded-lg bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 text-zinc-400 hover:text-zinc-200 transition-colors active:scale-95 ml-1"
+              title={isCollapsed ? "Expand Order Execution Panel" : "Collapse Order Execution Panel"}
+            >
+              {isCollapsed ? <ChevronDown className="w-3.5 h-3.5 text-accent-amber" /> : <ChevronUp className="w-3.5 h-3.5 text-zinc-400" />}
+            </button>
           </div>
         </div>
+
+        {!isCollapsed && (
+          <>
 
         {/* Cockpit Error Banner */}
         {cockpitError && (
@@ -1141,10 +1159,12 @@ export default function ControlCockpit({
             </button>
           </div>
         </div>
+          </>
+        )}
       </div>
 
       {/* Live Transaction Receipt */}
-      {lastReceipt && (
+      {!isCollapsed && lastReceipt && (
         <div className="mt-4 p-3 rounded-lg bg-zinc-950 border border-zinc-800 text-[10px] text-zinc-400 space-y-1">
           <div className="font-semibold text-zinc-200 uppercase flex justify-between">
             <span>RECEIPT: {lastReceipt.type} ({lastReceipt.data?.symbol || currentAsset})</span>

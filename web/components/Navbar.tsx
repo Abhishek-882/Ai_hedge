@@ -3,7 +3,7 @@
 import React, { useEffect, useState } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { ShieldCheck, User, LogOut, Terminal, History, Home, Lock, Sparkles, Activity } from "lucide-react";
+import { ShieldCheck, User, LogOut, Terminal, History, Home, Lock, Sparkles, Activity, Bot } from "lucide-react";
 
 export default function Navbar() {
   const pathname = usePathname();
@@ -56,6 +56,7 @@ export default function Navbar() {
   const navLinks = [
     { href: "/", label: "Intro", icon: Home },
     { href: "/terminal", label: "Terminal", icon: Terminal },
+    { href: "/bot", label: "Auto-Bot", icon: Bot },
     { href: "/history", label: "History", icon: History },
     { href: "/profile", label: "Profile", icon: User },
   ];
