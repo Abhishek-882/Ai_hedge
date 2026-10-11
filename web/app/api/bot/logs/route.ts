@@ -1,24 +1,14 @@
 import { NextRequest, NextResponse } from "next/server";
-import fs from "fs";
-import path from "path";
 import { loadBotState } from "@/lib/botEngine";
+import { readDataFile } from "@/lib/storagePath";
 
 export const dynamic = "force-dynamic";
 
 export async function GET(req: NextRequest) {
-  const AUDIT_LOG_FILE_PATH = path.join(process.cwd(), "bot_audit_log.json");
   const state = loadBotState();
-  let logs: any[] = [];
+  let logs: any[] = readDataFile<any[]>("bot_audit_log.json", []);
 
-  // 1. Try reading from dedicated persistent audit log file
-  try {
-    if (fs.existsSync(AUDIT_LOG_FILE_PATH)) {
-      const raw = fs.readFileSync(AUDIT_LOG_FILE_PATH, "utf-8");
-      logs = JSON.parse(raw);
-    }
-  } catch {}
-
-  // 2. Fallback to state.logs if file was empty or missing
+  // Fallback to state.logs if file was empty or missing
   if (!Array.isArray(logs) || logs.length === 0) {
     logs = state.logs || [];
   }

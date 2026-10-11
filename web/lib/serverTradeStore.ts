@@ -1,5 +1,6 @@
 import fs from "fs";
 import path from "path";
+import { readDataFile, saveDataFile } from "./storagePath";
 
 export interface ServerHedgeTrade {
   id: string;
@@ -26,7 +27,7 @@ export interface ServerHedgeTrade {
   status: "ACTIVE" | "CONFIRMED" | "CLOSED" | "DELTA_NEUTRAL";
 }
 
-const TRADES_FILE_PATH = path.join(process.cwd(), "hedge_trades_history.json");
+const TRADES_FILE_NAME = "hedge_trades_history.json";
 
 // Singleton memory cache across hot-reloads / serverless invocations
 const globalForTrades = global as unknown as {
@@ -43,16 +44,11 @@ export function loadTrades(): ServerHedgeTrade[] {
     return globalForTrades.serverTrades;
   }
 
-  try {
-    if (fs.existsSync(TRADES_FILE_PATH)) {
-      const raw = fs.readFileSync(TRADES_FILE_PATH, "utf-8");
-      const parsed = JSON.parse(raw);
-      if (Array.isArray(parsed)) {
-        globalForTrades.serverTrades = parsed;
-        return parsed;
-      }
-    }
-  } catch {}
+  const parsed = readDataFile<ServerHedgeTrade[]>(TRADES_FILE_NAME, []);
+  if (Array.isArray(parsed) && parsed.length > 0) {
+    globalForTrades.serverTrades = parsed;
+    return parsed;
+  }
 
   const initial = getInitialSeededTrades();
   globalForTrades.serverTrades = initial;
@@ -62,9 +58,7 @@ export function loadTrades(): ServerHedgeTrade[] {
 
 export function saveTrades(trades: ServerHedgeTrade[]) {
   globalForTrades.serverTrades = trades;
-  try {
-    fs.writeFileSync(TRADES_FILE_PATH, JSON.stringify(trades, null, 2), "utf-8");
-  } catch {}
+  saveDataFile(TRADES_FILE_NAME, trades);
 }
 
 export function clearTrades(): void {

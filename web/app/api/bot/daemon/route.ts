@@ -15,6 +15,7 @@ import {
   unlockSingleCoin,
   lockFlattenedCoinForBot,
   loadSetFiles,
+  restoreBotsAndSetFiles,
   BotConfig,
 } from "@/lib/botEngine";
 
@@ -26,6 +27,21 @@ export async function GET(req: NextRequest) {
 
   const searchParams = req.nextUrl.searchParams;
   const action = searchParams.get("action");
+
+  // Handle external or internal keep-alive cron heartbeat
+  if (action === "cron_tick" || action === "heartbeat") {
+    ensureBotWorker();
+    runAutonomousBotCycle().catch(() => {});
+    return NextResponse.json({
+      success: true,
+      heartbeat: true,
+      timestamp: Date.now(),
+      isRunning: state.isRunning,
+      activeBotsCount: state.bots.filter((b) => b.enabled).length,
+      uptimeSeconds: state.isRunning ? Math.floor((Date.now() - state.startedAt) / 1000) : 0,
+      message: "24/7 Daemon heartbeat acknowledged. Bot cycle triggered.",
+    });
+  }
 
   // Handle direct download of .set file
   if (action === "download_set_file") {
@@ -232,6 +248,13 @@ export async function POST(req: Request) {
   } else if (action === "clear_logs") {
     state.logs = [];
     saveBotState(state);
+  } else if (action === "sync_restore_vault") {
+    const clientBots = body.bots;
+    const clientSetFiles = body.setFiles;
+    const preferredActiveBotId = body.activeBotId;
+    if (Array.isArray(clientBots) || Array.isArray(clientSetFiles)) {
+      restoreBotsAndSetFiles(clientBots || [], clientSetFiles || [], preferredActiveBotId);
+    }
   }
 
   const uptimeSeconds = state.isRunning

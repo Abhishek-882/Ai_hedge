@@ -36,9 +36,12 @@ import {
   FileText,
   Save,
   FolderOpen,
+  Upload,
   X,
 } from "lucide-react";
 import { formatCountdown } from "@/lib/settlementTime";
+
+const BROWSER_VAULT_KEY = "ai_hedge_bot_vault_v1";
 
 interface BotConfig {
   enabled: boolean;
@@ -188,15 +191,73 @@ export default function AutoBotPanel() {
     daemon?.bots?.[0] ||
     null;
 
+  const hasAttemptedVaultSyncRef = React.useRef<boolean>(false);
+
   const fetchStatus = useCallback(async () => {
     try {
       const res = await fetch("/api/bot/daemon", { cache: "no-store" });
       const data = await res.json();
       if (data.success && data.daemon) {
-        setDaemon(data.daemon);
+        let serverDaemon = data.daemon;
+
+        // Auto-restore from Browser Vault if server was reset to default
+        if (!hasAttemptedVaultSyncRef.current && typeof window !== "undefined") {
+          hasAttemptedVaultSyncRef.current = true;
+          try {
+            const rawVault = localStorage.getItem(BROWSER_VAULT_KEY);
+            if (rawVault) {
+              const vault = JSON.parse(rawVault);
+              const isServerOnlyDefault =
+                serverDaemon.bots?.length === 1 &&
+                serverDaemon.bots[0].name === "Conservative Funding Sniper" &&
+                (serverDaemon.bots[0].activeHedges?.length || 0) === 0;
+
+              const clientHasCustom =
+                Array.isArray(vault.bots) &&
+                (vault.bots.length > 1 ||
+                  vault.bots[0]?.name !== "Conservative Funding Sniper" ||
+                  (Array.isArray(vault.setFiles) && vault.setFiles.length > 2));
+
+              if (isServerOnlyDefault && clientHasCustom) {
+                const restoreRes = await fetch("/api/bot/daemon", {
+                  method: "POST",
+                  headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify({
+                    action: "sync_restore_vault",
+                    bots: vault.bots,
+                    setFiles: vault.setFiles,
+                    activeBotId: vault.activeBotId,
+                  }),
+                });
+                const restoreData = await restoreRes.json();
+                if (restoreData.success && restoreData.daemon) {
+                  serverDaemon = restoreData.daemon;
+                  showToast("🛡️ Browser Vault: Restored your saved bots & presets to server!");
+                }
+              }
+            }
+          } catch {}
+        }
+
+        // Always mirror current valid state into browser vault
+        if (typeof window !== "undefined" && serverDaemon.bots && serverDaemon.bots.length > 0) {
+          try {
+            localStorage.setItem(
+              BROWSER_VAULT_KEY,
+              JSON.stringify({
+                bots: serverDaemon.bots,
+                setFiles: serverDaemon.setFiles || [],
+                activeBotId: serverDaemon.activeBotId,
+                savedAt: Date.now(),
+              })
+            );
+          } catch {}
+        }
+
+        setDaemon(serverDaemon);
         const curBot =
-          data.daemon.bots?.find((b: any) => b.id === data.daemon.activeBotId) ||
-          data.daemon.bots?.[0];
+          serverDaemon.bots?.find((b: any) => b.id === serverDaemon.activeBotId) ||
+          serverDaemon.bots?.[0];
 
         if (curBot && !isConfigOpen) {
           setMinSpreadBps(curBot.config?.minSpreadBps ?? 5.0);
@@ -419,6 +480,73 @@ export default function AutoBotPanel() {
 
   const handleDownloadSetFile = (fileName: string) => {
     window.open(`/api/bot/daemon?action=download_set_file&fileName=${encodeURIComponent(fileName)}`, "_blank");
+  };
+
+  const handleExportFleetBackup = () => {
+    if (!daemon) return;
+    const backupData = {
+      version: 1,
+      appName: "AI-Hedge Dual-Exchange Arbitrage",
+      exportedAt: new Date().toISOString(),
+      activeBotId: daemon.activeBotId,
+      bots: daemon.bots,
+      setFiles: daemon.setFiles,
+    };
+    const blob = new Blob([JSON.stringify(backupData, null, 2)], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `ai_hedge_fleet_backup_${new Date().toISOString().slice(0, 10)}.json`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+    showToast("Downloaded full Fleet & Strategy Presets backup JSON!");
+  };
+
+  const handleImportFleetBackup = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = async (evt) => {
+      try {
+        const parsed = JSON.parse(evt.target?.result as string);
+        if (parsed && (Array.isArray(parsed.bots) || Array.isArray(parsed.setFiles))) {
+          const res = await fetch("/api/bot/daemon", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              action: "sync_restore_vault",
+              bots: parsed.bots,
+              setFiles: parsed.setFiles,
+              activeBotId: parsed.activeBotId,
+            }),
+          });
+          const data = await res.json();
+          if (data.success && data.daemon) {
+            setDaemon(data.daemon);
+            try {
+              localStorage.setItem(
+                BROWSER_VAULT_KEY,
+                JSON.stringify({
+                  bots: data.daemon.bots,
+                  setFiles: data.daemon.setFiles,
+                  activeBotId: data.daemon.activeBotId,
+                  savedAt: Date.now(),
+                })
+              );
+            } catch {}
+            showToast("Restored all bots and presets from backup!");
+          }
+        } else {
+          showToast("Invalid backup JSON format.");
+        }
+      } catch {
+        showToast("Failed to parse backup JSON file.");
+      }
+    };
+    reader.readAsText(file);
+    e.target.value = "";
   };
 
   const handleResetBotMemory = async () => {
@@ -647,8 +775,12 @@ export default function AutoBotPanel() {
           </button>
         </div>
 
-        {/* Global Master Daemon Switch */}
+        {/* Global Master Daemon Switch & Vault Status */}
         <div className="flex items-center space-x-2">
+          <span className="hidden md:inline-flex items-center space-x-1.5 px-2.5 py-1 rounded-lg bg-zinc-900 border border-zinc-800 text-[10px] text-zinc-300 font-semibold" title="Roster and strategy presets persistently backed up in Browser Vault">
+            <ShieldCheck className="w-3.5 h-3.5 text-emerald-400" />
+            <span>Vault Synced</span>
+          </span>
           <span className="text-[11px] font-semibold text-zinc-400 hidden sm:inline">
             MASTER DAEMON 24/7:
           </span>
@@ -1684,7 +1816,27 @@ export default function AutoBotPanel() {
               })}
             </div>
 
-            <div className="pt-2 border-t border-zinc-800/80 flex justify-end">
+            <div className="pt-3 border-t border-zinc-800/80 flex flex-wrap items-center justify-between gap-2">
+              <div className="flex items-center space-x-2">
+                <button
+                  onClick={handleExportFleetBackup}
+                  className="px-3 py-1.5 rounded-lg bg-zinc-900 hover:bg-zinc-800 text-accent-cyan border border-zinc-800 text-xs font-semibold flex items-center space-x-1.5 transition-all"
+                  title="Export full backup JSON containing all bots and custom presets"
+                >
+                  <Download className="w-3.5 h-3.5" />
+                  <span>Export Fleet (.json)</span>
+                </button>
+                <label className="px-3 py-1.5 rounded-lg bg-zinc-900 hover:bg-zinc-800 text-accent-amber border border-zinc-800 text-xs font-semibold flex items-center space-x-1.5 transition-all cursor-pointer">
+                  <Upload className="w-3.5 h-3.5" />
+                  <span>Import Backup</span>
+                  <input
+                    type="file"
+                    accept=".json"
+                    onChange={handleImportFleetBackup}
+                    className="hidden"
+                  />
+                </label>
+              </div>
               <button
                 onClick={() => setIsSetManagerOpen(false)}
                 className="px-4 py-1.5 rounded-lg bg-zinc-900 hover:bg-zinc-800 text-zinc-300 border border-zinc-800 text-xs font-semibold transition-colors"

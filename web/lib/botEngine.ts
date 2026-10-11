@@ -13,6 +13,7 @@ import {
   SYSTEM_DEFAULT_BITGET_SECRET,
   SYSTEM_DEFAULT_BITGET_PASSPHRASE,
 } from "./userStore";
+import { resolveDataFilePath, readDataFile, saveDataFile } from "./storagePath";
 
 export interface BotConfig {
   enabled: boolean;
@@ -115,9 +116,13 @@ export interface BotEngineState {
   lastEvaluatedCandidate?: any;
 }
 
-const STATE_FILE_PATH = path.join(process.cwd(), "bot_daemon_state.json");
-const SET_FILES_PATH = path.join(process.cwd(), "bot_set_files.json");
-const AUDIT_LOG_FILE_PATH = path.join(process.cwd(), "bot_audit_log.json");
+const STATE_FILE_NAME = "bot_daemon_state.json";
+const SET_FILES_NAME = "bot_set_files.json";
+const AUDIT_LOG_FILE_NAME = "bot_audit_log.json";
+
+const STATE_FILE_PATH = resolveDataFilePath(STATE_FILE_NAME);
+const SET_FILES_PATH = resolveDataFilePath(SET_FILES_NAME);
+const AUDIT_LOG_FILE_PATH = resolveDataFilePath(AUDIT_LOG_FILE_NAME);
 
 // System admin API credentials for 24/7 background worker
 const ADMIN_BINANCE_KEY = SYSTEM_DEFAULT_BINANCE_KEY;
@@ -370,21 +375,12 @@ function formatSymbolQuantity(qty: number, symbol: string, refPrice: number = 0)
 const globalForBot = global as unknown as {
   botEngineState?: BotEngineState;
   botInterval?: NodeJS.Timeout | null;
+  keepAliveInterval?: NodeJS.Timeout | null;
   botIsExecutingCycle?: boolean;
 };
 
 export function loadSetFiles(): BotSetFile[] {
-  let customFiles: BotSetFile[] = [];
-  try {
-    if (fs.existsSync(SET_FILES_PATH)) {
-      const raw = fs.readFileSync(SET_FILES_PATH, "utf-8");
-      const parsed = JSON.parse(raw);
-      if (Array.isArray(parsed)) {
-        customFiles = parsed;
-      }
-    }
-  } catch {}
-
+  const customFiles = readDataFile<BotSetFile[]>(SET_FILES_NAME, []);
   const merged = [...BUILT_IN_SET_FILES];
   for (const cf of customFiles) {
     if (!merged.some((b) => b.fileName.toLowerCase() === cf.fileName.toLowerCase())) {
@@ -395,12 +391,8 @@ export function loadSetFiles(): BotSetFile[] {
 }
 
 export function saveSetFiles(files: BotSetFile[]) {
-  try {
-    const customOnly = files.filter((f) => !f.isBuiltIn);
-    fs.writeFileSync(SET_FILES_PATH, JSON.stringify(customOnly, null, 2), "utf-8");
-  } catch (err: any) {
-    console.error("Failed to save set files:", err.message);
-  }
+  const customOnly = files.filter((f) => !f.isBuiltIn);
+  saveDataFile(SET_FILES_NAME, customOnly);
 }
 
 export function loadBotState(): BotEngineState {
@@ -411,9 +403,8 @@ export function loadBotState(): BotEngineState {
   const allSetFiles = loadSetFiles();
 
   try {
-    if (fs.existsSync(STATE_FILE_PATH)) {
-      const raw = fs.readFileSync(STATE_FILE_PATH, "utf-8");
-      const parsed = JSON.parse(raw);
+    const parsed = readDataFile<any>(STATE_FILE_NAME, null);
+    if (parsed) {
 
       let bots: BotInstance[] = [];
       if (Array.isArray(parsed.bots) && parsed.bots.length > 0) {
@@ -541,11 +532,7 @@ export function saveBotState(state: BotEngineState) {
   }
 
   globalForBot.botEngineState = state;
-  try {
-    fs.writeFileSync(STATE_FILE_PATH, JSON.stringify(state, null, 2), "utf-8");
-  } catch (err: any) {
-    console.error("Failed to save bot daemon state:", err.message);
-  }
+  saveDataFile(STATE_FILE_NAME, state);
 }
 
 export function appendBotLog(
@@ -567,19 +554,12 @@ export function appendBotLog(
   try {
     saveBotState(state);
 
-    let auditHistory: BotLog[] = [];
-    if (fs.existsSync(AUDIT_LOG_FILE_PATH)) {
-      try {
-        const raw = fs.readFileSync(AUDIT_LOG_FILE_PATH, "utf-8");
-        const parsed = JSON.parse(raw);
-        if (Array.isArray(parsed)) auditHistory = parsed;
-      } catch {}
-    }
+    let auditHistory = readDataFile<BotLog[]>(AUDIT_LOG_FILE_NAME, []);
     auditHistory.unshift(log);
     if (auditHistory.length > 500) {
       auditHistory = auditHistory.slice(0, 500);
     }
-    fs.writeFileSync(AUDIT_LOG_FILE_PATH, JSON.stringify(auditHistory, null, 2), "utf-8");
+    saveDataFile(AUDIT_LOG_FILE_NAME, auditHistory);
   } catch (err: any) {
     console.error("Auto-save audit log error:", err.message);
   }
@@ -853,6 +833,74 @@ export function deleteSetFile(fileName: string): boolean {
   appendBotLog(state, `[SET FILE DELETED] Preset "${fileName}" removed.`, "warn");
   saveBotState(state);
   return true;
+}
+
+export function restoreBotsAndSetFiles(
+  clientBots: BotInstance[],
+  clientSetFiles: BotSetFile[],
+  preferredActiveBotId?: string
+): BotEngineState {
+  const state = loadBotState();
+  let stateChanged = false;
+
+  // 1. Restore / Merge custom .set files
+  if (Array.isArray(clientSetFiles) && clientSetFiles.length > 0) {
+    let currentSets = loadSetFiles();
+    for (const csf of clientSetFiles) {
+      if (!currentSets.some((s) => s.fileName.toLowerCase() === csf.fileName.toLowerCase())) {
+        currentSets.push({
+          ...csf,
+          isBuiltIn: false,
+          updatedAt: Date.now(),
+        });
+        stateChanged = true;
+      }
+    }
+    saveSetFiles(currentSets);
+    state.setFiles = currentSets;
+  }
+
+  // 2. Restore / Merge custom bots
+  if (Array.isArray(clientBots) && clientBots.length > 0) {
+    const isOnlyDefaultBot =
+      state.bots.length === 1 &&
+      state.bots[0].id === "bot-1" &&
+      state.bots[0].name === "Conservative Funding Sniper" &&
+      (state.bots[0].activeHedges?.length || 0) === 0;
+
+    if (isOnlyDefaultBot && (clientBots.length > 1 || clientBots[0].name !== "Conservative Funding Sniper")) {
+      // Server was reset to fresh default: completely adopt client vault roster
+      state.bots = clientBots;
+      stateChanged = true;
+    } else {
+      // Server already has bots: merge any missing bots from client vault
+      for (const cb of clientBots) {
+        const exists = state.bots.some((b) => b.id === cb.id || b.name.toLowerCase() === cb.name.toLowerCase());
+        if (!exists) {
+          state.bots.push(cb);
+          stateChanged = true;
+        }
+      }
+    }
+  }
+
+  // 3. Set active bot ID if valid
+  if (preferredActiveBotId && state.bots.some((b) => b.id === preferredActiveBotId)) {
+    state.activeBotId = preferredActiveBotId;
+    stateChanged = true;
+  }
+
+  if (stateChanged) {
+    appendBotLog(
+      state,
+      `[VAULT SYNC RESTORE] Restored ${state.bots.length} bot instance(s) and ${state.setFiles.length} strategy preset(s) from persistent browser vault.`,
+      "success"
+    );
+    saveBotState(state);
+    ensureBotWorker();
+  }
+
+  return state;
 }
 
 /**
@@ -1826,6 +1874,16 @@ export function ensureBotWorker(): void {
     globalForBot.botInterval = setInterval(() => {
       runAutonomousBotCycle().catch(() => {});
     }, 5000);
+  }
+
+  // Self-keep-alive heartbeat interval: periodically triggers cycle to keep event loop active
+  if (!globalForBot.keepAliveInterval) {
+    globalForBot.keepAliveInterval = setInterval(() => {
+      const s = loadBotState();
+      if (s.isRunning && !globalForBot.botIsExecutingCycle) {
+        runAutonomousBotCycle().catch(() => {});
+      }
+    }, 15000);
   }
 }
 

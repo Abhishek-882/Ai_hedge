@@ -1,5 +1,6 @@
 import fs from "fs";
 import path from "path";
+import { readDataFile, saveDataFile } from "./storagePath";
 
 export interface UserApiKeys {
   binanceKey: string;
@@ -22,7 +23,7 @@ export interface UserAccount {
   apiKeys: UserApiKeys;
 }
 
-const USERS_FILE_PATH = path.join(process.cwd(), "user_accounts_store.json");
+const USERS_FILE_NAME = "user_accounts_store.json";
 
 // System Admin Default Credentials
 export const ADMIN_EMAIL_PRIMARY = "varsha633@gmailcom";
@@ -71,33 +72,30 @@ export function loadUsers(): UserAccount[] {
   }
 
   try {
-    if (fs.existsSync(USERS_FILE_PATH)) {
-      const raw = fs.readFileSync(USERS_FILE_PATH, "utf-8");
-      const parsed = JSON.parse(raw);
-      if (Array.isArray(parsed) && parsed.length > 0) {
-        // Ensure admin user exists with current credentials
-        const hasAdmin = parsed.some(
+    const parsed = readDataFile<any[]>(USERS_FILE_NAME, []);
+    if (Array.isArray(parsed) && parsed.length > 0) {
+      // Ensure admin user exists with current credentials
+      const hasAdmin = parsed.some(
+        (u) => u.email.toLowerCase() === ADMIN_EMAIL_PRIMARY || u.email.toLowerCase() === ADMIN_EMAIL_ALIAS
+      );
+      if (!hasAdmin) {
+        parsed.unshift(getSeedAdminUser());
+      } else {
+        // Always ensure admin password and role match required credentials
+        const adminIdx = parsed.findIndex(
           (u) => u.email.toLowerCase() === ADMIN_EMAIL_PRIMARY || u.email.toLowerCase() === ADMIN_EMAIL_ALIAS
         );
-        if (!hasAdmin) {
-          parsed.unshift(getSeedAdminUser());
-        } else {
-          // Always ensure admin password and role match required credentials
-          const adminIdx = parsed.findIndex(
-            (u) => u.email.toLowerCase() === ADMIN_EMAIL_PRIMARY || u.email.toLowerCase() === ADMIN_EMAIL_ALIAS
-          );
-          if (adminIdx >= 0) {
-            parsed[adminIdx].password = ADMIN_DEFAULT_PASSWORD;
-            parsed[adminIdx].role = "admin";
-            if (!parsed[adminIdx].apiKeys?.binanceKey) {
-              parsed[adminIdx].apiKeys = getSeedAdminUser().apiKeys;
-            }
+        if (adminIdx >= 0) {
+          parsed[adminIdx].password = ADMIN_DEFAULT_PASSWORD;
+          parsed[adminIdx].role = "admin";
+          if (!parsed[adminIdx].apiKeys?.binanceKey) {
+            parsed[adminIdx].apiKeys = getSeedAdminUser().apiKeys;
           }
         }
-        globalForUsers.userAccounts = parsed;
-        saveUsers(parsed);
-        return parsed;
       }
+      globalForUsers.userAccounts = parsed;
+      saveUsers(parsed);
+      return parsed;
     }
   } catch {}
 
@@ -109,9 +107,7 @@ export function loadUsers(): UserAccount[] {
 
 export function saveUsers(users: UserAccount[]): void {
   globalForUsers.userAccounts = users;
-  try {
-    fs.writeFileSync(USERS_FILE_PATH, JSON.stringify(users, null, 2), "utf-8");
-  } catch {}
+  saveDataFile(USERS_FILE_NAME, users);
 }
 
 export function findUserByEmail(email: string): UserAccount | undefined {
